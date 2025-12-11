@@ -68,6 +68,10 @@ yarn-error.log*
 *.flv
 *.wmv
 
+# Executable files
+*.exe
+Step2_video_processing_still_extract_data_entry/Video_processing_app.exe
+
 # Images (if needed, comment out to track images)
 # *.jpg
 # *.jpeg
