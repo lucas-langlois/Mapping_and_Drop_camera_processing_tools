@@ -34,7 +34,7 @@ A comprehensive video player application with integrated data entry for marine/e
 - Python 3.8 or higher
 - 4GB RAM minimum
 
-### Setup
+### Option 1: Run from Source (Recommended)
 
 1. **Install Dependencies**
    ```powershell
@@ -43,7 +43,7 @@ A comprehensive video player application with integrated data entry for marine/e
    
    Or install individually:
    ```powershell
-   pip install opencv-python PyQt5 numpy
+   pip install opencv-python PyQt5 numpy pandas pillow
    ```
 
 2. **Prepare Directory Structure**
@@ -51,6 +51,38 @@ A comprehensive video player application with integrated data entry for marine/e
    - `drop_videos/` - Place your video files here
    - `drop_stills/` - Extracted still images
    - `data/` - CSV templates and data entries
+
+### Option 2: Build Standalone Executable
+
+If you need a standalone `.exe` file (no Python required to run):
+
+1. **Install PyInstaller**
+   ```powershell
+   pip install pyinstaller
+   ```
+
+2. **Run the Build Script**
+   ```powershell
+   python build_exe.py
+   ```
+   
+   This will:
+   - Clean up any previous builds
+   - Package all dependencies
+   - Create `VideoPlayer.exe` in the `dist/` folder
+   - Build time: ~2-5 minutes depending on your system
+
+3. **Distribute the Executable**
+   - Find `VideoPlayer.exe` in `dist/` folder
+   - Copy the entire parent directory structure (with `drop_videos/`, `drop_stills/`, `data/` folders)
+   - The `.exe` can be run on any Windows machine without Python installed
+   
+   **Note**: The `.exe` file is ~500MB-3GB due to bundled Python runtime and OpenCV libraries. This is normal for PyInstaller applications.
+
+4. **Alternative: Manual PyInstaller Build**
+   ```powershell
+   pyinstaller --name=VideoPlayer --onefile --windowed video_player.py
+   ```
 
 ## Usage
 

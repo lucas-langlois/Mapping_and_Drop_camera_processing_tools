@@ -73,10 +73,27 @@ The tool will:
 - Renamed video files from Step 1
 - Data entry template CSV
 
-**Quick Start**:
+**Quick Start (Run from Source)**:
 ```bash
 # Navigate to Step2 folder
 cd Step2_video_processing_still_extract_data_entry/Source_code
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Launch the video player
+python video_player.py
+```
+
+**Alternative: Build Standalone Executable**:
+```bash
+# Install PyInstaller
+pip install pyinstaller
+
+# Build the .exe (output in dist/ folder)
+python build_exe.py
+```
+> **Note**: The executable is not included in this repository due to its large size (~500MB-3GB). Build it locally using the instructions above.
 
 # Install dependencies
 pip install -r requirements.txt
@@ -160,7 +177,12 @@ Required Python packages:
 pip install -r Step2_video_processing_still_extract_data_entry/Source_code/requirements.txt
 ```
 
-Main dependencies: `opencv-python`, `pandas`, `pillow`, `tkinter`
+Main dependencies: `opencv-python`, `pandas`, `pillow`, `PyQt5`, `numpy`
+
+**Optional** - To build standalone executable:
+```bash
+pip install pyinstaller
+```
 
 ---
 

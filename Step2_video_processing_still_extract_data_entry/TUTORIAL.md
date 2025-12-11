@@ -2,6 +2,8 @@
 
 This tutorial will guide you through the complete workflow of using the Drop Cam Video Analysis tool for marine/environmental video annotation.
 
+> **Installation Note**: This tool can be run directly from Python source code (recommended) or built as a standalone `.exe` file. See the [Source_code/README.md](Source_code/README.md) for detailed installation instructions, including how to build the executable using `build_exe.py`.
+
 ## Table of Contents
 1. [Preparing Your Files](#preparing-your-files)
 2. [First Launch Setup](#first-launch-setup)
