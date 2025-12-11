@@ -1,0 +1,13 @@
+{
+  "name": "my-console-app",
+  "version": "1.0.0",
+  "description": "A simple console application",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "node src/main.js"
+  },
+  "dependencies": {},
+  "devDependencies": {},
+  "author": "",
+  "license": "ISC"
+}
