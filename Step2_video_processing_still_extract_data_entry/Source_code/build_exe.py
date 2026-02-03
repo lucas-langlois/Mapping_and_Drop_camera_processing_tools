@@ -49,6 +49,6 @@ PyInstaller.__main__.run([
 print("\n" + "="*60)
 print("Build complete!")
 print("="*60)
-print(f"\nExecutable created in: {os.path.join(script_dir, 'dist', 'VideoPlayer.exe')}")
+print(f"\nExecutable created in: {os.path.join(script_dir, 'dist', 'Video_processing_app.exe')}")
 print("\nYou can distribute this .exe file to any Windows computer.")
 print("The drop_videos and drop_stills folders will be created automatically.")

@@ -18,10 +18,10 @@ import cv2
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QPushButton, QSlider, QLabel, 
                              QFileDialog, QSpinBox, QComboBox, QMessageBox,
-                             QLineEdit, QTextEdit, QScrollArea, QGroupBox, QGridLayout)
+                             QLineEdit, QTextEdit, QScrollArea, QGroupBox, QGridLayout,
+                             QShortcut, QInputDialog)
 from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtGui import QImage, QPixmap, QKeySequence
-from PyQt5.QtWidgets import QShortcut
 
 
 class VideoPlayer(QMainWindow):
@@ -1485,8 +1485,6 @@ class VideoPlayer(QMainWindow):
             return
         
         # Ask for new drop number
-        from PyQt5.QtWidgets import QInputDialog
-        
         current_count = self.drop_counter
         video_name = os.path.basename(self.video_path)
         
