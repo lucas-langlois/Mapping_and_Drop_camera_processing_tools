@@ -45,9 +45,18 @@ class VideoPlayer(QMainWindow):
         self.video_queue = []
         self.current_video_index = 0
         self.drop_counter = 1  # Counter for saved stills
-        self.drop_videos_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'drop_videos')
-        self.drop_stills_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'drop_stills')
-        self.data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
+        
+        # Get the correct application path (works for both .py and .exe)
+        if getattr(sys, 'frozen', False):
+            # Running as compiled executable
+            application_path = os.path.dirname(sys.executable)
+        else:
+            # Running as script
+            application_path = os.path.dirname(os.path.abspath(__file__))
+        
+        self.drop_videos_dir = os.path.join(application_path, 'drop_videos')
+        self.drop_stills_dir = os.path.join(application_path, 'drop_stills')
+        self.data_dir = os.path.join(application_path, 'data')
         
         # Data entry variables
         self.data_fields = {}
@@ -245,6 +254,11 @@ class VideoPlayer(QMainWindow):
         self.autoload_btn.clicked.connect(self.load_video_queue)
         autoload_layout.addWidget(self.autoload_btn)
         
+        # Choose video folder button
+        self.choose_folder_btn = QPushButton("Choose Video Folder...")
+        self.choose_folder_btn.clicked.connect(self.choose_video_folder)
+        autoload_layout.addWidget(self.choose_folder_btn)
+        
         # Previous video button
         self.prev_video_btn = QPushButton("◀ Previous Video")
         self.prev_video_btn.clicked.connect(self.previous_video)
@@ -410,6 +424,21 @@ class VideoPlayer(QMainWindow):
         button_layout.addWidget(clear_btn)
         
         layout.addLayout(button_layout)
+        
+        # Additional action buttons (second row)
+        button_layout2 = QHBoxLayout()
+        
+        delete_btn = QPushButton("Delete Current Entry")
+        delete_btn.clicked.connect(self.delete_current_entry)
+        delete_btn.setStyleSheet("background-color: #F44336; color: white; font-weight: bold; padding: 8px;")
+        button_layout2.addWidget(delete_btn)
+        
+        reset_drop_btn = QPushButton("Reset Drop Count")
+        reset_drop_btn.clicked.connect(self.reset_drop_count)
+        reset_drop_btn.setStyleSheet("background-color: #FF9800; color: white; font-weight: bold; padding: 8px;")
+        button_layout2.addWidget(reset_drop_btn)
+        
+        layout.addLayout(button_layout2)
         layout.addStretch()
         
         container.setLayout(layout)
@@ -688,6 +717,12 @@ class VideoPlayer(QMainWindow):
                 
                 self.drop_counter += 1
                 
+                # Update queue label to show new drop count
+                self.queue_label.setText(
+                    f"Video {self.current_video_index + 1}/{len(self.video_queue)}: "
+                    f"{os.path.basename(self.video_path)} (Next drop: {self.drop_counter})"
+                )
+                
                 # Show success message
                 msg = f"Frame saved to:\n{output_path}\n\nData entry auto-saved with DROP_ID: {drop_id}\n\n"
                 msg += "Form is now ready for your next observation."
@@ -752,6 +787,18 @@ class VideoPlayer(QMainWindow):
             f"Extracted {saved_count} frames to:\n{output_dir}"
         )
         
+    def choose_video_folder(self):
+        """Choose a custom video folder and load videos from it"""
+        folder_path = QFileDialog.getExistingDirectory(
+            self, "Select Video Folder",
+            self.drop_videos_dir,
+            QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks
+        )
+        
+        if folder_path:
+            self.drop_videos_dir = folder_path
+            self.load_video_queue()
+    
     def load_video_queue(self):
         """Load all videos from drop_videos directory"""
         if not os.path.exists(self.drop_videos_dir):
@@ -793,7 +840,7 @@ class VideoPlayer(QMainWindow):
         
         QMessageBox.information(
             self, "Videos Loaded",
-            f"Loaded {len(self.video_queue)} video(s) from drop_videos/\n\n"
+            f"Loaded {len(self.video_queue)} video(s) from:\n{self.drop_videos_dir}\n\n"
             f"Stills will be saved to drop_stills/\n\n"
             f"Use 'S' key or Extract Frame button to save stills."
         )
@@ -1368,6 +1415,106 @@ class VideoPlayer(QMainWindow):
             QMessageBox.critical(
                 self, "Error",
                 f"Failed to auto-save data entry:\n{str(e)}"
+            )
+    
+    def delete_current_entry(self):
+        """Delete the currently displayed entry"""
+        if self.current_entry_index < 0 or self.current_entry_index >= len(self.all_data_entries):
+            QMessageBox.warning(
+                self, "No Entry",
+                "No entry is currently loaded. Load entries first using 'Load All Entries' button."
+            )
+            return
+        
+        # Get the entry to delete
+        entry = self.all_data_entries[self.current_entry_index]
+        drop_id = entry.get('DROP_ID', '')
+        filename = entry.get('FILENAME', '')
+        
+        # Confirm deletion
+        reply = QMessageBox.question(
+            self, "Confirm Delete",
+            f"Are you sure you want to delete this entry?\n\nDROP_ID: {drop_id}\nFILENAME: {filename}\n\nThis will remove it from the CSV file.",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        
+        if reply == QMessageBox.No:
+            return
+        
+        # Remove from in-memory list
+        del self.all_data_entries[self.current_entry_index]
+        
+        # Write updated list back to CSV
+        output_file = os.path.join(self.data_dir, "data_entries.csv")
+        fieldnames = self.template_fieldnames if self.template_fieldnames else []
+        
+        try:
+            with open(output_file, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerows(self.all_data_entries)
+            
+            QMessageBox.information(
+                self, "Success",
+                f"Entry deleted successfully.\n\nRemaining entries: {len(self.all_data_entries)}"
+            )
+            
+            # Navigate to the next entry or previous if at end
+            if len(self.all_data_entries) == 0:
+                self.clear_data_entry()
+                self.current_entry_index = -1
+                self.update_navigation_buttons()
+            else:
+                # Stay at same index (which now shows the next entry) or go to last if we deleted the last entry
+                if self.current_entry_index >= len(self.all_data_entries):
+                    self.current_entry_index = len(self.all_data_entries) - 1
+                self.load_entry_at_index(self.current_entry_index)
+        except Exception as e:
+            QMessageBox.critical(
+                self, "Error",
+                f"Failed to delete entry:\n{str(e)}"
+            )
+    
+    def reset_drop_count(self):
+        """Reset the drop counter for the current video"""
+        if not self.video_path:
+            QMessageBox.warning(
+                self, "No Video",
+                "No video is currently loaded. Load a video first."
+            )
+            return
+        
+        # Ask for new drop number
+        from PyQt5.QtWidgets import QInputDialog
+        
+        current_count = self.drop_counter
+        video_name = os.path.basename(self.video_path)
+        
+        new_count, ok = QInputDialog.getInt(
+            self, "Reset Drop Count",
+            f"Current video: {video_name}\n\nCurrent drop count: {current_count}\n\nEnter new drop count:",
+            value=1, minValue=1, maxValue=9999
+        )
+        
+        if ok:
+            self.drop_counter = new_count
+            
+            # Update the queue label if using video queue
+            if self.video_queue and self.video_path in self.video_queue:
+                self.queue_label.setText(
+                    f"Video {self.current_video_index + 1}/{len(self.video_queue)}: "
+                    f"{os.path.basename(self.video_path)} (Next drop: {self.drop_counter})"
+                )
+            
+            # Update DROP_ID field if data is loaded
+            if self.data_fields and 'DROP_ID' in self.data_fields:
+                self.data_fields['DROP_ID'].blockSignals(True)
+                self.data_fields['DROP_ID'].setText(f"drop{self.drop_counter}")
+                self.data_fields['DROP_ID'].blockSignals(False)
+            
+            QMessageBox.information(
+                self, "Success",
+                f"Drop count reset to {new_count} for current video.\n\nNext extracted frame will be: drop{new_count}"
             )
     
     def closeEvent(self, event):

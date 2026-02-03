@@ -38,8 +38,6 @@ PyInstaller.__main__.run([
     '--onefile',
     '--windowed',  # No console window
     '--icon=NONE',  # You can add an icon file here if you have one
-    '--add-data=drop_videos;drop_videos',
-    '--add-data=drop_stills;drop_stills',
     '--hidden-import=cv2',
     '--hidden-import=PyQt5',
     '--hidden-import=numpy',

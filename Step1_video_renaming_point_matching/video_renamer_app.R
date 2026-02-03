@@ -22,7 +22,7 @@ ui <- fluidPage(
       div(style = "margin-bottom: 10px;",
         textInput("video_dir", 
                   "Video Directory:", 
-                  value = "E:/OneDrive - James Cook University/Backup SSD Drive/India/Videos",
+                  value = file.path(getwd(), "Videos"),
                   width = "100%"),
         shinyDirButton("video_dir_browse", 
                        "Browse...", 
@@ -34,7 +34,7 @@ ui <- fluidPage(
       div(style = "margin-bottom: 10px;",
         textInput("csv_path", 
                   "CSV File Path:", 
-                  value = "E:/OneDrive - James Cook University/Backup SSD Drive/India/data/Chilika_seagrass_Nov25_datacollection.csv",
+                  value = file.path(getwd(), "data"),
                   width = "100%"),
         shinyFilesButton("csv_file_browse", 
                          "Browse...", 
@@ -228,6 +228,7 @@ server <- function(input, output, session) {
   # Set up file browser volumes (roots for browsing)
   # This allows browsing from root on Windows or home directory on Unix
   volumes <- c(
+    Project = getwd(),
     Home = fs::path_home(),
     getVolumes()()
   )
