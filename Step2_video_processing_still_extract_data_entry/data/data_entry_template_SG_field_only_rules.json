@@ -1,0 +1,78 @@
+{
+  "rules": [
+    {
+      "type": "allowed_values",
+      "field": "SG_PRESENT",
+      "values": [
+        "0",
+        "1"
+      ],
+      "error": "SG_PRESENT must be 0 or 1"
+    },
+    {
+      "type": "autofill",
+      "trigger_field": "SG_PRESENT",
+      "trigger_value": "0",
+      "actions": {
+        "SG_COVER": "0",
+        "CR": "NA",
+        "CS": "NA",
+        "HO": "NA",
+        "HD": "NA",
+        "HS": "NA",
+        "HU": "NA",
+        "SI": "NA",
+        "EA": "NA",
+        "TH": "NA",
+        "ZC": "NA",
+        "EPI_COVER": "NA"
+      }
+    },
+    {
+      "type": "conditional_sum",
+      "if_field": "SG_PRESENT",
+      "if_value": "1",
+      "fields": [
+        "CR",
+        "CS",
+        "HO",
+        "HD",
+        "HS",
+        "HU",
+        "SI",
+        "EA",
+        "TH",
+        "ZC"
+      ],
+      "target": 100,
+      "tolerance": 0,
+      "blank_as_zero": true,
+      "error": "When seagrass is present, all species percentages must sum to 100%"
+    },
+    {
+      "type": "conditional",
+      "if_field": "SG_PRESENT",
+      "if_value": "0",
+      "then_field": "SG_COVER",
+      "then_condition": "equals",
+      "then_value": "0",
+      "error": "If no seagrass is present, SG_COVER must be 0"
+    },
+    {
+      "type": "conditional",
+      "if_field": "SG_PRESENT",
+      "if_value": "1",
+      "then_field": "SG_COVER",
+      "then_condition": "greater_than",
+      "then_value": "0",
+      "error": "If seagrass is present, SG_COVER must be greater than 0"
+    },
+    {
+      "type": "range",
+      "field": "SG_COVER",
+      "min": 0,
+      "max": 100,
+      "error": "SG_COVER must be between 0 and 100"
+    }
+  ]
+}
