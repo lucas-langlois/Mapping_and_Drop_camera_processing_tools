@@ -9,7 +9,9 @@ This tutorial will guide you through the complete workflow of using the Drop Cam
 4. [Loading Videos](#loading-videos)
 5. [Extracting Stills and Entering Data](#extracting-stills-and-entering-data)
 6. [Navigating and Editing Entries](#navigating-and-editing-entries)
-7. [Tips and Best Practices](#tips-and-best-practices)
+7. [Project Save/Load](#project-saveload)
+8. [Interactive Map View](#interactive-map-view)
+9. [Tips and Best Practices](#tips-and-best-practices)
 
 ---
 
@@ -82,7 +84,20 @@ Open PowerShell in the project directory and run:
 python video_player.py
 ```
 
-### Step 2: Load Data Entry Template
+### Step 2: Choose Project Type
+
+A dialog appears: **"Start New Project or Load Existing?"**
+
+**For First Time / New Survey:**
+1. Click **"Start New Project"**
+2. Continue to Step 3 below
+
+**To Resume Previous Work:**
+1. Click **"Load Existing Project"**
+2. Select your project file from `projects/` folder
+3. ✨ Everything loads automatically - skip to [Loading Videos](#loading-videos)!
+
+### Step 3: Load Data Entry Template (New Projects Only)
 
 1. A dialog appears: **"Load Data Entry Template"**
 2. Click **OK**
@@ -92,7 +107,7 @@ python video_player.py
 
 The application will read the column headers and create form fields for each one.
 
-### Step 3: Load Base CSV (Optional)
+### Step 4: Load Base CSV (Optional, New Projects Only)
 
 1. A second dialog appears: **"Load Base CSV (Optional)"**
 2. If you have a base CSV with location data:
@@ -105,6 +120,8 @@ The application will read the column headers and create form fields for each one
    - Click **No**
 
 The application window now opens with the video player on the left and data entry form on the right.
+
+**💡 Pro Tip:** After loading your template and base CSV, immediately click **"💾 Save Project"** so you can quickly resume next time!
 
 ---
 
@@ -565,6 +582,215 @@ While navigation auto-saves, you can also manually save:
 
 ---
 
+## Project Save/Load
+
+Save your entire project state and resume exactly where you left off - perfect for multi-day field work!
+
+### What Gets Saved in a Project?
+
+When you save a project, it stores:
+- ✅ Data entry template path
+- ✅ Base CSV data (all rows, for map functionality)
+- ✅ Video queue (list of all videos)
+- ✅ Current video and frame position
+- ✅ Drop counter state
+- ✅ All validation rules
+- ✅ Current entry index
+
+### Starting a New Project
+
+**First Launch:**
+
+1. Launch the application: `python video_player.py`
+2. Startup dialog appears: **"Start New Project or Load Existing?"**
+3. Click **"Start New Project"**
+4. Load your data entry template
+5. Load base CSV (optional)
+6. Load videos from drop_videos/
+7. Work on your data entry...
+
+### Saving Your Project
+
+**Manual Save (Recommended):**
+
+1. Click **"💾 Save Project"** button (top of window)
+2. Choose a location and filename (e.g., `Wuthathi_Nov2025.json`)
+3. Project saved to `projects/` folder
+4. Confirmation message: "Project saved"
+
+**Auto-Save on Close:**
+
+- When you close the app, it automatically offers to save your project
+- If you already have a project loaded, it auto-saves without asking
+- Ensures you never lose your place!
+
+### Loading an Existing Project
+
+**On Startup:**
+
+1. Launch the application
+2. Startup dialog: **"Start New Project or Load Existing?"**
+3. Click **"Load Existing Project"**
+4. Select your project file (e.g., `Wuthathi_Nov2025.json`)
+5. ✨ Everything restored:
+   - Template and validation rules loaded
+   - Base CSV data loaded
+   - Video queue restored
+   - Current video opened at exact frame
+   - Drop counter set correctly
+   - All previous entries loaded
+   - Ready to continue!
+
+### Example Workflow
+
+**Day 1 - Morning Session:**
+```
+9:00 AM - Start new project "Survey_Jan2025"
+9:05 AM - Load template and base CSV
+9:10 AM - Process videos 1-5 (20 drops total)
+11:30 AM - Click "Save Project"
+11:31 AM - Close app for lunch
+```
+
+**Day 1 - Afternoon Session:**
+```
+1:00 PM - Launch app
+1:01 PM - Load "Survey_Jan2025" project
+1:02 PM - Resume at Video 6, ready for next drop
+1:05 PM - Process videos 6-10 (15 more drops)
+3:30 PM - Save project and close
+```
+
+**Day 2:**
+```
+9:00 AM - Launch app, load project
+9:01 AM - Continue from Video 11 exactly where left off!
+```
+
+**Benefits:**
+- No re-entering template or base CSV paths
+- No re-loading video queue
+- Instant resume
+- Perfect continuation of drop numbering
+
+### Project File Location
+
+Projects are saved in: `Source_code/projects/[your_project_name].json`
+
+**Tip:** Back up your project files regularly along with your data_entries.csv!
+
+---
+
+## Interactive Map View
+
+Visualize all your sampling points on an interactive satellite map!
+
+### Opening the Map
+
+1. Ensure you have base CSV loaded (with LATITUDE and LONGITUDE columns)
+2. Click **"🗺 Show on Map"** button (next to Save Project)
+3. Map window opens showing all your points
+
+### Map Features
+
+**Satellite Basemap:**
+- High-resolution Esri World Imagery
+- Perfect for verifying sampling locations
+- Shows reef structures, seagrass beds, coastal features
+
+**Point Markers:**
+- 🔴 **Red marker** - Current video location (the video you're working on)
+- 🔵 **Blue markers** - All other sampling points
+- White labels showing Point IDs next to each marker
+
+**Interactive Popups:**
+
+Click any marker to see detailed information:
+- Point ID
+- Latitude and Longitude (6 decimal precision)
+- Location name
+- Depth
+- Date
+- Substrate type
+- Camera mode
+- (Shows all available metadata from base CSV)
+
+**Legend:**
+
+Bottom-right corner shows:
+- Red circle = Current Video Point
+- Blue circle = Other Points
+
+### Navigation
+
+- **Pan**: Click and drag the map
+- **Zoom**: Use mouse wheel or +/- buttons
+- **Reset view**: Map automatically centers on current point when opened
+
+### Use Cases
+
+**Survey Planning:**
+- View spatial distribution of sampling points
+- Identify coverage gaps
+- Plan additional survey locations
+
+**Quality Control:**
+- Verify GPS coordinates are in expected area
+- Spot obvious coordinate errors (points in wrong ocean!)
+- Confirm points match field notes
+
+**Progress Tracking:**
+- See which point you're currently working on (red marker)
+- Visualize how many points remain (blue markers)
+- Share map screenshot with team for status updates
+
+**Team Communication:**
+- Share map view to show survey area
+- Explain sampling strategy visually
+- Reference specific points in discussions
+
+### Requirements
+
+**Base CSV Must Include:**
+- `POINT_ID` column (unique identifier)
+- `LATITUDE` column (WGS84 decimal degrees, e.g., -11.9068)
+- `LONGITUDE` column (WGS84 decimal degrees, e.g., 143.1344)
+
+**Optional Columns (shown in popup if available):**
+- `LOCATION` - Site name
+- `DEPTH` - Water depth
+- `DATE` - Survey date
+- `SUBSTRATE` - Bottom type
+- `MODE` - Camera deployment method
+
+**Technical:**
+- PyQtWebEngine must be installed: `pip install PyQtWebEngine`
+- Internet connection required (loads map tiles from Esri servers)
+
+### Troubleshooting
+
+**"No base data loaded" error:**
+- Load a base CSV file first using "Load Base CSV" button
+- Or create a new project and load base CSV during startup
+
+**Points in wrong location:**
+- Check LATITUDE and LONGITUDE columns in your CSV
+- Verify coordinates are in decimal degrees (not DMS format)
+- Ensure coordinates are WGS84 (standard GPS format)
+- Check columns aren't swapped (lat should be ~-10 to -25 for GBR, lon ~142-153)
+
+**Map doesn't load:**
+- Check internet connection (map tiles load from Esri servers)
+- Ensure PyQtWebEngine is installed
+- Try closing and reopening the map
+
+**No markers showing:**
+- Verify LATITUDE and LONGITUDE have numeric values (not blank)
+- Check for valid coordinates (not 0,0 or obviously wrong values)
+- Ensure at least one row in base CSV has complete coordinate data
+
+---
+
 ## Tips and Best Practices
 
 ### Workflow Efficiency
@@ -592,6 +818,15 @@ While navigation auto-saves, you can also manually save:
 4. Adjust only what's different (15-30 seconds)
 5. Repeat for similar drops → **Save 67% of time!**
 6. Use auto-fill rules for common scenarios (e.g., no seagrass = instant NA fill)
+
+**Multi-Day Method (With Project Save/Load):** 💾
+1. Day 1: Start new project, load template/base CSV
+2. Save project immediately (💾 Save Project button)
+3. Process videos throughout the day
+4. Save project before closing
+5. Day 2: Load existing project → Resume instantly at exact frame!
+6. Continue processing, save periodically
+7. No need to reload anything - instant resume!
 
 ### Data Quality Tips
 
@@ -637,6 +872,22 @@ While navigation auto-saves, you can also manually save:
    - Copy it regularly to another location
    - Consider version control (name it with date: `data_entries_2025-12-09.csv`)
    - Back up your `_rules.json` file too (your validation setup)
+   - Save your project file (`projects/*.json`) for easy resume
+
+8. **Use the map view for quality control** 🗺️
+   - Click **"🗺 Show on Map"** to visualize all sampling points
+   - Verify GPS coordinates are in the correct area
+   - Spot obvious errors (points in wrong location/ocean)
+   - Check spatial coverage of your survey
+   - Red marker shows which point you're currently working on
+   - Great for progress tracking and spatial planning
+
+9. **Save your project frequently** 💾
+   - Click **"💾 Save Project"** at regular intervals
+   - Especially before lunch breaks or end of day
+   - Auto-saves on close, but manual saves give peace of mind
+   - Resume exactly where you left off next session
+   - No need to reload videos, templates, or navigate to position
 
 ### Keyboard Shortcuts Cheat Sheet
 

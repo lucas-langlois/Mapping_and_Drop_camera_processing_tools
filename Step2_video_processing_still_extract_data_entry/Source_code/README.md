@@ -23,12 +23,14 @@ A comprehensive video player application with integrated data entry for marine/e
 ✅ **Validation Rules** - Built-in QAQC system with visual rule builder  
 ✅ **Auto-Fill Rules** - Automatically populate fields based on conditions  
 ✅ **Conditional Sum Validation** - Validate sums only when conditions are met  
+✅ **Calculated Fields** - Auto-calculate values from formulas  
 ✅ **Copy from Previous** - Quickly reuse values from previous entries  
+✅ **Project Save/Load** - Resume exactly where you left off  
+✅ **Interactive Map View** - Visualize all sampling points on satellite imagery  
 
 ### Frame Extraction
 ✅ **Single Frame Export** - Extract current frame with 'S' key  
 ✅ **Auto-Named Files** - `[video_name]_drop1.jpg`, `drop2.jpg`, etc.  
-✅ **Batch Extraction** - Extract frames at custom intervals  
 ✅ **Organized Output** - All stills saved to `drop_stills/` folder  
 
 ## Installation
@@ -47,7 +49,7 @@ A comprehensive video player application with integrated data entry for marine/e
    
    Or install individually:
    ```powershell
-   pip install opencv-python PyQt5 numpy pandas pillow
+   pip install opencv-python PyQt5 PyQtWebEngine numpy
    ```
 
 2. **Prepare Directory Structure**
@@ -206,6 +208,7 @@ POINT_ID,DROP_ID,YEAR,DATE,TIME,LATITUDE,LONGITUDE,FILENAME,SUBSTRATE,DEPTH,COMM
 ### Smart Drop Numbering
 - Drop IDs sequence across multiple videos with same POINT_ID
 - Example: Video 1 (ID001) creates drop1, drop2; Video 2 (ID001) continues with drop3, drop4
+- Automatically resets to drop1 when POINT_ID changes
 
 ### Auto-Data Population
 - Extracts POINT_ID from video filename (e.g., "ID001")
@@ -218,6 +221,58 @@ POINT_ID,DROP_ID,YEAR,DATE,TIME,LATITUDE,LONGITUDE,FILENAME,SUBSTRATE,DEPTH,COMM
 - Edit historical data
 - Changes auto-save when navigating
 - Visual indicator (*) shows unsaved changes
+
+### Project Save/Load
+Save your entire project state and resume exactly where you left off:
+
+**Features:**
+- Saves video queue, current video, and frame position
+- Preserves all data entries and validation rules
+- Stores base CSV data and template settings
+- Auto-saves on close (if project exists)
+- Startup prompt to load existing or create new project
+
+**Usage:**
+1. Click **"💾 Save Project"** at any time
+2. Name your project (e.g., `Wuthathi_Nov2025.json`)
+3. Project saved to `projects/` folder
+4. On next launch, choose "Load Existing Project"
+5. Resume exactly where you stopped!
+
+**Benefits:**
+- No need to reload videos, templates, or base CSV
+- Preserves your exact frame position
+- Maintains drop counter state
+- Perfect for multi-day field work
+
+### Interactive Map View
+Visualize all your sampling points on a satellite map:
+
+**Features:**
+- 🗺️ Satellite basemap (Esri World Imagery)
+- 📍 All Point IDs displayed with labeled markers
+- 🔴 Current video point highlighted in red
+- 🔵 Other points shown in blue
+- ℹ️ Click markers for detailed popup info (coordinates, depth, date, location)
+- 🏷️ Permanent white labels showing Point IDs
+- 📊 Legend explaining marker colors
+
+**Usage:**
+1. Click **"🗺 Show on Map"** button (next to Save Project)
+2. Interactive map opens in popup window
+3. Pan/zoom to explore your survey area
+4. Click any marker to see details
+5. Red marker shows which point you're currently working on
+
+**Requirements:**
+- LATITUDE and LONGITUDE in base CSV (WGS84 decimal degrees)
+- PyQtWebEngine installed (`pip install PyQtWebEngine`)
+
+**Perfect for:**
+- Verifying GPS coordinates are correct
+- Planning which videos to process next
+- Visualizing spatial coverage of your survey
+- Sharing site locations with team members
 
 ## Data Validation Rules (QAQC)
 

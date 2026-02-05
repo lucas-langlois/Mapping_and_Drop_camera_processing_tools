@@ -8,6 +8,7 @@ import os
 from datetime import datetime
 import csv
 import json
+import re
 
 # Set environment variable BEFORE importing cv2 to handle videos with multiple streams (video + audio)
 os.environ['OPENCV_FFMPEG_READ_ATTEMPTS'] = '100000'
@@ -22,8 +23,9 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QLineEdit, QTextEdit, QScrollArea, QGroupBox, QGridLayout,
                              QShortcut, QInputDialog, QDialog, QListWidget, QListWidgetItem,
                              QDialogButtonBox, QFrame, QDoubleSpinBox, QCheckBox)
-from PyQt5.QtCore import QTimer, Qt
+from PyQt5.QtCore import QTimer, Qt, QUrl
 from PyQt5.QtGui import QImage, QPixmap, QKeySequence, QColor
+from PyQt5.QtWebEngineWidgets import QWebEngineView
 
 
 class ValidationRulesDialog(QDialog):
@@ -103,7 +105,8 @@ class ValidationRulesDialog(QDialog):
             "Conditional (If-Then)",
             "Sum Equals",
             "Conditional Sum",
-            "Auto-Fill"
+            "Auto-Fill",
+            "Calculated Field"
         ])
         self.rule_type_combo.currentTextChanged.connect(self.rule_type_changed)
         type_layout.addWidget(self.rule_type_combo)
@@ -294,38 +297,52 @@ class ValidationRulesDialog(QDialog):
         self.cond_sum_if_field.addItems(self.template_fieldnames)
         cond_sum_layout.addWidget(self.cond_sum_if_field, 0, 1)
         
-        cond_sum_layout.addWidget(QLabel("Equals:"), 1, 0)
+        cond_sum_layout.addWidget(QLabel("Condition:"), 1, 0)
+        self.cond_sum_if_condition = QComboBox()
+        self.cond_sum_if_condition.addItems(["Equals", "Greater than", "Greater than or equal", "Not equals"])
+        cond_sum_layout.addWidget(self.cond_sum_if_condition, 1, 1)
+        
+        cond_sum_layout.addWidget(QLabel("Value:"), 1, 2)
         self.cond_sum_if_value = QLineEdit()
-        cond_sum_layout.addWidget(self.cond_sum_if_value, 1, 1)
+        cond_sum_layout.addWidget(self.cond_sum_if_value, 1, 3)
         
         cond_sum_layout.addWidget(QLabel("Then Sum of Fields (comma-separated):"), 2, 0)
         self.cond_sum_fields = QLineEdit()
         self.cond_sum_fields.setPlaceholderText("e.g., CR, CS, HO, HD, HS")
         cond_sum_layout.addWidget(self.cond_sum_fields, 2, 1)
         
-        cond_sum_layout.addWidget(QLabel("Must Equal:"), 3, 0)
+        cond_sum_layout.addWidget(QLabel("Comparison:"), 3, 0)
+        self.cond_sum_comparison = QComboBox()
+        self.cond_sum_comparison.addItems(["Equal to", "Greater than", "Greater than or equal"])
+        cond_sum_layout.addWidget(self.cond_sum_comparison, 3, 1)
+        
+        cond_sum_layout.addWidget(QLabel("Target Value:"), 4, 0)
         self.cond_sum_target = QDoubleSpinBox()
         self.cond_sum_target.setMinimum(-999999)
         self.cond_sum_target.setMaximum(999999)
         self.cond_sum_target.setValue(100)
-        cond_sum_layout.addWidget(self.cond_sum_target, 3, 1)
+        cond_sum_layout.addWidget(self.cond_sum_target, 4, 1)
         
-        cond_sum_layout.addWidget(QLabel("Tolerance (+/-):"), 4, 0)
+        cond_sum_layout.addWidget(QLabel("Tolerance (+/-):"), 5, 0)
         self.cond_sum_tolerance = QDoubleSpinBox()
         self.cond_sum_tolerance.setMinimum(0)
         self.cond_sum_tolerance.setMaximum(999999)
         self.cond_sum_tolerance.setValue(0.5)
         self.cond_sum_tolerance.setDecimals(2)
-        cond_sum_layout.addWidget(self.cond_sum_tolerance, 4, 1)
+        cond_sum_layout.addWidget(self.cond_sum_tolerance, 5, 1)
         
-        cond_sum_layout.addWidget(QLabel("Treat Blanks As:"), 5, 0)
+        tolerance_note = QLabel("(Only applies to 'Equal to' comparison)")
+        tolerance_note.setStyleSheet("font-size: 9px; color: #666;")
+        cond_sum_layout.addWidget(tolerance_note, 5, 2)
+        
+        cond_sum_layout.addWidget(QLabel("Treat Blanks As:"), 6, 0)
         self.cond_sum_blank_as = QComboBox()
         self.cond_sum_blank_as.addItems(["0 (zero)", "Skip field"])
-        cond_sum_layout.addWidget(self.cond_sum_blank_as, 5, 1)
+        cond_sum_layout.addWidget(self.cond_sum_blank_as, 6, 1)
         
-        cond_sum_layout.addWidget(QLabel("Error Message:"), 6, 0)
+        cond_sum_layout.addWidget(QLabel("Error Message:"), 7, 0)
         self.cond_sum_error = QLineEdit()
-        cond_sum_layout.addWidget(self.cond_sum_error, 6, 1)
+        cond_sum_layout.addWidget(self.cond_sum_error, 7, 1)
         
         self.conditional_sum_panel.setLayout(cond_sum_layout)
         self.editor_layout.addWidget(self.conditional_sum_panel)
@@ -354,6 +371,36 @@ class ValidationRulesDialog(QDialog):
         
         self.autofill_panel.setLayout(autofill_layout)
         self.editor_layout.addWidget(self.autofill_panel)
+        
+        # Calculated Field panel
+        self.calculated_panel = QGroupBox("Calculated Field Rule")
+        calc_layout = QGridLayout()
+        
+        calc_layout.addWidget(QLabel("Target Field:"), 0, 0)
+        self.calc_target_field = QComboBox()
+        self.calc_target_field.addItems(self.template_fieldnames)
+        calc_layout.addWidget(self.calc_target_field, 0, 1)
+        
+        calc_layout.addWidget(QLabel("Formula:"), 1, 0)
+        self.calc_formula = QLineEdit()
+        self.calc_formula.setPlaceholderText("e.g., 100 - SG_COVER - AL_COVER - HC_COVER")
+        calc_layout.addWidget(self.calc_formula, 1, 1)
+        
+        calc_layout.addWidget(QLabel("Decimal Places:"), 2, 0)
+        self.calc_decimals = QSpinBox()
+        self.calc_decimals.setMinimum(0)
+        self.calc_decimals.setMaximum(10)
+        self.calc_decimals.setValue(1)
+        calc_layout.addWidget(self.calc_decimals, 2, 1)
+        
+        calc_layout.addWidget(QLabel("Formula Help:"), 3, 0, 1, 2)
+        help_text = QLabel("Use field names and operators: +, -, *, /, ( )\nExample: 100 - SG_COVER - AL_COVER\nFields are replaced with their numeric values.\nBlank fields = 0")
+        help_text.setStyleSheet("color: #666; font-size: 10px; padding: 5px; background-color: #f0f0f0; border-radius: 3px;")
+        help_text.setWordWrap(True)
+        calc_layout.addWidget(help_text, 4, 0, 1, 2)
+        
+        self.calculated_panel.setLayout(calc_layout)
+        self.editor_layout.addWidget(self.calculated_panel)
     
     def rule_type_changed(self, rule_type):
         """Show/hide appropriate editor panel"""
@@ -364,6 +411,7 @@ class ValidationRulesDialog(QDialog):
         self.sum_panel.hide()
         self.conditional_sum_panel.hide()
         self.autofill_panel.hide()
+        self.calculated_panel.hide()
         
         if rule_type == "Allowed Values":
             self.allowed_values_panel.show()
@@ -379,6 +427,8 @@ class ValidationRulesDialog(QDialog):
             self.conditional_sum_panel.show()
         elif rule_type == "Auto-Fill":
             self.autofill_panel.show()
+        elif rule_type == "Calculated Field":
+            self.calculated_panel.show()
     
     def add_new_rule(self):
         """Prepare to add a new rule"""
@@ -441,8 +491,30 @@ class ValidationRulesDialog(QDialog):
         elif rule_type == 'conditional_sum':
             self.rule_type_combo.setCurrentText("Conditional Sum")
             self.cond_sum_if_field.setCurrentText(rule.get('if_field', ''))
+            
+            # Load IF condition operator (default to "Equals" for backward compatibility)
+            if_condition = rule.get('if_condition', 'equals')
+            if if_condition == 'equals':
+                self.cond_sum_if_condition.setCurrentText("Equals")
+            elif if_condition == 'greater':
+                self.cond_sum_if_condition.setCurrentText("Greater than")
+            elif if_condition == 'greater_equal':
+                self.cond_sum_if_condition.setCurrentText("Greater than or equal")
+            elif if_condition == 'not_equals':
+                self.cond_sum_if_condition.setCurrentText("Not equals")
+            
             self.cond_sum_if_value.setText(str(rule.get('if_value', '')))
             self.cond_sum_fields.setText(', '.join(rule.get('fields', [])))
+            
+            # Load SUM comparison operator (default to "Equal to" for backward compatibility)
+            comparison = rule.get('comparison', 'equal')
+            if comparison == 'equal':
+                self.cond_sum_comparison.setCurrentText("Equal to")
+            elif comparison == 'greater':
+                self.cond_sum_comparison.setCurrentText("Greater than")
+            elif comparison == 'greater_equal':
+                self.cond_sum_comparison.setCurrentText("Greater than or equal")
+            
             self.cond_sum_target.setValue(float(rule.get('target', 100)))
             self.cond_sum_tolerance.setValue(float(rule.get('tolerance', 0.5)))
             blank_as = "0 (zero)" if rule.get('blank_as_zero', True) else "Skip field"
@@ -457,6 +529,12 @@ class ValidationRulesDialog(QDialog):
             actions = rule.get('actions', {})
             actions_text = ', '.join([f"{k}={v}" for k, v in actions.items()])
             self.autofill_actions.setPlainText(actions_text)
+        
+        elif rule_type == 'calculated':
+            self.rule_type_combo.setCurrentText("Calculated Field")
+            self.calc_target_field.setCurrentText(rule.get('target_field', ''))
+            self.calc_formula.setText(rule.get('formula', ''))
+            self.calc_decimals.setValue(int(rule.get('decimals', 1)))
     
     def delete_selected_rule(self):
         """Delete the selected rule"""
@@ -536,15 +614,45 @@ class ValidationRulesDialog(QDialog):
             elif rule_type == "Conditional Sum":
                 fields = [f.strip() for f in self.cond_sum_fields.text().split(',')]
                 blank_as_zero = self.cond_sum_blank_as.currentText() == "0 (zero)"
+                
+                # Convert IF condition text to internal format
+                if_condition_text = self.cond_sum_if_condition.currentText()
+                if if_condition_text == "Greater than":
+                    if_condition = 'greater'
+                    if_condition_desc = ">"
+                elif if_condition_text == "Greater than or equal":
+                    if_condition = 'greater_equal'
+                    if_condition_desc = ">="
+                elif if_condition_text == "Not equals":
+                    if_condition = 'not_equals'
+                    if_condition_desc = "!="
+                else:
+                    if_condition = 'equals'
+                    if_condition_desc = "="
+                
+                # Convert SUM comparison text to internal format
+                comparison_text = self.cond_sum_comparison.currentText()
+                if comparison_text == "Greater than":
+                    comparison = 'greater'
+                    comparison_desc = "be greater than"
+                elif comparison_text == "Greater than or equal":
+                    comparison = 'greater_equal'
+                    comparison_desc = "be greater than or equal to"
+                else:
+                    comparison = 'equal'
+                    comparison_desc = "equal"
+                
                 rule = {
                     'type': 'conditional_sum',
                     'if_field': self.cond_sum_if_field.currentText(),
+                    'if_condition': if_condition,
                     'if_value': self.cond_sum_if_value.text(),
                     'fields': fields,
+                    'comparison': comparison,
                     'target': self.cond_sum_target.value(),
                     'tolerance': self.cond_sum_tolerance.value(),
                     'blank_as_zero': blank_as_zero,
-                    'error': self.cond_sum_error.text() or f"If {self.cond_sum_if_field.currentText()}={self.cond_sum_if_value.text()}, sum of {', '.join(fields)} must equal {self.cond_sum_target.value()}"
+                    'error': self.cond_sum_error.text() or f"If {self.cond_sum_if_field.currentText()}{if_condition_desc}{self.cond_sum_if_value.text()}, sum of {', '.join(fields)} must {comparison_desc} {self.cond_sum_target.value()}"
                 }
             
             elif rule_type == "Auto-Fill":
@@ -565,6 +673,20 @@ class ValidationRulesDialog(QDialog):
                     'trigger_field': self.autofill_trigger_field.currentText(),
                     'trigger_value': self.autofill_trigger_value.text(),
                     'actions': actions
+                }
+            
+            elif rule_type == "Calculated Field":
+                formula = self.calc_formula.text().strip()
+                
+                if not formula:
+                    QMessageBox.warning(self, "Invalid Formula", "Please specify a formula")
+                    return
+                
+                rule = {
+                    'type': 'calculated',
+                    'target_field': self.calc_target_field.currentText(),
+                    'formula': formula,
+                    'decimals': self.calc_decimals.value()
                 }
             
             # Add or update rule
@@ -625,6 +747,10 @@ class ValidationRulesDialog(QDialog):
         self.autofill_trigger_field.setCurrentIndex(0)
         self.autofill_trigger_value.clear()
         self.autofill_actions.clear()
+        
+        self.calc_target_field.setCurrentIndex(0)
+        self.calc_formula.clear()
+        self.calc_decimals.setValue(1)
     
     def rule_selected(self, item):
         """Handle rule selection from list"""
@@ -671,17 +797,217 @@ class ValidationRulesDialog(QDialog):
             return f"Sum of {', '.join(rule['fields'])} must equal {rule['target']}"
         
         elif rule_type == 'conditional_sum':
-            return f"If {rule['if_field']}={rule['if_value']}, sum of {', '.join(rule['fields'])} must equal {rule['target']}"
+            # Format IF condition
+            if_condition = rule.get('if_condition', 'equals')
+            if if_condition == 'greater':
+                if_symbol = ">"
+            elif if_condition == 'greater_equal':
+                if_symbol = ">="
+            elif if_condition == 'not_equals':
+                if_symbol = "!="
+            else:
+                if_symbol = "="
+            
+            # Format SUM comparison
+            comparison = rule.get('comparison', 'equal')
+            if comparison == 'greater':
+                comp_text = "be greater than"
+            elif comparison == 'greater_equal':
+                comp_text = "be >= "
+            else:
+                comp_text = "equal"
+            return f"If {rule['if_field']}{if_symbol}{rule['if_value']}, sum of {', '.join(rule['fields'])} must {comp_text} {rule['target']}"
         
         elif rule_type == 'autofill':
             actions_str = ', '.join([f"{k}={v}" for k, v in rule.get('actions', {}).items()])
             return f"When {rule['trigger_field']}={rule['trigger_value']}, auto-set: {actions_str}"
+        
+        elif rule_type == 'calculated':
+            return f"Calculate {rule['target_field']} = {rule['formula']}"
         
         return "Unknown rule"
     
     def get_rules(self):
         """Return the current rules list"""
         return self.rules
+
+
+class MapDialog(QDialog):
+    """Dialog for displaying points on a Leaflet map"""
+    def __init__(self, points_data, current_point_id, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Point Locations Map")
+        self.setGeometry(100, 100, 1000, 700)
+        
+        # Store data
+        self.points_data = points_data  # List of dicts with point_id, lat, lon
+        self.current_point_id = current_point_id
+        
+        # Setup UI
+        layout = QVBoxLayout()
+        
+        # Create web view
+        self.web_view = QWebEngineView()
+        
+        # Generate and load HTML
+        html = self.generate_map_html()
+        self.web_view.setHtml(html)
+        
+        layout.addWidget(self.web_view)
+        
+        # Close button
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(self.accept)
+        layout.addWidget(close_btn)
+        
+        self.setLayout(layout)
+    
+    def generate_map_html(self):
+        """Generate HTML with Leaflet map"""
+        # Calculate center of map (use current point if available, otherwise first point)
+        if self.points_data:
+            current_point = next((p for p in self.points_data if p['point_id'] == self.current_point_id), None)
+            if current_point:
+                center_lat = current_point['lat']
+                center_lon = current_point['lon']
+            else:
+                center_lat = self.points_data[0]['lat']
+                center_lon = self.points_data[0]['lon']
+        else:
+            center_lat = -10.0
+            center_lon = 142.0
+        
+        # Build markers JavaScript
+        markers_js = []
+        for point in self.points_data:
+            is_current = point['point_id'] == self.current_point_id
+            color = 'red' if is_current else 'blue'
+            icon_html = f"'<div style=\"background-color: {color}; width: 25px; height: 25px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.5);\"></div>'"
+            
+            # Build popup content with available fields
+            popup_content = f"<div style='min-width: 200px;'><h3 style='margin: 0 0 10px 0; color: {color};'>{point['point_id']}</h3>"
+            popup_content += f"<b>Latitude:</b> {point['lat']:.6f}<br>"
+            popup_content += f"<b>Longitude:</b> {point['lon']:.6f}<br>"
+            
+            # Add optional fields if present
+            if 'location' in point and point['location'] != 'N/A':
+                popup_content += f"<b>Location:</b> {point['location']}<br>"
+            if 'depth' in point and point['depth'] != 'N/A':
+                popup_content += f"<b>Depth:</b> {point['depth']}<br>"
+            if 'date' in point and point['date'] != 'N/A':
+                popup_content += f"<b>Date:</b> {point['date']}<br>"
+            if 'substrate' in point and point['substrate'] != 'N/A':
+                popup_content += f"<b>Substrate:</b> {point['substrate']}<br>"
+            if 'mode' in point and point['mode'] != 'N/A':
+                popup_content += f"<b>Mode:</b> {point['mode']}<br>"
+            
+            popup_content += "</div>"
+            
+            # Escape single quotes in popup content for JavaScript
+            popup_content = popup_content.replace("'", "\\'")
+            
+            marker_js = f"""
+            L.marker([{point['lat']}, {point['lon']}], {{
+                icon: L.divIcon({{
+                    className: 'custom-div-icon',
+                    html: {icon_html},
+                    iconSize: [25, 25],
+                    iconAnchor: [12, 12]
+                }})
+            }}).addTo(map).bindPopup('{popup_content}');
+            
+            // Add permanent label
+            L.marker([{point['lat']}, {point['lon']}], {{
+                icon: L.divIcon({{
+                    className: 'point-label',
+                    html: '<div style="color: white; font-weight: bold; font-size: 13px; white-space: nowrap; text-shadow: 2px 2px 3px rgba(0,0,0,0.8), -1px -1px 2px rgba(0,0,0,0.8), 1px -1px 2px rgba(0,0,0,0.8), -1px 1px 2px rgba(0,0,0,0.8);">{point['point_id']}</div>',
+                    iconSize: null,
+                    iconAnchor: [-18, 0]
+                }})
+            }}).addTo(map);
+            """
+            markers_js.append(marker_js)
+        
+        markers_code = '\n'.join(markers_js)
+        
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Point Locations</title>
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+            <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+            <style>
+                body {{ margin: 0; padding: 0; }}
+                #map {{ height: 100vh; width: 100%; }}
+                .point-label {{
+                    pointer-events: none; /* Allow clicking through labels to markers */
+                }}
+                .leaflet-popup-content-wrapper {{
+                    border-radius: 8px;
+                }}
+                .leaflet-popup-content {{
+                    margin: 10px 15px;
+                    font-family: Arial, sans-serif;
+                    font-size: 13px;
+                    line-height: 1.6;
+                }}
+                .legend {{
+                    background: white;
+                    padding: 10px;
+                    border-radius: 5px;
+                    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+                    line-height: 24px;
+                    font-family: Arial, sans-serif;
+                    font-size: 13px;
+                }}
+                .legend-item {{
+                    margin: 5px 0;
+                }}
+                .legend-icon {{
+                    display: inline-block;
+                    width: 18px;
+                    height: 18px;
+                    border-radius: 50%;
+                    border: 2px solid white;
+                    margin-right: 8px;
+                    vertical-align: middle;
+                    box-shadow: 0 0 3px rgba(0,0,0,0.5);
+                }}
+            </style>
+        </head>
+        <body>
+            <div id="map"></div>
+            <script>
+                // Initialize map
+                var map = L.map('map').setView([{center_lat}, {center_lon}], 13);
+                
+                // Add satellite basemap (Esri World Imagery)
+                L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{{z}}/{{y}}/{{x}}', {{
+                    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+                    maxZoom: 18
+                }}).addTo(map);
+                
+                // Add markers
+                {markers_code}
+                
+                // Add legend
+                var legend = L.control({{ position: 'bottomright' }});
+                legend.onAdd = function (map) {{
+                    var div = L.DomUtil.create('div', 'legend');
+                    div.innerHTML = '<h4 style="margin: 0 0 8px 0;">Point Locations</h4>';
+                    div.innerHTML += '<div class="legend-item"><span class="legend-icon" style="background-color: red;"></span>Current Video Point</div>';
+                    div.innerHTML += '<div class="legend-item"><span class="legend-icon" style="background-color: blue;"></span>Other Points</div>';
+                    return div;
+                }};
+                legend.addTo(map);
+            </script>
+        </body>
+        </html>
+        """
+        return html
 
 
 class VideoPlayer(QMainWindow):
@@ -717,12 +1043,18 @@ class VideoPlayer(QMainWindow):
         self.drop_videos_dir = os.path.join(application_path, 'drop_videos')
         self.drop_stills_dir = os.path.join(application_path, 'drop_stills')
         self.data_dir = os.path.join(application_path, 'data')
+        self.projects_dir = os.path.join(application_path, 'projects')
+        os.makedirs(self.projects_dir, exist_ok=True)
+        
+        # Project state variables
+        self.current_project_file = None
         
         # Data entry variables
         self.data_fields = {}
         self.template_fieldnames = []  # Store fieldnames from template CSV
         self.base_data = {}  # Store preloaded base data from CSV
         self.base_data_csv = []  # Store all rows from loaded base CSV
+        self.base_data_csv_path = None  # Store path to loaded base CSV file
         self.all_data_entries = []  # List of all data entries (only created on frame extraction)
         self.current_entry_index = -1  # Current position in data entries (-1 means no entries yet)
         self.unsaved_changes = False  # Track if current entry has unsaved changes
@@ -759,6 +1091,41 @@ class VideoPlayer(QMainWindow):
     
     def show_startup_dialogs(self):
         """Show startup dialogs to load template and optional base CSV"""
+        # Step 0: Ask if user wants to start new project or load existing
+        project_msg = QMessageBox()
+        project_msg.setIcon(QMessageBox.Question)
+        project_msg.setWindowTitle("Drop Cam Video Analysis - Start")
+        project_msg.setText(
+            "Welcome to Drop Cam Video Analysis!\n\n"
+            "Would you like to:\n\n"
+            "• Start a NEW project (setup from scratch)\n"
+            "• Load an EXISTING project (resume where you left off)"
+        )
+        
+        new_btn = project_msg.addButton("New Project", QMessageBox.ActionRole)
+        load_btn = project_msg.addButton("Load Existing Project", QMessageBox.ActionRole)
+        cancel_btn = project_msg.addButton(QMessageBox.Cancel)
+        
+        project_msg.exec_()
+        
+        if project_msg.clickedButton() == cancel_btn:
+            return False
+        
+        if project_msg.clickedButton() == load_btn:
+            # Load existing project
+            if self.load_project():
+                return True
+            else:
+                # Loading failed, ask if they want to start new instead
+                retry = QMessageBox.question(
+                    self, "Load Failed",
+                    "Failed to load project.\n\nWould you like to start a new project instead?",
+                    QMessageBox.Yes | QMessageBox.No
+                )
+                if retry == QMessageBox.No:
+                    return False
+                # Continue to new project setup below
+        
         # Step 1: Load template CSV (required)
         template_msg = QMessageBox()
         template_msg.setIcon(QMessageBox.Information)
@@ -815,6 +1182,7 @@ class VideoPlayer(QMainWindow):
                     with open(base_path, 'r', encoding='utf-8') as f:
                         reader = csv.DictReader(f)
                         self.base_data_csv = list(reader)
+                        self.base_data_csv_path = base_path  # Store the path
                     
                     QMessageBox.information(
                         self, "Base CSV Loaded",
@@ -868,6 +1236,18 @@ class VideoPlayer(QMainWindow):
         
         # Control buttons layout
         controls_layout = QHBoxLayout()
+        
+        # Save Project button
+        self.save_project_btn = QPushButton("💾 Save Project")
+        self.save_project_btn.clicked.connect(lambda: self.save_project())
+        self.save_project_btn.setStyleSheet("background-color: #9C27B0; color: white; font-weight: bold; padding: 8px;")
+        controls_layout.addWidget(self.save_project_btn)
+        
+        # Show on Map button
+        self.show_map_btn = QPushButton("🗺 Show on Map")
+        self.show_map_btn.clicked.connect(self.show_map)
+        self.show_map_btn.setStyleSheet("background-color: #2196F3; color: white; font-weight: bold; padding: 8px;")
+        controls_layout.addWidget(self.show_map_btn)
         
         # Help/Instructions button
         self.help_btn = QPushButton("❓ Instructions")
@@ -926,12 +1306,6 @@ class VideoPlayer(QMainWindow):
         self.extract_btn.setEnabled(False)
         controls_layout.addWidget(self.extract_btn)
         
-        # Batch extract button
-        self.batch_extract_btn = QPushButton("Batch Extract")
-        self.batch_extract_btn.clicked.connect(self.batch_extract)
-        self.batch_extract_btn.setEnabled(False)
-        controls_layout.addWidget(self.batch_extract_btn)
-        
         video_layout.addLayout(controls_layout)
         
         # Auto-loader controls
@@ -965,18 +1339,6 @@ class VideoPlayer(QMainWindow):
         autoload_layout.addStretch()
         
         video_layout.addLayout(autoload_layout)
-        
-        # Batch extraction controls
-        batch_layout = QHBoxLayout()
-        batch_layout.addWidget(QLabel("Extract every"))
-        self.frame_interval = QSpinBox()
-        self.frame_interval.setMinimum(1)
-        self.frame_interval.setMaximum(1000)
-        self.frame_interval.setValue(30)
-        batch_layout.addWidget(self.frame_interval)
-        batch_layout.addWidget(QLabel("frames"))
-        batch_layout.addStretch()
-        video_layout.addLayout(batch_layout)
         
         # Add video layout to main layout
         main_layout.addLayout(video_layout, 2)
@@ -1121,10 +1483,10 @@ class VideoPlayer(QMainWindow):
         # Action buttons
         button_layout = QHBoxLayout()
         
-        load_base_btn = QPushButton("Load Base CSV")
-        load_base_btn.clicked.connect(self.load_base_data)
-        load_base_btn.setStyleSheet("background-color: #2196F3; color: white; font-weight: bold; padding: 8px;")
-        button_layout.addWidget(load_base_btn)
+        init_entry_btn = QPushButton("📝 Initialise New Entry")
+        init_entry_btn.clicked.connect(self.initialise_new_entry)
+        init_entry_btn.setStyleSheet("background-color: #2196F3; color: white; font-weight: bold; padding: 8px;")
+        button_layout.addWidget(init_entry_btn)
         
         save_btn = QPushButton("Save Entry")
         save_btn.clicked.connect(self.save_data_entry)
@@ -1206,11 +1568,10 @@ class VideoPlayer(QMainWindow):
             self.next_frame_btn.setEnabled(True)
             self.skip_back_btn.setEnabled(True)
             self.skip_forward_btn.setEnabled(True)
-            self.speed_combo.setEnabled(True)
-            self.extract_btn.setEnabled(True)
-            self.batch_extract_btn.setEnabled(True)
-            
-            self.display_frame()
+        self.speed_combo.setEnabled(True)
+        self.extract_btn.setEnabled(True)
+        
+        self.display_frame()
             
     def toggle_play(self):
         """Toggle play/pause"""
@@ -1416,12 +1777,12 @@ class VideoPlayer(QMainWindow):
             # Check if we're in auto-loader mode
             if self.video_queue and self.video_path in self.video_queue:
                 # Auto-load base data from CSV on first extraction if not already loaded
-                first_extraction = False
                 if not self.base_data:
                     self.auto_load_base_data_from_csv()
-                    # Update drop counter based on POINT_ID
-                    self.drop_counter = self.get_next_drop_number_for_point()
-                    first_extraction = True
+                
+                # ALWAYS calculate the next drop number using simple logic
+                # (Compare current POINT_ID with last entry's POINT_ID)
+                self.drop_counter = self.get_next_drop_number_for_point()
                 
                 # VALIDATE DATA BEFORE EXTRACTING FRAME
                 # Prepare data row for validation
@@ -1517,50 +1878,6 @@ class VideoPlayer(QMainWindow):
         else:
             QMessageBox.warning(self, "Error", "Failed to extract frame")
             
-    def batch_extract(self):
-        """Extract frames at specified intervals"""
-        if not self.cap:
-            return
-            
-        interval = self.frame_interval.value()
-        
-        # Confirm action
-        reply = QMessageBox.question(
-            self, "Batch Extract",
-            f"Extract every {interval} frame(s)?\n"
-            f"This will create approximately {self.total_frames // interval} images.",
-            QMessageBox.Yes | QMessageBox.No
-        )
-        
-        if reply == QMessageBox.No:
-            return
-            
-        # Create output directory
-        video_name = os.path.splitext(os.path.basename(self.video_path))[0]
-        output_dir = os.path.join(os.path.dirname(self.video_path), f"{video_name}_batch_frames")
-        os.makedirs(output_dir, exist_ok=True)
-        
-        # Extract frames
-        saved_count = 0
-        self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-        
-        for frame_num in range(0, self.total_frames, interval):
-            self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
-            ret, frame = self.cap.read()
-            
-            if ret:
-                output_path = os.path.join(output_dir, f"frame_{frame_num:06d}.jpg")
-                cv2.imwrite(output_path, frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
-                saved_count += 1
-                
-        # Reset to original frame
-        self.cap.set(cv2.CAP_PROP_POS_FRAMES, self.current_frame)
-        
-        QMessageBox.information(
-            self, "Success", 
-            f"Extracted {saved_count} frames to:\n{output_dir}"
-        )
-        
     def choose_video_folder(self):
         """Choose a custom video folder and load videos from it"""
         folder_path = QFileDialog.getExistingDirectory(
@@ -1627,15 +1944,29 @@ class VideoPlayer(QMainWindow):
         self.current_video_index = index
         video_path = self.video_queue[index]
         
-        # Auto-load base data from CSV when loading a new video
+        # Set video path first
         self.video_path = video_path
-        if self.base_data_csv:
-            self.auto_load_base_data_from_csv()
+        video_name = os.path.splitext(os.path.basename(video_path))[0]
         
-        # Reset drop counter - check existing drops for this POINT_ID
+        # Load base data FIRST - this sets the correct POINT_ID
+        # Do NOT call populate_fields_from_base_data() yet
+        if self.base_data_csv:
+            # Find matching base data without populating fields yet
+            for row in self.base_data_csv:
+                video_fn = row.get('VIDEO_FILENAME', '')
+                if video_fn:
+                    csv_video_name = os.path.splitext(video_fn)[0]
+                    if csv_video_name == video_name or video_fn == os.path.basename(video_path):
+                        self.base_data = row
+                        print(f"  Loaded base data for POINT_ID: {row.get('POINT_ID', 'N/A')}")
+                        break
+        
+        # NOW reset drop counter with the correct POINT_ID from new base_data
         self.drop_counter = self.get_next_drop_number_for_point()
         
-        video_name = os.path.splitext(os.path.basename(video_path))[0]
+        # NOW populate fields (this will call update_drop_fields_for_next() with correct counter)
+        if self.base_data:
+            self.populate_fields_from_base_data()
         
         # Load video
         if self.cap:
@@ -1669,7 +2000,6 @@ class VideoPlayer(QMainWindow):
         self.skip_forward_btn.setEnabled(True)
         self.speed_combo.setEnabled(True)
         self.extract_btn.setEnabled(True)
-        self.batch_extract_btn.setEnabled(True)
         
         # Update queue label
         self.queue_label.setText(
@@ -1684,6 +2014,23 @@ class VideoPlayer(QMainWindow):
         if not self.video_queue:
             return
         
+        # Confirm before moving to previous video
+        reply = QMessageBox.question(
+            self, "Move to Previous Video?",
+            "⚠️ Have you extracted and saved ALL drops for this video?\n\n"
+            "IMPORTANT: Make sure the last drop is saved before continuing.\n\n"
+            "Moving to the previous video will:\n"
+            "• Reset drop counter\n"
+            "• Load base data for that video\n"
+            "• Clear observation fields\n\n"
+            "Continue to previous video?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        
+        if reply == QMessageBox.No:
+            return
+        
         if self.is_playing:
             self.toggle_play()
         
@@ -1693,6 +2040,23 @@ class VideoPlayer(QMainWindow):
     def next_video(self):
         """Load next video from queue"""
         if not self.video_queue:
+            return
+        
+        # Confirm before moving to next video
+        reply = QMessageBox.question(
+            self, "Move to Next Video?",
+            "⚠️ Have you extracted and saved ALL drops for this video?\n\n"
+            "IMPORTANT: Make sure the last drop is saved before continuing.\n\n"
+            "Moving to the next video will:\n"
+            "• Reset drop counter to drop1\n"
+            "• Load base data for the new video\n"
+            "• Clear observation fields\n\n"
+            "Continue to next video?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        
+        if reply == QMessageBox.No:
             return
         
         if self.is_playing:
@@ -1803,6 +2167,73 @@ class VideoPlayer(QMainWindow):
             else:
                 widget.clear()
     
+    def initialise_new_entry(self):
+        """Save current entry (without extracting frame) and prepare for next entry"""
+        # Check if we're in auto-loader mode
+        if not self.video_queue or not self.video_path or self.video_path not in self.video_queue:
+            QMessageBox.warning(
+                self, "Not in Video Queue Mode",
+                "This feature only works when using 'Load Videos from drop_videos/'.\n\n"
+                "For manual video mode, use 'Save Entry' button instead."
+            )
+            return
+        
+        # Auto-load base data from CSV on first use if not already loaded
+        if not self.base_data:
+            self.auto_load_base_data_from_csv()
+        
+        # ALWAYS calculate the next drop number using the simple logic
+        # (Compare current POINT_ID with last entry's POINT_ID)
+        self.drop_counter = self.get_next_drop_number_for_point()
+        
+        # Save current data entry without extracting frame
+        drop_id = f"drop{self.drop_counter}"
+        
+        # Use video filename as base for still filename (even though no still is extracted)
+        video_name = os.path.splitext(os.path.basename(self.video_path))[0]
+        still_filename = f"{video_name}_drop{self.drop_counter}.jpg"  # Placeholder - no actual file created
+        
+        # Auto-save data entry
+        self.auto_save_data_entry(drop_id, still_filename)
+        
+        self.drop_counter += 1
+        
+        # Update DROP_ID and FILENAME fields in the form to show the NEXT drop information
+        next_drop_id = f"drop{self.drop_counter}"
+        next_filename = f"{video_name}_drop{self.drop_counter}.jpg"
+        
+        if 'DROP_ID' in self.data_fields:
+            widget = self.data_fields['DROP_ID']
+            widget.blockSignals(True)
+            if isinstance(widget, QTextEdit):
+                widget.setPlainText(next_drop_id)
+            else:
+                widget.setText(next_drop_id)
+            widget.blockSignals(False)
+            print(f"  Updated DROP_ID field to: {next_drop_id}")
+        
+        if 'FILENAME' in self.data_fields:
+            widget = self.data_fields['FILENAME']
+            widget.blockSignals(True)
+            if isinstance(widget, QTextEdit):
+                widget.setPlainText(next_filename)
+            else:
+                widget.setText(next_filename)
+            widget.blockSignals(False)
+            print(f"  Updated FILENAME field to: {next_filename}")
+        
+        # Update queue label to show new drop count
+        self.queue_label.setText(
+            f"Video {self.current_video_index + 1}/{len(self.video_queue)}: "
+            f"{os.path.basename(self.video_path)} (Next drop: {self.drop_counter})"
+        )
+        
+        # Show success message
+        msg = f"Entry initialized with DROP_ID: {drop_id}\n\n"
+        msg += "Data saved (no frame extracted).\n\n"
+        msg += "Form is now ready for your next observation."
+        QMessageBox.information(self, "Success", msg)
+    
     def load_base_data(self):
         """Load base data from a CSV file"""
         file_path, _ = QFileDialog.getOpenFileName(
@@ -1824,6 +2255,7 @@ class VideoPlayer(QMainWindow):
                 
                 # Store all rows for matching later
                 self.base_data_csv = rows
+                self.base_data_csv_path = file_path  # Store the path
                 
                 QMessageBox.information(
                     self, "Success",
@@ -1897,58 +2329,45 @@ class VideoPlayer(QMainWindow):
                     return
     
     def get_next_drop_number_for_point(self):
-        """Get the next drop number for the current POINT_ID"""
-        # Get POINT_ID from base_data
-        point_id = self.base_data.get('POINT_ID', '') if self.base_data else ''
+        """
+        Get the next drop number using simple logic:
+        - If no previous entries OR POINT_ID changed: drop1
+        - If POINT_ID same as previous entry: increment drop number
+        """
+        # Get current POINT_ID from base_data
+        current_point_id = self.base_data.get('POINT_ID', '') if self.base_data else ''
         
-        if not point_id and self.video_path:
-            # Try to extract POINT_ID from video filename (e.g., "ID001" from filename)
-            video_name = os.path.basename(self.video_path)
-            import re
-            match = re.search(r'ID(\d+)', video_name, re.IGNORECASE)
-            if match:
-                point_id = match.group(1)  # Extract just the number part
+        print(f"  get_next_drop_number_for_point called")
+        print(f"    Current POINT_ID: '{current_point_id}'")
+        print(f"    Total entries: {len(self.all_data_entries)}")
         
-        if not point_id:
-            # Fallback to video-based naming if no POINT_ID
-            video_name = os.path.splitext(os.path.basename(self.video_path))[0] if self.video_path else ''
-            existing_drops = [
-                f for f in os.listdir(self.drop_stills_dir)
-                if f.startswith(video_name + "_drop") and f.endswith('.jpg')
-            ] if os.path.exists(self.drop_stills_dir) else []
-            
-            if existing_drops:
-                drop_numbers = []
-                for f in existing_drops:
-                    try:
-                        num = int(f.replace(video_name + "_drop", "").replace(".jpg", ""))
-                        drop_numbers.append(num)
-                    except:
-                        pass
-                return max(drop_numbers) + 1 if drop_numbers else 1
+        # If no entries exist, start at drop1
+        if not self.all_data_entries or len(self.all_data_entries) == 0:
+            print(f"    No previous entries → drop1")
             return 1
         
-        # Check data_entries.csv for existing entries with same POINT_ID
-        output_file = os.path.join(self.data_dir, "data_entries.csv")
-        if not os.path.exists(output_file):
-            return 1
+        # Get the last entry
+        last_entry = self.all_data_entries[-1]
+        last_point_id = last_entry.get('POINT_ID', '')
+        last_drop_id = last_entry.get('DROP_ID', '')
         
-        try:
-            with open(output_file, 'r', encoding='utf-8') as f:
-                reader = csv.DictReader(f)
-                max_drop = 0
-                for row in reader:
-                    if row.get('POINT_ID') == point_id:
-                        drop_id = row.get('DROP_ID', '')
-                        # Extract number from drop ID (e.g., "drop3" -> 3)
-                        if drop_id.startswith('drop'):
-                            try:
-                                num = int(drop_id.replace('drop', ''))
-                                max_drop = max(max_drop, num)
-                            except:
-                                pass
-                return max_drop + 1
-        except:
+        print(f"    Last entry: POINT_ID='{last_point_id}', DROP_ID='{last_drop_id}'")
+        
+        # Extract drop number from last entry
+        last_drop_num = 1
+        if last_drop_id and last_drop_id.startswith('drop'):
+            try:
+                last_drop_num = int(last_drop_id.replace('drop', ''))
+            except:
+                last_drop_num = 1
+        
+        # Simple logic: Same POINT_ID = increment, Different POINT_ID = reset to 1
+        if current_point_id == last_point_id:
+            next_drop = last_drop_num + 1
+            print(f"    Same POINT_ID → increment to drop{next_drop}")
+            return next_drop
+        else:
+            print(f"    Different POINT_ID → reset to drop1")
             return 1
     
     def update_drop_fields_for_next(self):
@@ -2018,6 +2437,7 @@ class VideoPlayer(QMainWindow):
         def handler():
             self.mark_entry_changed()
             self.check_autofill_rules(field_name)
+            self.check_calculated_rules(field_name)
         return handler
     
     def mark_entry_changed(self):
@@ -2047,19 +2467,66 @@ class VideoPlayer(QMainWindow):
                 )
                 return
             
-            # Load the first entry
-            self.current_entry_index = 0
-            self.load_entry_at_index(0)
+            # Automatically open the NEXT video after the last completed entry FIRST
+            last_entry_index = len(self.all_data_entries) - 1
+            last_entry = self.all_data_entries[last_entry_index]
+            video_filename = None
+            
+            # Try to get video filename from various fields
+            if 'VIDEO_FILENAME' in last_entry:
+                video_filename = last_entry['VIDEO_FILENAME']
+            elif 'FILENAME' in last_entry:
+                # Extract video name from still filename (e.g., "video_drop3.jpg" -> "video.mp4")
+                filename = last_entry['FILENAME']
+                if '_drop' in filename:
+                    video_name = filename.split('_drop')[0]
+                    video_filename = video_name + '.mp4'  # Assume mp4, could also check for other extensions
+            
+            # Try to find and open the NEXT video in the queue
+            video_loaded = False
+            if video_filename and self.video_queue:
+                # Search for the video in the queue
+                for idx, video_path in enumerate(self.video_queue):
+                    if os.path.basename(video_path) == video_filename or os.path.splitext(os.path.basename(video_path))[0] == os.path.splitext(video_filename)[0]:
+                        # Found the last video - load the NEXT one
+                        next_idx = (idx + 1) % len(self.video_queue)
+                        if next_idx != idx:  # Make sure there's a next video
+                            # Load the next video - this will populate fields with correct DROP_ID
+                            self.load_video_from_queue(next_idx)
+                            next_video_name = os.path.basename(self.video_queue[next_idx])
+                            print(f"  Auto-loaded NEXT video: {next_video_name}")
+                            video_loaded = True
+                        break
+            
+            # Set current_entry_index to point to a new entry (beyond saved entries)
+            # This allows "copy from previous" to work correctly
+            self.current_entry_index = len(self.all_data_entries)
             
             # Enable navigation buttons
             self.update_navigation_buttons()
             
-            QMessageBox.information(
-                self, "Success",
-                f"Loaded {len(self.all_data_entries)} data entries.\n\n"
-                f"Use navigation arrows to browse through entries.\n"
-                f"Changes are auto-saved when navigating."
-            )
+            # Show appropriate message
+            if video_loaded:
+                QMessageBox.information(
+                    self, "Success - Ready to Resume",
+                    f"Loaded {len(self.all_data_entries)} data entries.\n\n"
+                    f"✓ Showing last entry (#{last_entry_index + 1})\n"
+                    f"✓ Next video automatically loaded and ready\n\n"
+                    f"⚠️ IMPORTANT: Always complete ALL drops for a video\n"
+                    f"before moving to the next video or quitting the app!\n\n"
+                    f"Use navigation arrows to review previous entries.\n"
+                    f"Changes are auto-saved when navigating."
+                )
+            else:
+                QMessageBox.information(
+                    self, "Success",
+                    f"Loaded {len(self.all_data_entries)} data entries.\n\n"
+                    f"Showing last entry (#{last_entry_index + 1}).\n\n"
+                    f"⚠️ IMPORTANT: Always complete ALL drops for a video\n"
+                    f"before moving to the next video or quitting the app!\n\n"
+                    f"Use navigation arrows to browse through entries.\n"
+                    f"Changes are auto-saved when navigating."
+                )
         except Exception as e:
             QMessageBox.critical(
                 self, "Error",
@@ -2091,6 +2558,19 @@ class VideoPlayer(QMainWindow):
         # Unblock signals
         for widget in self.data_fields.values():
             widget.blockSignals(False)
+        
+        # Update drop_counter based on the loaded entry's DROP_ID
+        # This ensures the next extraction uses the correct drop number
+        drop_id = entry.get('DROP_ID', '')
+        if drop_id:
+            # Extract number from DROP_ID (e.g., "drop3" -> 3)
+            import re
+            match = re.search(r'drop(\d+)', drop_id, re.IGNORECASE)
+            if match:
+                current_drop_num = int(match.group(1))
+                # Set counter to next drop number
+                self.drop_counter = current_drop_num + 1
+                print(f"  Loaded entry with DROP_ID={drop_id}, set drop_counter={self.drop_counter} for next extraction")
         
         self.unsaved_changes = False
         self.update_navigation_buttons()
@@ -2580,6 +3060,73 @@ class VideoPlayer(QMainWindow):
                 f"Rules will be checked when saving entries."
             )
     
+    def show_map(self):
+        """Show all points on a Leaflet map with current point highlighted"""
+        if not self.base_data_csv or len(self.base_data_csv) < 1:
+            QMessageBox.warning(
+                self, "No Data",
+                "No base data loaded. Please load a base CSV file first."
+            )
+            return
+        
+        # Extract unique points with their coordinates
+        points_data = []
+        seen_points = set()
+        
+        # base_data_csv contains dictionaries (from csv.DictReader)
+        # Check if required fields exist
+        first_row = self.base_data_csv[0]
+        if 'POINT_ID' not in first_row or 'LATITUDE' not in first_row or 'LONGITUDE' not in first_row:
+            QMessageBox.warning(
+                self, "Missing Fields",
+                "Required fields not found in base CSV.\n\nMake sure your CSV has POINT_ID, LATITUDE, and LONGITUDE columns."
+            )
+            return
+        
+        # Collect unique points
+        for row in self.base_data_csv:
+            point_id = row.get('POINT_ID', '')
+            lat_str = row.get('LATITUDE', '')
+            lon_str = row.get('LONGITUDE', '')
+            
+            # Skip if already seen or if coordinates are empty
+            if point_id in seen_points or not lat_str or not lon_str:
+                continue
+            
+            try:
+                lat = float(lat_str)
+                lon = float(lon_str)
+                
+                point_info = {
+                    'point_id': point_id,
+                    'lat': lat,
+                    'lon': lon
+                }
+                
+                # Add optional fields if available
+                for field in ['LOCATION', 'DEPTH', 'DATE', 'SUBSTRATE', 'MODE']:
+                    value = row.get(field, '')
+                    point_info[field.lower()] = value if value else 'N/A'
+                
+                points_data.append(point_info)
+                seen_points.add(point_id)
+            except (ValueError, TypeError):
+                continue
+        
+        if not points_data:
+            QMessageBox.warning(
+                self, "No Valid Points",
+                "No valid points with coordinates found in base CSV."
+            )
+            return
+        
+        # Get current point ID
+        current_point_id = self.base_data.get('POINT_ID', '') if self.base_data else ''
+        
+        # Show map dialog
+        dialog = MapDialog(points_data, current_point_id, self)
+        dialog.exec_()
+    
     def load_validation_rules(self):
         """Load validation rules from JSON file"""
         if not self.template_path:
@@ -2636,9 +3183,30 @@ class VideoPlayer(QMainWindow):
         if rule_type == 'autofill':
             return f"When {rule.get('trigger_field')}={rule.get('trigger_value')}, fill {len(rule.get('actions', {}))} fields"
         elif rule_type == 'conditional_sum':
-            return f"If {rule.get('if_field')}={rule.get('if_value')}, sum={rule.get('target')}"
+            # Format IF condition symbol
+            if_condition = rule.get('if_condition', 'equals')
+            if if_condition == 'greater':
+                if_symbol = ">"
+            elif if_condition == 'greater_equal':
+                if_symbol = ">="
+            elif if_condition == 'not_equals':
+                if_symbol = "!="
+            else:
+                if_symbol = "="
+            
+            # Format SUM comparison symbol
+            comparison = rule.get('comparison', 'equal')
+            if comparison == 'greater':
+                comp_symbol = ">"
+            elif comparison == 'greater_equal':
+                comp_symbol = ">="
+            else:
+                comp_symbol = "="
+            return f"If {rule.get('if_field')}{if_symbol}{rule.get('if_value')}, sum{comp_symbol}{rule.get('target')}"
         elif rule_type == 'conditional':
             return f"If {rule.get('if_field')}={rule.get('if_value')}"
+        elif rule_type == 'calculated':
+            return f"Calc: {rule.get('target_field')}={rule.get('formula')}"
         else:
             return rule_type
     
@@ -2774,14 +3342,40 @@ class VideoPlayer(QMainWindow):
                 elif rule_type == 'conditional_sum':
                     if_field = rule.get('if_field')
                     if_value = str(rule.get('if_value', '')).strip()
+                    if_condition = rule.get('if_condition', 'equals')  # Default to 'equals' for backward compatibility
                     current_if_value = data_row.get(if_field, '').strip()
                     
-                    # Check if condition applies
-                    if current_if_value == if_value:
+                    # Check if condition applies based on if_condition operator
+                    condition_met = False
+                    try:
+                        # Try numeric comparison first
+                        curr_num = float(current_if_value) if current_if_value else 0
+                        if_num = float(if_value) if if_value else 0
+                        
+                        if if_condition == 'equals':
+                            condition_met = curr_num == if_num
+                        elif if_condition == 'greater':
+                            condition_met = curr_num > if_num
+                        elif if_condition == 'greater_equal':
+                            condition_met = curr_num >= if_num
+                        elif if_condition == 'not_equals':
+                            condition_met = curr_num != if_num
+                    except ValueError:
+                        # Fall back to string comparison
+                        if if_condition == 'equals':
+                            condition_met = current_if_value == if_value
+                        elif if_condition == 'not_equals':
+                            condition_met = current_if_value != if_value
+                        # For greater/greater_equal, cannot compare strings meaningfully
+                        else:
+                            condition_met = False
+                    
+                    if condition_met:
                         fields = rule.get('fields', [])
                         target = float(rule.get('target', 0))
                         tolerance = float(rule.get('tolerance', 0))
                         blank_as_zero = rule.get('blank_as_zero', True)
+                        comparison = rule.get('comparison', 'equal')  # Default to 'equal' for backward compatibility
                         
                         total = 0
                         has_error = False
@@ -2801,7 +3395,16 @@ class VideoPlayer(QMainWindow):
                             # else: skip this field in calculation
                         
                         if not has_error:
-                            if abs(total - target) > tolerance:
+                            # Check based on comparison operator
+                            is_valid = False
+                            if comparison == 'equal':
+                                is_valid = abs(total - target) <= tolerance
+                            elif comparison == 'greater':
+                                is_valid = total > target
+                            elif comparison == 'greater_equal':
+                                is_valid = total >= target
+                            
+                            if not is_valid:
                                 errors.append(rule.get('error', f"Conditional sum validation failed"))
             
             except Exception as e:
@@ -2887,6 +3490,80 @@ class VideoPlayer(QMainWindow):
                     
                     # Break after first matching rule
                     break
+    
+    def check_calculated_rules(self, changed_field):
+        """Check if any calculated field rules should be triggered"""
+        if not self.validation_rules:
+            return
+        
+        # Check all calculated rules
+        for rule in self.validation_rules:
+            if rule.get('type') == 'calculated':
+                formula = rule.get('formula', '')
+                target_field = rule.get('target_field')
+                decimals = int(rule.get('decimals', 1))
+                
+                # Find all field names referenced in the formula
+                # Field names are uppercase letters and underscores
+                referenced_fields = re.findall(r'\b[A-Z][A-Z0-9_]*\b', formula)
+                
+                # Check if the changed field is referenced in this formula
+                if changed_field in referenced_fields or changed_field == target_field:
+                    print(f"Calculated field check: {target_field} = {formula}")
+                    
+                    # Get current values for all fields
+                    formula_to_eval = formula
+                    all_fields_available = True
+                    
+                    for field_name in referenced_fields:
+                        if field_name in self.data_fields:
+                            widget = self.data_fields[field_name]
+                            if isinstance(widget, QTextEdit):
+                                value_str = widget.toPlainText().strip()
+                            else:
+                                value_str = widget.text().strip()
+                            
+                            # Try to convert to number (blank = 0)
+                            try:
+                                value = float(value_str) if value_str and value_str != 'NA' else 0
+                            except ValueError:
+                                # Non-numeric value, skip this calculation
+                                print(f"  ⚠ Field {field_name} has non-numeric value: '{value_str}'")
+                                all_fields_available = False
+                                break
+                            
+                            # Replace field name with its value in the formula
+                            formula_to_eval = re.sub(r'\b' + field_name + r'\b', str(value), formula_to_eval)
+                        else:
+                            all_fields_available = False
+                            break
+                    
+                    if all_fields_available:
+                        try:
+                            # Evaluate the formula (safe eval with limited scope)
+                            result = eval(formula_to_eval, {"__builtins__": {}}, {})
+                            result_formatted = f"{result:.{decimals}f}"
+                            
+                            print(f"  ✓ Calculated: {formula_to_eval} = {result_formatted}")
+                            
+                            # Update the target field
+                            if target_field in self.data_fields:
+                                target_widget = self.data_fields[target_field]
+                                
+                                # Block signals temporarily to avoid triggering other rules
+                                target_widget.blockSignals(True)
+                                
+                                if isinstance(target_widget, QTextEdit):
+                                    target_widget.setPlainText(result_formatted)
+                                else:
+                                    target_widget.setText(result_formatted)
+                                
+                                target_widget.blockSignals(False)
+                                
+                                print(f"  Set {target_field} = {result_formatted}")
+                        
+                        except Exception as e:
+                            print(f"  ❌ Error evaluating formula: {str(e)}")
     
     def show_instructions(self):
         """Show instructions popup dialog"""
@@ -3028,8 +3705,189 @@ class VideoPlayer(QMainWindow):
         # Show dialog
         dialog.exec_()
     
+    def save_project(self, project_path=None):
+        """Save current project state to a file"""
+        if not project_path:
+            project_path, _ = QFileDialog.getSaveFileName(
+                self, "Save Project",
+                self.projects_dir,
+                "Project Files (*.json);;All Files (*.*)"
+            )
+            
+            if not project_path:
+                return False
+        
+        try:
+            # Collect project state
+            project_data = {
+                'template_path': self.template_path,
+                'base_data_csv_path': self.base_data_csv_path,  # Store path to base CSV file
+                'video_queue': self.video_queue,
+                'current_video_index': self.current_video_index,
+                'current_video_path': self.video_path,
+                'current_frame': self.current_frame if self.cap else 0,
+                'drop_counter': self.drop_counter,
+                'current_entry_index': self.current_entry_index,
+                'base_data': self.base_data,
+                'base_data_csv': self.base_data_csv,  # Save the full CSV data for map
+                'saved_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            }
+            
+            # Save to JSON
+            with open(project_path, 'w', encoding='utf-8') as f:
+                json.dump(project_data, f, indent=2)
+            
+            self.current_project_file = project_path
+            print(f"Project saved to: {project_path}")
+            return True
+            
+        except Exception as e:
+            QMessageBox.critical(
+                self, "Error",
+                f"Failed to save project:\n{str(e)}"
+            )
+            return False
+    
+    def load_project(self):
+        """Load project state from a file"""
+        project_path, _ = QFileDialog.getOpenFileName(
+            self, "Load Project",
+            self.projects_dir,
+            "Project Files (*.json);;All Files (*.*)"
+        )
+        
+        if not project_path:
+            return False
+        
+        try:
+            # Load project data
+            with open(project_path, 'r', encoding='utf-8') as f:
+                project_data = json.load(f)
+            
+            # Restore template
+            self.template_path = project_data.get('template_path')
+            if not self.template_path or not os.path.exists(self.template_path):
+                QMessageBox.critical(self, "Error", "Template file not found. Project cannot be loaded.")
+                return False
+            
+            # Load template fieldnames
+            with open(self.template_path, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                self.template_fieldnames = reader.fieldnames
+            
+            # Load validation rules
+            self.load_validation_rules()
+            
+            # Restore state
+            self.video_queue = project_data.get('video_queue', [])
+            self.current_video_index = project_data.get('current_video_index', 0)
+            self.drop_counter = project_data.get('drop_counter', 1)
+            self.current_entry_index = project_data.get('current_entry_index', -1)
+            self.base_data = project_data.get('base_data', {})
+            self.base_data_csv = project_data.get('base_data_csv', [])  # Restore base CSV for map
+            self.base_data_csv_path = project_data.get('base_data_csv_path')  # Restore base CSV path
+            
+            # Create data entry pane with loaded template
+            self.create_data_entry_pane()
+            
+            # Replace placeholder with actual data entry widget
+            self.main_layout.removeWidget(self.data_entry_placeholder)
+            self.data_entry_placeholder.deleteLater()
+            self.main_layout.addWidget(self.data_entry_widget, 1)
+            
+            # Load all data entries from CSV
+            output_file = os.path.join(self.data_dir, "data_entries.csv")
+            if os.path.exists(output_file):
+                with open(output_file, 'r', encoding='utf-8') as f:
+                    reader = csv.DictReader(f)
+                    self.all_data_entries = list(reader)
+            
+            # Restore video if it exists
+            current_video_path = project_data.get('current_video_path')
+            if current_video_path and os.path.exists(current_video_path):
+                # Load the video
+                if self.cap:
+                    self.cap.release()
+                
+                self.video_path = current_video_path
+                self.cap = cv2.VideoCapture(current_video_path, cv2.CAP_FFMPEG)
+                self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                
+                if self.cap.isOpened():
+                    self.total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                    self.fps = self.cap.get(cv2.CAP_PROP_FPS)
+                    self.current_frame = project_data.get('current_frame', 0)
+                    
+                    self.timeline_slider.setMaximum(self.total_frames - 1)
+                    self.timeline_slider.setValue(self.current_frame)
+                    
+                    # Enable controls
+                    self.play_btn.setEnabled(True)
+                    self.prev_frame_btn.setEnabled(True)
+                    self.next_frame_btn.setEnabled(True)
+                    self.skip_back_btn.setEnabled(True)
+                    self.skip_forward_btn.setEnabled(True)
+                    self.speed_combo.setEnabled(True)
+                    self.extract_btn.setEnabled(True)
+                    
+                    # Update queue label if in queue mode
+                    if self.video_queue:
+                        self.queue_label.setText(
+                            f"Video {self.current_video_index + 1}/{len(self.video_queue)}: "
+                            f"{os.path.basename(current_video_path)} (Next drop: {self.drop_counter})"
+                        )
+                        # Enable video navigation buttons
+                        self.prev_video_btn.setEnabled(True)
+                        self.next_video_btn.setEnabled(True)
+                    
+                    self.display_frame()
+            
+            # Populate fields with base data
+            if self.base_data:
+                self.populate_fields_from_base_data()
+            
+            # Update navigation
+            self.update_navigation_buttons()
+            
+            self.current_project_file = project_path
+            
+            QMessageBox.information(
+                self, "Project Loaded",
+                f"Project loaded successfully!\n\n"
+                f"Entries: {len(self.all_data_entries)}\n"
+                f"Video: {os.path.basename(current_video_path) if current_video_path else 'None'}\n"
+                f"Next drop: {self.drop_counter}\n\n"
+                f"Ready to resume work!"
+            )
+            
+            return True
+            
+        except Exception as e:
+            QMessageBox.critical(
+                self, "Error",
+                f"Failed to load project:\n{str(e)}"
+            )
+            return False
+    
     def closeEvent(self, event):
         """Clean up when closing"""
+        # Auto-save project before closing
+        if self.current_project_file:
+            self.save_project(self.current_project_file)
+            print(f"Auto-saved project on close: {self.current_project_file}")
+        elif self.template_path:
+            # Offer to save project
+            reply = QMessageBox.question(
+                self, "Save Project?",
+                "Would you like to save your project before closing?\n\n"
+                "This will let you resume exactly where you left off next time.",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes
+            )
+            
+            if reply == QMessageBox.Yes:
+                self.save_project()
+        
         if self.cap:
             self.cap.release()
         event.accept()
