@@ -143,7 +143,8 @@ ui <- fluidPage(
                    tags$li("Set the correct timezones for your data"),
                    tags$li("Click 'Preview Matches' to see what will be renamed"),
                    tags$li("Review the results in the 'Results' tab"),
-                   tags$li("If everything looks good, click 'Rename Videos' to apply changes")
+                   tags$li("If everything looks good, click 'Rename Videos' to apply changes"),
+                   tags$li("An output CSV will be saved in the video directory with all CSV data + matched video info")
                  ),
                  hr(),
                  h4("File Browser"),
@@ -362,8 +363,8 @@ server <- function(input, output, session) {
         updateTabsetPanel(session, "tabs", selected = "Results")
         
         renamed_count <- sum(res$status == "Renamed", na.rm = TRUE)
-        showNotification(paste("Successfully renamed", renamed_count, "videos!"), 
-                        type = "message", duration = 5)
+        showNotification(paste("Successfully renamed", renamed_count, "videos! Output CSV saved to video directory."), 
+                        type = "message", duration = 7)
         
       }, error = function(e) {
         showNotification(paste("Error:", e$message), type = "error", duration = 10)

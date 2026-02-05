@@ -290,6 +290,47 @@ match_and_rename_videos <- function(video_dir,
     cat("Set dry_run = FALSE to perform the actual renaming\n")
   }
   
+  # Create output CSV with full data (when not dry run)
+  if (!dry_run) {
+    # Create a merged dataframe with all CSV columns + video info
+    # Only include successfully matched/renamed videos
+    matched_results <- results[results$status %in% c("Matched", "Renamed"), ]
+    
+    if (nrow(matched_results) > 0) {
+      # Create output dataframe by matching OBJECTID
+      output_data <- data.frame()
+      
+      for (i in 1:nrow(matched_results)) {
+        matched_oid <- matched_results$matched_objectid[i]
+        
+        # Find the corresponding CSV row
+        csv_row <- df[df[[objectid_col]] == matched_oid, ]
+        
+        # If multiple CSV rows match, take the first one (should be unique based on closest match)
+        if (nrow(csv_row) > 0) {
+          # Get first matching row and add video info
+          csv_row <- csv_row[1, ]
+          csv_row$matched_video_filename <- matched_results$new_filename[i]
+          csv_row$video_datetime <- matched_results$video_timestamp[i]
+          csv_row$time_difference_sec <- matched_results$time_difference_sec[i]
+          
+          # Remove helper columns used for matching
+          csv_row$datetime_parsed <- NULL
+          csv_row$datetime_camera <- NULL
+          
+          output_data <- rbind(output_data, csv_row)
+        }
+      }
+      
+      # Write output CSV
+      output_csv_path <- file.path(video_dir, paste0("video_matching_output_", 
+                                                      format(Sys.time(), "%Y%m%d_%H%M%S"), 
+                                                      ".csv"))
+      write.csv(output_data, output_csv_path, row.names = FALSE)
+      cat("\n** Output CSV saved to:", output_csv_path, "**\n")
+    }
+  }
+  
   # Return results dataframe
   return(results)
 }

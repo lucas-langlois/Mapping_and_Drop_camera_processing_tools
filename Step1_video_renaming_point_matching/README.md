@@ -23,6 +23,7 @@ This interactive script will guide you through installation and launch the app!
 - ✅ Preview mode (see matches before renaming)
 - ✅ File browser for easy path selection
 - ✅ Export matching results as CSV log
+- ✅ **Auto-generates output CSV with all survey data + matched video info**
 - ✅ Batch processing for multiple videos
 
 ---
@@ -140,6 +141,7 @@ source("launch_app.R")
    - If everything looks good, click "Rename Videos"
    - Confirm the action
    - Videos will be renamed according to the matches
+   - **An output CSV will be automatically saved with all your data + video matches**
 
 7. **Download Log**
    - Click "Download Log" to save the matching results as CSV
@@ -152,6 +154,37 @@ source("launch_app.R")
 | **Results** | Summary statistics, detailed matching results table |
 | **CSV Preview** | Load and preview your CSV data (first 100 rows) |
 | **Video Files** | Scan and list DJI videos in directory |
+
+---
+
+## 📤 Output Files
+
+When you rename videos (not in preview mode), the app generates **two** files:
+
+### 1. Matching Log (Manual Download)
+- **Downloaded via**: "Download Log" button
+- **Contains**: Video matching details (original filename, video timestamp, matched OBJECTID, new filename, status, etc.)
+- **Purpose**: Track the renaming operation itself
+
+### 2. **Output CSV with Full Survey Data** (Automatic)
+- **Location**: Automatically saved in your video directory
+- **Filename**: `video_matching_output_YYYYMMDD_HHMMSS.csv`
+- **Contains**: 
+  - ✅ **All original columns from your imported CSV** (OBJECTID, Date.Time, Latitude, Longitude, etc.)
+  - ✅ `matched_video_filename` - the new renamed video filename
+  - ✅ `video_datetime` - the datetime extracted from the video file
+  - ✅ `time_difference_sec` - time difference between CSV and video timestamps
+- **Purpose**: Complete dataset linking your survey data with matched videos
+- **Note**: Only includes successfully matched/renamed videos
+
+**Example Output CSV:**
+
+| OBJECTID | Date.Time | Latitude | Longitude | Other_Data | matched_video_filename | video_datetime | time_difference_sec |
+|----------|-----------|----------|-----------|------------|------------------------|----------------|---------------------|
+| 1 | 11/18/2025 06:51:51 | -17.234 | 139.567 | ... | Burketown_20251118_ID001_122107.MP4 | 2025-11-18 12:21:07 | 45.2 |
+| 2 | 11/18/2025 07:15:32 | -17.235 | 139.568 | ... | Burketown_20251118_ID002_124532.MP4 | 2025-11-18 12:45:32 | 12.8 |
+
+This output CSV is ideal for importing into GIS software, databases, or further analysis!
 
 ---
 
@@ -300,6 +333,7 @@ shiny::runApp("video_renamer_app.R", launch.browser = TRUE)
 - **Timezone settings** must match your data for accurate matching
 - **Backup your videos** before first use (safety first!)
 - Test with a few videos first before processing large batches
+- Check your **video directory** for the output CSV after renaming
 
 ---
 
