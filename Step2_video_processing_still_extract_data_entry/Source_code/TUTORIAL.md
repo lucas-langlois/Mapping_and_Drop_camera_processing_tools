@@ -5,13 +5,15 @@ This tutorial will guide you through the complete workflow of using the Drop Cam
 ## Table of Contents
 1. [Preparing Your Files](#preparing-your-files)
 2. [First Launch Setup](#first-launch-setup)
-3. [Setting Up Validation Rules (QAQC)](#setting-up-validation-rules-qaqc)
-4. [Loading Videos](#loading-videos)
-5. [Extracting Stills and Entering Data](#extracting-stills-and-entering-data)
-6. [Navigating and Editing Entries](#navigating-and-editing-entries)
-7. [Project Save/Load](#project-saveload)
-8. [Interactive Map View](#interactive-map-view)
-9. [Tips and Best Practices](#tips-and-best-practices)
+3. [User Interface Layout Options](#user-interface-layout-options)
+4. [Setting Up Validation Rules (QAQC)](#setting-up-validation-rules-qaqc)
+5. [Loading Videos](#loading-videos)
+6. [Video Zoom Feature](#video-zoom-feature)
+7. [Extracting Stills and Entering Data](#extracting-stills-and-entering-data)
+8. [Navigating and Editing Entries](#navigating-and-editing-entries)
+9. [Project Save/Load](#project-saveload)
+10. [Interactive Map View](#interactive-map-view)
+11. [Tips and Best Practices](#tips-and-best-practices)
 
 ---
 
@@ -122,6 +124,61 @@ The application will read the column headers and create form fields for each one
 The application window now opens with the video player on the left and data entry form on the right.
 
 **💡 Pro Tip:** After loading your template and base CSV, immediately click **"💾 Save Project"** so you can quickly resume next time!
+
+---
+
+## User Interface Layout Options
+
+The application offers two layout modes to suit your workspace setup.
+
+### Single Window Mode (Default)
+
+This is the standard layout when you first open the application:
+- **Left side**: Video player with all controls
+- **Right side**: Data entry form
+- **Best for**: Single monitor setups, laptops
+
+### Dual-Screen Mode (2+ Monitors)
+
+Perfect for users with multiple monitors! Separates the video player and data entry into independent windows.
+
+**To Enter Dual-Screen Mode:**
+
+1. Look for the **⬌** button in the video control bar (orange colored)
+2. Hover over it - tooltip says "Toggle Dual-Screen Mode"
+3. Click the button
+4. The data entry panel detaches into a new window
+5. **If you have 2+ monitors**: The data entry window automatically appears on your second screen
+6. **If you have 1 monitor**: The window opens to the right of the main window
+7. The **⬌** button turns **green** (indicating detached mode)
+
+**To Return to Single Window Mode:**
+
+1. Click the **⬌** button again (now green)
+2. OR close the detached data entry window
+3. The data entry panel returns to the main window
+4. Button turns **orange** again
+
+**Recommended Setup for Dual Screens:**
+
+- **Monitor 1 (Primary)**: Maximize the video player window
+  - Large viewing area for video
+  - Easy access to all playback controls
+  - Timeline slider spans full width
+  
+- **Monitor 2 (Secondary)**: Position data entry window
+  - Full visibility of all form fields (no scrolling!)
+  - See all buttons and controls at once
+  - Easy access to validation rules and copy buttons
+
+**Benefits:**
+- 🎯 **More screen real estate**: Both video and form fully visible
+- ⚡ **Faster workflow**: No switching between video and form
+- 👀 **Better visibility**: See entire form while watching video
+- 📊 **Perfect for complex forms**: Many fields fully visible
+- 🔄 **Synchronized** All data, rules, and state stay connected
+
+**Note**: Both windows close together when you exit the application. Your layout preference is not saved - you'll default to single window on next launch.
 
 ---
 
@@ -343,6 +400,84 @@ Save massive time by auto-filling fields based on conditions:
    - System automatically searches for matching VIDEO_FILENAME
    - If found, data entry form pre-fills with location data
    - Drop counter shows the next sequential number for this POINT_ID
+
+---
+
+## Video Zoom Feature
+
+The zoom feature helps you examine fine details in your video - crucial for identifying species, substrates, or small features.
+
+### How to Access Zoom Controls
+
+**Location**: In the video control bar, look for:
+- Label: "Zoom:"
+- Horizontal slider (between "Speed" and "Extract" buttons)
+- Percentage display (shows current zoom level)
+
+### Using the Zoom
+
+**Step 1: Open a video**
+- Zoom controls activate automatically when a video is loaded
+
+**Step 2: Adjust zoom level**
+- **Drag slider to the RIGHT** → Zoom IN (100% → 400%)
+- **Drag slider to the LEFT** → Zoom OUT (100% → 50%)
+- **Current level** displayed next to slider (e.g., "150%")
+
+**Step 3: Navigate zoomed video**
+- At zoom > 100%: Scrollbars appear automatically
+- Click and drag the video to pan around
+- OR use the scrollbars to navigate
+- Video stays zoomed while you navigate frames
+
+### Zoom Levels Guide
+
+| Zoom Level | Best For |
+|------------|----------|
+| **50%** | Overview of entire scene |
+| **100%** (default) | Normal viewing, general navigation |
+| **150-200%** | Identifying substrate types, moderate detail |
+| **250-350%** | Species identification, reading small text/numbers |
+| **400%** | Maximum detail for tiny features, quality checks |
+
+### Practical Example
+
+**Scenario**: Identifying seagrass species in a dense meadow
+
+1. Navigate to the frame showing seagrass
+2. Zoom to **250%** using the slider
+3. Scrollbars appear (video is now larger than viewport)
+4. Click and drag to pan to the area of interest
+5. Study the leaf shapes and structures in detail
+6. Identify species with confidence
+7. Zoom back to **100%** for next observation
+8. OR keep zoom at 250% to examine next frame at same detail
+
+### Zoom Tips
+
+**✅ Do:**
+- Set zoom level once, navigate frames normally - zoom persists
+- Use high zoom (250-400%) for species ID, substrate texture
+- Zoom to 100% for general navigation between points
+- Combine with pause/frame-by-frame navigation (arrow keys)
+- Zoom works at any playback speed
+
+**⚠️ Note:**
+- Higher zoom = smoother transformation (better quality)
+- Lower zoom = faster transformation (better performance)
+- Zoom applies to current frame and all subsequent frames until you change it
+
+### Keyboard-Friendly Workflow
+
+1. Find general area at 100% zoom (use arrow keys, timeline)
+2. Press **←** or **→** to fine-tune frame position
+3. Increase zoom to 200-300% using slider
+4. Use click-and-drag to position the zoomed area
+5. Fill in data entry form
+6. Press **S** to extract still
+7. Zoom resets are not automatic - manually return to 100% if desired
+
+**Time Saver**: Leave zoom at a consistent level (like 150%) for an entire video if all observations need similar detail!
 
 ---
 
@@ -843,24 +978,51 @@ Bottom-right corner shows:
    - Use validation rules to enforce allowed values
    - Keep a reference sheet nearby
 
-3. **Use COMMENTS field liberally**
+3. **Use decimal precision for percentage fields** 🔢
+   - Fields like SG_COVER, AL_COVER support decimals (e.g., 0.7, 33.3, 66.6)
+   - **Important**: If using decimals, set calculated field rules to `decimals: 1` or higher
+   - With `decimals: 0`, value 0.7 → OPEN calculates as 99 → Sum = 99.7 ≠ 100 ❌
+   - With `decimals: 1`, value 0.7 → OPEN calculates as 99.3 → Sum = 100.0 ✓
+   - Use tolerance in sum rules (e.g., 0.5) to handle minor rounding differences
+   - Example: `{"type": "calculated", "target_field": "OPEN", "formula": "100 - SG_COVER - AL_COVER", "decimals": 1}`
+
+4. **Leverage helpful tooltips** 💡
+   - Every button has a tooltip - hover your mouse to see descriptions
+   - Forgot what a button does? Just hover over it!
+   - Especially useful for icon-only buttons (💾, 🗺, ❓, ⬌, etc.)
+   - Tooltips appear with dark background and white text for easy reading
+
+5. **Take advantage of dual-screen mode** 🖥️🖥️
+   - If you have 2+ monitors, click the ⬌ button
+   - Maximize video player on one screen
+   - Full data entry form on second screen
+   - Eliminates constant scrolling and window switching
+   - ~20-30% workflow efficiency gain from better visibility
+
+6. **Use zoom strategically** 🔍
+   - Set zoom level based on task (100% for navigation, 200-300% for ID)
+   - Zoom persists across frames - set once for entire video if needed
+   - Critical for species identification, substrate characterization
+   - Combine with frame-by-frame (arrow keys) for detailed examination
+
+7. **Use COMMENTS field liberally**
    - Note unusual features
    - Record uncertainties
    - Flag entries that need review
 
-4. **Check your data periodically**
+8. **Check your data periodically**
    - Click "Load All Entries" and browse through
    - Look for blank fields or typos
    - Watch for red-highlighted fields (validation warnings)
    - Verify coverage percentages add up correctly
 
-5. **Pay attention to validation warnings**
+9. **Pay attention to validation warnings**
    - Red highlights indicate rule violations
    - Fix issues immediately rather than clicking "Save Anyway"
    - If you frequently need "Save Anyway", revise the rule
    - Use validation errors to identify systematic mistakes
 
-6. **Use "Copy from Previous" for similar drops** ⚡
+10. **Use "Copy from Previous" for similar drops** ⚡
    - Process all drops from one video in sequence
    - Use **"◄ Copy All from Previous Entry"** when conditions are similar
    - Always review and adjust copied values - don't blindly copy!

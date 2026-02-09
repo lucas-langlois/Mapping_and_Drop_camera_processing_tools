@@ -22,7 +22,8 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QFileDialog, QSpinBox, QComboBox, QMessageBox,
                              QLineEdit, QTextEdit, QScrollArea, QGroupBox, QGridLayout,
                              QShortcut, QInputDialog, QDialog, QListWidget, QListWidgetItem,
-                             QDialogButtonBox, QFrame, QDoubleSpinBox, QCheckBox)
+                             QDialogButtonBox, QFrame, QDoubleSpinBox, QCheckBox, QSizePolicy,
+                             QDesktopWidget)
 from PyQt5.QtCore import QTimer, Qt, QUrl
 from PyQt5.QtGui import QImage, QPixmap, QKeySequence, QColor
 from PyQt5.QtWebEngineWidgets import QWebEngineView
@@ -1010,6 +1011,24 @@ class MapDialog(QDialog):
         return html
 
 
+class DetachedDataEntryWindow(QMainWindow):
+    """Separate window for data entry pane (dual-screen mode)"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Data Entry Panel")
+        self.setGeometry(200, 100, 500, 900)
+        
+    def set_data_entry_widget(self, widget):
+        """Set the data entry widget as central widget"""
+        self.setCentralWidget(widget)
+    
+    def closeEvent(self, event):
+        """Handle window close - reattach to main window"""
+        if self.parent():
+            self.parent().reattach_data_entry_pane()
+        event.accept()
+
+
 class VideoPlayer(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -1024,6 +1043,7 @@ class VideoPlayer(QMainWindow):
         self.fps = 30
         self.current_frame = 0
         self.playback_speed = 1.0
+        self.zoom_level = 1.0
         self.cached_frame = None
         self.cached_frame_number = -1
         
@@ -1076,6 +1096,10 @@ class VideoPlayer(QMainWindow):
         # Timer for video playback
         self.timer = QTimer()
         self.timer.timeout.connect(self.play_next_frame)
+        
+        # Layout mode variables
+        self.is_detached_mode = False
+        self.detached_window = None
         
         self.init_ui()
         self.setup_shortcuts()
@@ -1213,12 +1237,19 @@ class VideoPlayer(QMainWindow):
         # Left side: Video player
         video_layout = QVBoxLayout()
         
+        # Scroll area for video display (enables zooming without expanding UI)
+        self.video_scroll = QScrollArea()
+        self.video_scroll.setWidgetResizable(False)  # Allow scrolling when zoomed
+        self.video_scroll.setAlignment(Qt.AlignCenter)
+        self.video_scroll.setStyleSheet("QScrollArea { background-color: black; }")
+        
         # Video display label
         self.video_label = QLabel("Open a video file to start")
         self.video_label.setAlignment(Qt.AlignCenter)
         self.video_label.setStyleSheet("QLabel { background-color: black; color: white; }")
-        self.video_label.setMinimumSize(800, 600)
-        video_layout.addWidget(self.video_label)
+        
+        self.video_scroll.setWidget(self.video_label)
+        video_layout.addWidget(self.video_scroll, 1)  # Stretch factor 1 to take available space
         
         # Frame info label
         self.info_label = QLabel("Frame: 0 / 0 | Time: 00:00:00")
@@ -1229,65 +1260,93 @@ class VideoPlayer(QMainWindow):
         self.timeline_slider = QSlider(Qt.Horizontal)
         self.timeline_slider.setMinimum(0)
         self.timeline_slider.setMaximum(0)
+        self.timeline_slider.setToolTip("Drag to navigate through video frames")
         self.timeline_slider.setPageStep(100)  # Jump 100 frames when clicking on slider track
         self.timeline_slider.setSingleStep(1)  # Move 1 frame with arrow keys
         self.timeline_slider.valueChanged.connect(self.slider_changed)
         video_layout.addWidget(self.timeline_slider)
         
-        # Control buttons layout
+        # Control buttons layout - Row 1: Main controls
         controls_layout = QHBoxLayout()
+        controls_layout.setSpacing(4)  # Reduce spacing between buttons
         
         # Save Project button
-        self.save_project_btn = QPushButton("💾 Save Project")
+        self.save_project_btn = QPushButton("💾")
+        self.save_project_btn.setToolTip("Save Project")
         self.save_project_btn.clicked.connect(lambda: self.save_project())
-        self.save_project_btn.setStyleSheet("background-color: #9C27B0; color: white; font-weight: bold; padding: 8px;")
+        self.save_project_btn.setStyleSheet("background-color: #9C27B0; color: white; font-weight: bold; padding: 5px;")
+        self.save_project_btn.setMaximumWidth(40)
         controls_layout.addWidget(self.save_project_btn)
         
         # Show on Map button
-        self.show_map_btn = QPushButton("🗺 Show on Map")
+        self.show_map_btn = QPushButton("🗺")
+        self.show_map_btn.setToolTip("Show on Map")
         self.show_map_btn.clicked.connect(self.show_map)
-        self.show_map_btn.setStyleSheet("background-color: #2196F3; color: white; font-weight: bold; padding: 8px;")
+        self.show_map_btn.setStyleSheet("background-color: #2196F3; color: white; font-weight: bold; padding: 5px;")
+        self.show_map_btn.setMaximumWidth(40)
         controls_layout.addWidget(self.show_map_btn)
         
         # Help/Instructions button
-        self.help_btn = QPushButton("❓ Instructions")
+        self.help_btn = QPushButton("❓")
+        self.help_btn.setToolTip("Instructions")
         self.help_btn.clicked.connect(self.show_instructions)
-        self.help_btn.setStyleSheet("background-color: #2196F3; color: white; font-weight: bold; padding: 8px;")
+        self.help_btn.setStyleSheet("background-color: #2196F3; color: white; font-weight: bold; padding: 5px;")
+        self.help_btn.setMaximumWidth(40)
         controls_layout.addWidget(self.help_btn)
         
+        # Layout toggle button (dual-screen mode)
+        self.layout_toggle_btn = QPushButton("⬌")
+        self.layout_toggle_btn.setToolTip("Toggle Dual-Screen Mode (Detach/Attach Data Entry Panel)")
+        self.layout_toggle_btn.clicked.connect(self.toggle_layout_mode)
+        self.layout_toggle_btn.setStyleSheet("background-color: #FF5722; color: white; font-weight: bold; padding: 5px;")
+        self.layout_toggle_btn.setMaximumWidth(40)
+        controls_layout.addWidget(self.layout_toggle_btn)
+        
         # Open file button
-        self.open_btn = QPushButton("Open Video")
+        self.open_btn = QPushButton("Open")
+        self.open_btn.setToolTip("Open video file")
         self.open_btn.clicked.connect(self.open_video)
+        self.open_btn.setMaximumWidth(60)
         controls_layout.addWidget(self.open_btn)
         
         # Play/Pause button
-        self.play_btn = QPushButton("Play")
+        self.play_btn = QPushButton("▶")
+        self.play_btn.setToolTip("Play/Pause")
         self.play_btn.clicked.connect(self.toggle_play)
         self.play_btn.setEnabled(False)
+        self.play_btn.setMaximumWidth(40)
         controls_layout.addWidget(self.play_btn)
         
         # Previous frame button
-        self.prev_frame_btn = QPushButton("◀ Frame")
+        self.prev_frame_btn = QPushButton("◀")
+        self.prev_frame_btn.setToolTip("Previous Frame")
         self.prev_frame_btn.clicked.connect(self.previous_frame)
         self.prev_frame_btn.setEnabled(False)
+        self.prev_frame_btn.setMaximumWidth(40)
         controls_layout.addWidget(self.prev_frame_btn)
         
         # Next frame button
-        self.next_frame_btn = QPushButton("Frame ▶")
+        self.next_frame_btn = QPushButton("▶")
+        self.next_frame_btn.setToolTip("Next Frame")
         self.next_frame_btn.clicked.connect(self.next_frame)
         self.next_frame_btn.setEnabled(False)
+        self.next_frame_btn.setMaximumWidth(40)
         controls_layout.addWidget(self.next_frame_btn)
         
         # Skip backward button (10 frames)
-        self.skip_back_btn = QPushButton("◀◀ -10")
+        self.skip_back_btn = QPushButton("◀◀")
+        self.skip_back_btn.setToolTip("Skip -10 frames")
         self.skip_back_btn.clicked.connect(lambda: self.skip_frames(-10))
         self.skip_back_btn.setEnabled(False)
+        self.skip_back_btn.setMaximumWidth(45)
         controls_layout.addWidget(self.skip_back_btn)
         
         # Skip forward button (10 frames)
-        self.skip_forward_btn = QPushButton("+10 ▶▶")
+        self.skip_forward_btn = QPushButton("▶▶")
+        self.skip_forward_btn.setToolTip("Skip +10 frames")
         self.skip_forward_btn.clicked.connect(lambda: self.skip_frames(10))
         self.skip_forward_btn.setEnabled(False)
+        self.skip_forward_btn.setMaximumWidth(45)
         controls_layout.addWidget(self.skip_forward_btn)
         
         # Speed control
@@ -1296,45 +1355,81 @@ class VideoPlayer(QMainWindow):
         self.speed_combo = QComboBox()
         self.speed_combo.addItems(["0.25x", "0.5x", "1x", "2x", "4x", "8x", "12x"])
         self.speed_combo.setCurrentIndex(2)  # 1x default
+        self.speed_combo.setToolTip("Playback speed")
         self.speed_combo.currentTextChanged.connect(self.change_speed)
         self.speed_combo.setEnabled(False)
+        self.speed_combo.setMaximumWidth(80)
         controls_layout.addWidget(self.speed_combo)
         
+        # Zoom control
+        zoom_label = QLabel("Zoom:")
+        controls_layout.addWidget(zoom_label)
+        self.zoom_slider = QSlider(Qt.Horizontal)
+        self.zoom_slider.setMinimum(50)  # 50% = 0.5x
+        self.zoom_slider.setMaximum(400)  # 400% = 4.0x
+        self.zoom_slider.setValue(100)  # 100% = 1.0x
+        self.zoom_slider.setToolTip("Zoom video (50% - 400%)")
+        self.zoom_slider.setTickPosition(QSlider.TicksBelow)
+        self.zoom_slider.setTickInterval(50)
+        self.zoom_slider.setMaximumWidth(120)
+        self.zoom_slider.valueChanged.connect(self.change_zoom)
+        self.zoom_slider.setEnabled(False)
+        controls_layout.addWidget(self.zoom_slider)
+        
+        self.zoom_label = QLabel("100%")
+        self.zoom_label.setMinimumWidth(45)
+        self.zoom_label.setStyleSheet("font-size: 11px;")
+        controls_layout.addWidget(self.zoom_label)
+        
         # Extract current frame button
-        self.extract_btn = QPushButton("Extract Frame")
+        self.extract_btn = QPushButton("Extract")
+        self.extract_btn.setToolTip("Extract Current Frame")
         self.extract_btn.clicked.connect(self.extract_current_frame)
         self.extract_btn.setEnabled(False)
+        self.extract_btn.setMaximumWidth(70)
         controls_layout.addWidget(self.extract_btn)
+        
+        controls_layout.addStretch()  # Push everything to the left
         
         video_layout.addLayout(controls_layout)
         
         # Auto-loader controls
         autoload_layout = QHBoxLayout()
+        autoload_layout.setSpacing(4)
         
         # Load videos from drop_videos button
-        self.autoload_btn = QPushButton("Load Videos from drop_videos/")
+        self.autoload_btn = QPushButton("Load drop_videos/")
+        self.autoload_btn.setToolTip("Load all videos from the drop_videos folder")
         self.autoload_btn.clicked.connect(self.load_video_queue)
+        self.autoload_btn.setMaximumWidth(130)
         autoload_layout.addWidget(self.autoload_btn)
         
         # Choose video folder button
-        self.choose_folder_btn = QPushButton("Choose Video Folder...")
+        self.choose_folder_btn = QPushButton("Choose Folder...")
+        self.choose_folder_btn.setToolTip("Choose a custom folder containing videos")
         self.choose_folder_btn.clicked.connect(self.choose_video_folder)
+        self.choose_folder_btn.setMaximumWidth(110)
         autoload_layout.addWidget(self.choose_folder_btn)
         
         # Previous video button
-        self.prev_video_btn = QPushButton("◀ Previous Video")
+        self.prev_video_btn = QPushButton("◀ Prev")
+        self.prev_video_btn.setToolTip("Previous Video")
         self.prev_video_btn.clicked.connect(self.previous_video)
         self.prev_video_btn.setEnabled(False)
+        self.prev_video_btn.setMaximumWidth(60)
         autoload_layout.addWidget(self.prev_video_btn)
         
         # Next video button
-        self.next_video_btn = QPushButton("Next Video ▶")
+        self.next_video_btn = QPushButton("Next ▶")
+        self.next_video_btn.setToolTip("Next Video")
         self.next_video_btn.clicked.connect(self.next_video)
         self.next_video_btn.setEnabled(False)
+        self.next_video_btn.setMaximumWidth(60)
         autoload_layout.addWidget(self.next_video_btn)
         
         # Video queue status label
-        self.queue_label = QLabel("No videos loaded")
+        self.queue_label = QLabel("No videos")
+        self.queue_label.setStyleSheet("font-size: 11px;")
         autoload_layout.addWidget(self.queue_label)
         autoload_layout.addStretch()
         
@@ -1407,6 +1502,7 @@ class VideoPlayer(QMainWindow):
         nav_layout = QHBoxLayout()
         
         self.prev_entry_btn = QPushButton("◀ Previous Entry")
+        self.prev_entry_btn.setToolTip("Navigate to previous saved entry")
         self.prev_entry_btn.clicked.connect(self.previous_entry)
         self.prev_entry_btn.setEnabled(False)
         nav_layout.addWidget(self.prev_entry_btn)
@@ -1417,6 +1513,7 @@ class VideoPlayer(QMainWindow):
         nav_layout.addWidget(self.entry_position_label)
         
         self.next_entry_btn = QPushButton("Next Entry ▶")
+        self.next_entry_btn.setToolTip("Navigate to next saved entry")
         self.next_entry_btn.clicked.connect(self.next_entry)
         self.next_entry_btn.setEnabled(False)
         nav_layout.addWidget(self.next_entry_btn)
@@ -1425,6 +1522,7 @@ class VideoPlayer(QMainWindow):
         
         # Load all entries button
         load_entries_btn = QPushButton("Load All Entries")
+        load_entries_btn.setToolTip("Load all saved entries from the data file for navigation")
         load_entries_btn.clicked.connect(self.load_all_entries)
         load_entries_btn.setStyleSheet("background-color: #FF9800; color: white; padding: 5px;")
         layout.addWidget(load_entries_btn)
@@ -1484,16 +1582,19 @@ class VideoPlayer(QMainWindow):
         button_layout = QHBoxLayout()
         
         init_entry_btn = QPushButton("📝 Initialise New Entry")
+        init_entry_btn.setToolTip("Create a new data entry with the next DROP_ID (doesn't extract frame)")
         init_entry_btn.clicked.connect(self.initialise_new_entry)
         init_entry_btn.setStyleSheet("background-color: #2196F3; color: white; font-weight: bold; padding: 8px;")
         button_layout.addWidget(init_entry_btn)
         
         save_btn = QPushButton("Save Entry")
+        save_btn.setToolTip("Save current entry to the data file")
         save_btn.clicked.connect(self.save_data_entry)
         save_btn.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold; padding: 8px;")
         button_layout.addWidget(save_btn)
         
         clear_btn = QPushButton("Clear Form")
+        clear_btn.setToolTip("Clear all data entry fields")
         clear_btn.clicked.connect(self.clear_data_entry)
         button_layout.addWidget(clear_btn)
         
@@ -1503,6 +1604,7 @@ class VideoPlayer(QMainWindow):
         rules_layout = QHBoxLayout()
         
         manage_rules_btn = QPushButton("⚙ Manage Validation Rules")
+        manage_rules_btn.setToolTip("Create and edit validation rules for data entry fields")
         manage_rules_btn.clicked.connect(self.manage_validation_rules)
         manage_rules_btn.setStyleSheet("background-color: #9C27B0; color: white; font-weight: bold; padding: 8px;")
         rules_layout.addWidget(manage_rules_btn)
@@ -1513,11 +1615,13 @@ class VideoPlayer(QMainWindow):
         button_layout2 = QHBoxLayout()
         
         delete_btn = QPushButton("Delete Current Entry")
+        delete_btn.setToolTip("Delete the currently displayed entry from the data file")
         delete_btn.clicked.connect(self.delete_current_entry)
         delete_btn.setStyleSheet("background-color: #F44336; color: white; font-weight: bold; padding: 8px;")
         button_layout2.addWidget(delete_btn)
         
         reset_drop_btn = QPushButton("Reset Drop Count")
+        reset_drop_btn.setToolTip("Manually set the next DROP_ID number")
         reset_drop_btn.clicked.connect(self.reset_drop_count)
         reset_drop_btn.setStyleSheet("background-color: #FF9800; color: white; font-weight: bold; padding: 8px;")
         button_layout2.addWidget(reset_drop_btn)
@@ -1569,6 +1673,7 @@ class VideoPlayer(QMainWindow):
             self.skip_back_btn.setEnabled(True)
             self.skip_forward_btn.setEnabled(True)
         self.speed_combo.setEnabled(True)
+        self.zoom_slider.setEnabled(True)
         self.extract_btn.setEnabled(True)
         
         self.display_frame()
@@ -1581,14 +1686,23 @@ class VideoPlayer(QMainWindow):
         self.is_playing = not self.is_playing
         
         if self.is_playing:
-            self.play_btn.setText("Pause")
+            self.play_btn.setText("⏸")
             interval = int(1000 / (self.fps * self.playback_speed))
             # Ensure minimum interval of 1ms for smooth high-speed playback
             interval = max(1, interval)
             self.timer.start(interval)
         else:
-            self.play_btn.setText("Play")
+            self.play_btn.setText("▶")
             self.timer.stop()
+    
+    def change_zoom(self, value):
+        """Change video zoom level"""
+        self.zoom_level = value / 100.0
+        self.zoom_label.setText(f"{value}%")
+        
+        # Redisplay current frame with new zoom
+        if self.cap and self.cached_frame is not None:
+            self.display_frame_data(self.cached_frame)
             
     def change_speed(self, speed_text):
         """Change playback speed"""
@@ -1740,17 +1854,35 @@ class VideoPlayer(QMainWindow):
         h, w, ch = rgb_frame.shape
         bytes_per_line = ch * w
         
-        # Create QImage and scale to fit label
+        # Create QImage
         q_img = QImage(rgb_frame.data, w, h, bytes_per_line, QImage.Format_RGB888)
         pixmap = QPixmap.fromImage(q_img)
         
-        # Scale pixmap to fit label while maintaining aspect ratio
-        # Use FastTransformation for better performance during navigation
-        scaled_pixmap = pixmap.scaled(
-            self.video_label.size(), 
-            Qt.KeepAspectRatio, 
-            Qt.FastTransformation
+        # Get scroll area viewport size
+        viewport_size = self.video_scroll.viewport().size()
+        
+        # Calculate base scaled size to fit viewport
+        base_scaled = pixmap.scaled(
+            viewport_size,
+            Qt.KeepAspectRatio,
+            Qt.SmoothTransformation
         )
+        
+        # Apply zoom to the base scaled size
+        target_width = int(base_scaled.width() * self.zoom_level)
+        target_height = int(base_scaled.height() * self.zoom_level)
+        
+        # Create final scaled pixmap with zoom
+        transformation = Qt.SmoothTransformation if self.zoom_level > 1.0 else Qt.FastTransformation
+        scaled_pixmap = pixmap.scaled(
+            target_width,
+            target_height,
+            Qt.KeepAspectRatio,
+            transformation
+        )
+        
+        # Resize label to match pixmap (this enables scrolling when zoomed)
+        self.video_label.resize(scaled_pixmap.size())
         self.video_label.setPixmap(scaled_pixmap)
         
         # Update info label
@@ -1854,8 +1986,7 @@ class VideoPlayer(QMainWindow):
                 
                 # Update queue label to show new drop count
                 self.queue_label.setText(
-                    f"Video {self.current_video_index + 1}/{len(self.video_queue)}: "
-                    f"{os.path.basename(self.video_path)} (Next drop: {self.drop_counter})"
+                    f"{self.current_video_index + 1}/{len(self.video_queue)}: Drop {self.drop_counter}"
                 )
                 
                 # Show success message
@@ -1999,12 +2130,13 @@ class VideoPlayer(QMainWindow):
         self.skip_back_btn.setEnabled(True)
         self.skip_forward_btn.setEnabled(True)
         self.speed_combo.setEnabled(True)
+        self.zoom_slider.setEnabled(True)
         self.extract_btn.setEnabled(True)
         
         # Update queue label
         self.queue_label.setText(
-            f"Video {self.current_video_index + 1}/{len(self.video_queue)}: "
-            f"{os.path.basename(video_path)} (Next drop: {self.drop_counter})"
+            f"{self.current_video_index + 1}/{len(self.video_queue)}: "
+            f"{os.path.basename(video_path)[:30]} (Drop {self.drop_counter})"
         )
         
         self.display_frame()
@@ -2224,8 +2356,7 @@ class VideoPlayer(QMainWindow):
         
         # Update queue label to show new drop count
         self.queue_label.setText(
-            f"Video {self.current_video_index + 1}/{len(self.video_queue)}: "
-            f"{os.path.basename(self.video_path)} (Next drop: {self.drop_counter})"
+            f"{self.current_video_index + 1}/{len(self.video_queue)}: Drop {self.drop_counter}"
         )
         
         # Show success message
@@ -3031,8 +3162,7 @@ class VideoPlayer(QMainWindow):
             # Update the queue label if using video queue
             if self.video_queue and self.video_path in self.video_queue:
                 self.queue_label.setText(
-                    f"Video {self.current_video_index + 1}/{len(self.video_queue)}: "
-                    f"{os.path.basename(self.video_path)} (Next drop: {self.drop_counter})"
+                    f"{self.current_video_index + 1}/{len(self.video_queue)}: Drop {self.drop_counter}"
                 )
             
             # Update DROP_ID field if data is loaded
@@ -3828,13 +3958,13 @@ class VideoPlayer(QMainWindow):
                     self.skip_back_btn.setEnabled(True)
                     self.skip_forward_btn.setEnabled(True)
                     self.speed_combo.setEnabled(True)
+                    self.zoom_slider.setEnabled(True)
                     self.extract_btn.setEnabled(True)
                     
                     # Update queue label if in queue mode
                     if self.video_queue:
                         self.queue_label.setText(
-                            f"Video {self.current_video_index + 1}/{len(self.video_queue)}: "
-                            f"{os.path.basename(current_video_path)} (Next drop: {self.drop_counter})"
+                            f"{self.current_video_index + 1}/{len(self.video_queue)}: Drop {self.drop_counter}"
                         )
                         # Enable video navigation buttons
                         self.prev_video_btn.setEnabled(True)
@@ -3869,6 +3999,67 @@ class VideoPlayer(QMainWindow):
             )
             return False
     
+    def toggle_layout_mode(self):
+        """Toggle between single-window and dual-screen layout"""
+        if self.is_detached_mode:
+            self.reattach_data_entry_pane()
+        else:
+            self.detach_data_entry_pane()
+    
+    def detach_data_entry_pane(self):
+        """Detach data entry pane into separate window (dual-screen mode)"""
+        if self.is_detached_mode or not self.data_entry_widget:
+            return
+        
+        # Remove data entry widget from main layout
+        self.main_layout.removeWidget(self.data_entry_widget)
+        
+        # Create detached window
+        self.detached_window = DetachedDataEntryWindow(self)
+        self.detached_window.set_data_entry_widget(self.data_entry_widget)
+        
+        # Position on second screen if available
+        desktop = QApplication.desktop()
+        if desktop.screenCount() > 1:
+            # Move to second screen
+            screen_rect = desktop.screenGeometry(1)
+            self.detached_window.move(screen_rect.left() + 100, screen_rect.top() + 100)
+        else:
+            # Position to the right of main window
+            main_geom = self.geometry()
+            self.detached_window.move(main_geom.right() + 20, main_geom.top())
+        
+        self.detached_window.show()
+        self.is_detached_mode = True
+        
+        # Update button tooltip
+        self.layout_toggle_btn.setToolTip("Attach Data Entry Panel (Single Window Mode)")
+        self.layout_toggle_btn.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold; padding: 5px;")
+        
+        print("Data entry panel detached to separate window")
+    
+    def reattach_data_entry_pane(self):
+        """Reattach data entry pane to main window (single-window mode)"""
+        if not self.is_detached_mode or not self.data_entry_widget:
+            return
+        
+        # Remove from detached window
+        if self.detached_window:
+            self.detached_window.takeCentralWidget()
+            self.detached_window.close()
+            self.detached_window = None
+        
+        # Add back to main layout
+        self.main_layout.addWidget(self.data_entry_widget, 1)
+        
+        self.is_detached_mode = False
+        
+        # Update button tooltip
+        self.layout_toggle_btn.setToolTip("Toggle Dual-Screen Mode (Detach Data Entry Panel)")
+        self.layout_toggle_btn.setStyleSheet("background-color: #FF5722; color: white; font-weight: bold; padding: 5px;")
+        
+        print("Data entry panel reattached to main window")
+    
     def closeEvent(self, event):
         """Clean up when closing"""
         # Auto-save project before closing
@@ -3888,6 +4079,10 @@ class VideoPlayer(QMainWindow):
             if reply == QMessageBox.Yes:
                 self.save_project()
         
+        # Close detached window if exists
+        if self.detached_window:
+            self.detached_window.close()
+        
         if self.cap:
             self.cap.release()
         event.accept()
@@ -3895,6 +4090,19 @@ class VideoPlayer(QMainWindow):
 
 def main():
     app = QApplication(sys.argv)
+    
+    # Set global tooltip style to ensure visibility
+    app.setStyleSheet("""
+        QToolTip {
+            background-color: #2b2b2b;
+            color: #ffffff;
+            border: 1px solid #555555;
+            padding: 5px;
+            border-radius: 3px;
+            font-size: 11px;
+        }
+    """)
+    
     player = VideoPlayer()
     player.show()
     sys.exit(app.exec_())

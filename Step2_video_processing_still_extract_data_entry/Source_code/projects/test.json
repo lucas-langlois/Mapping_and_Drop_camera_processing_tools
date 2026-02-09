@@ -1,0 +1,1546 @@
+{
+  "template_path": "L:/RES_MEG/NESP/How To Do Everything/Mapping_and_Drop_camera_processing_tools/Step2_video_processing_still_extract_data_entry/data/data_entry_template_SG_field_only.csv",
+  "base_data_csv_path": "L:/RES_MMP Secure/PROJECTS - Active/Wuthathi/Wuthathi 2025/Data 2025/Reef Ranger November/Step2_video_processing_still_extract_data_entry/data/Wuthathi_Subtidal_Nov25_data.csv",
+  "video_queue": [
+    "L:/RES_MMP Secure/IMAGE LIBRARY (Quadrat, PARs, Biomass, General images)/QUADRAT IMAGES_Label photos as - Site code Transect and meters_Year month day EG GI1125_20210525/LR/LR2/2025 11 Nov/Grabs and  video\\DJI_20251126121953_0005_D.MP4"
+  ],
+  "current_video_index": 0,
+  "current_video_path": "L:/RES_MMP Secure/IMAGE LIBRARY (Quadrat, PARs, Biomass, General images)/QUADRAT IMAGES_Label photos as - Site code Transect and meters_Year month day EG GI1125_20210525/LR/LR2/2025 11 Nov/Grabs and  video\\DJI_20251126121953_0005_D.MP4",
+  "current_frame": 1151,
+  "drop_counter": 1,
+  "current_entry_index": -1,
+  "base_data": {},
+  "base_data_csv": [
+    {
+      "POINT_ID": "1",
+      "GPS_DATETIME": "27/11/2025 9:19",
+      "VIDEO_TIMESTAMP": "27/11/2025 9:22",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251127_ID001_092219.MP4",
+      "LATITUDE": "-11.90676302",
+      "LONGITUDE": "143.134413",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "2",
+      "GPS_DATETIME": "27/11/2025 9:25",
+      "VIDEO_TIMESTAMP": "27/11/2025 9:25",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251127_ID002_092504.MP4",
+      "LATITUDE": "-11.90740599",
+      "LONGITUDE": "143.132552",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "3",
+      "GPS_DATETIME": "27/11/2025 9:30",
+      "VIDEO_TIMESTAMP": "27/11/2025 9:30",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251127_ID003_093033.MP4",
+      "LATITUDE": "-11.904689",
+      "LONGITUDE": "143.131224",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "3",
+      "GPS_DATETIME": "27/11/2025 9:30",
+      "VIDEO_TIMESTAMP": "27/11/2025 9:31",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251127_ID003_093142.MP4",
+      "LATITUDE": "-11.904689",
+      "LONGITUDE": "143.131224",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "4",
+      "GPS_DATETIME": "27/11/2025 9:35",
+      "VIDEO_TIMESTAMP": "27/11/2025 9:35",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251127_ID004_093503.MP4",
+      "LATITUDE": "-11.903639",
+      "LONGITUDE": "143.128578",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "5",
+      "GPS_DATETIME": "27/11/2025 9:38",
+      "VIDEO_TIMESTAMP": "27/11/2025 9:38",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251127_ID005_093849.MP4",
+      "LATITUDE": "-11.90522603",
+      "LONGITUDE": "143.126713",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "6",
+      "GPS_DATETIME": "27/11/2025 9:41",
+      "VIDEO_TIMESTAMP": "27/11/2025 9:42",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251127_ID006_094206.MP4",
+      "LATITUDE": "-11.904718",
+      "LONGITUDE": "143.125613",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "7",
+      "GPS_DATETIME": "27/11/2025 9:48",
+      "VIDEO_TIMESTAMP": "27/11/2025 9:48",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251127_ID007_094830.MP4",
+      "LATITUDE": "-11.90333197",
+      "LONGITUDE": "143.119341",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "8",
+      "GPS_DATETIME": "27/11/2025 9:52",
+      "VIDEO_TIMESTAMP": "27/11/2025 9:52",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251127_ID008_095211.MP4",
+      "LATITUDE": "-11.89875503",
+      "LONGITUDE": "143.11259",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "9",
+      "GPS_DATETIME": "27/11/2025 10:00",
+      "VIDEO_TIMESTAMP": "27/11/2025 10:01",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251127_ID009_100123.MP4",
+      "LATITUDE": "-11.89464899",
+      "LONGITUDE": "143.115053",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "10",
+      "GPS_DATETIME": "27/11/2025 10:04",
+      "VIDEO_TIMESTAMP": "27/11/2025 10:04",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251127_ID010_100445.MP4",
+      "LATITUDE": "-11.89162304",
+      "LONGITUDE": "143.115655",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "10",
+      "GPS_DATETIME": "27/11/2025 10:04",
+      "VIDEO_TIMESTAMP": "27/11/2025 10:04",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251127_ID010_100456.MP4",
+      "LATITUDE": "-11.89162304",
+      "LONGITUDE": "143.115655",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "11",
+      "GPS_DATETIME": "27/11/2025 10:09",
+      "VIDEO_TIMESTAMP": "27/11/2025 10:09",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251127_ID011_100929.MP4",
+      "LATITUDE": "-11.88574598",
+      "LONGITUDE": "143.115808",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "12",
+      "GPS_DATETIME": "27/11/2025 10:27",
+      "VIDEO_TIMESTAMP": "27/11/2025 10:27",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251127_ID012_102739.MP4",
+      "LATITUDE": "-11.90651198",
+      "LONGITUDE": "143.071766",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "13",
+      "GPS_DATETIME": "27/11/2025 10:30",
+      "VIDEO_TIMESTAMP": "27/11/2025 10:30",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251127_ID013_103045.MP4",
+      "LATITUDE": "-11.90488597",
+      "LONGITUDE": "143.072501",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "14",
+      "GPS_DATETIME": "27/11/2025 10:37",
+      "VIDEO_TIMESTAMP": "27/11/2025 10:37",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251127_ID014_103704.MP4",
+      "LATITUDE": "-11.88450404",
+      "LONGITUDE": "143.072035",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "15",
+      "GPS_DATETIME": "27/11/2025 10:43",
+      "VIDEO_TIMESTAMP": "27/11/2025 10:43",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251127_ID015_104309.MP4",
+      "LATITUDE": "-11.87385198",
+      "LONGITUDE": "143.070237",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "16",
+      "GPS_DATETIME": "27/11/2025 10:47",
+      "VIDEO_TIMESTAMP": "27/11/2025 10:47",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251127_ID016_104711.MP4",
+      "LATITUDE": "-11.868721",
+      "LONGITUDE": "143.075417",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "17",
+      "GPS_DATETIME": "27/11/2025 10:52",
+      "VIDEO_TIMESTAMP": "27/11/2025 10:52",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251127_ID017_105232.MP4",
+      "LATITUDE": "-11.88052598",
+      "LONGITUDE": "143.07859",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "18",
+      "GPS_DATETIME": "27/11/2025 10:55",
+      "VIDEO_TIMESTAMP": "27/11/2025 10:55",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251127_ID018_105551.MP4",
+      "LATITUDE": "-11.88341296",
+      "LONGITUDE": "143.078701",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "19",
+      "GPS_DATETIME": "27/11/2025 10:58",
+      "VIDEO_TIMESTAMP": "27/11/2025 10:58",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251127_ID019_105823.MP4",
+      "LATITUDE": "-11.88638996",
+      "LONGITUDE": "143.078698",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "20",
+      "GPS_DATETIME": "27/11/2025 11:01",
+      "VIDEO_TIMESTAMP": "27/11/2025 11:01",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251127_ID020_110133.MP4",
+      "LATITUDE": "-11.892207",
+      "LONGITUDE": "143.078074",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "21",
+      "GPS_DATETIME": "27/11/2025 13:52",
+      "VIDEO_TIMESTAMP": "27/11/2025 13:52",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251127_ID021_135241.MP4",
+      "LATITUDE": "-11.90450996",
+      "LONGITUDE": "143.028789",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "21",
+      "GPS_DATETIME": "27/11/2025 13:52",
+      "VIDEO_TIMESTAMP": "27/11/2025 13:54",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251127_ID021_135446.MP4",
+      "LATITUDE": "-11.90450996",
+      "LONGITUDE": "143.028789",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "21",
+      "GPS_DATETIME": "27/11/2025 13:52",
+      "VIDEO_TIMESTAMP": "27/11/2025 13:56",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251127_ID021_135652.MP4",
+      "LATITUDE": "-11.90450996",
+      "LONGITUDE": "143.028789",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "22",
+      "GPS_DATETIME": "27/11/2025 14:04",
+      "VIDEO_TIMESTAMP": "27/11/2025 14:06",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251127_ID022_140604.MP4",
+      "LATITUDE": "-11.89586101",
+      "LONGITUDE": "143.034229",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "23",
+      "GPS_DATETIME": "27/11/2025 14:15",
+      "VIDEO_TIMESTAMP": "27/11/2025 14:15",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251127_ID023_141538.MP4",
+      "LATITUDE": "-11.89325198",
+      "LONGITUDE": "143.015966",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "24",
+      "GPS_DATETIME": "27/11/2025 14:23",
+      "VIDEO_TIMESTAMP": "27/11/2025 14:23",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251127_ID024_142308.MP4",
+      "LATITUDE": "-11.89122196",
+      "LONGITUDE": "143.003169",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "25",
+      "GPS_DATETIME": "27/11/2025 14:31",
+      "VIDEO_TIMESTAMP": "27/11/2025 14:32",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251127_ID025_143200.MP4",
+      "LATITUDE": "-11.88834496",
+      "LONGITUDE": "142.983424",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "26",
+      "GPS_DATETIME": "27/11/2025 14:38",
+      "VIDEO_TIMESTAMP": "27/11/2025 14:39",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251127_ID026_143935.MP4",
+      "LATITUDE": "-11.88463898",
+      "LONGITUDE": "142.974212",
+      "DEPTH": "7.6",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "27",
+      "GPS_DATETIME": "27/11/2025 14:48",
+      "VIDEO_TIMESTAMP": "27/11/2025 14:47",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251127_ID027_144757.MP4",
+      "LATITUDE": "-11.891961",
+      "LONGITUDE": "142.965944",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "28",
+      "GPS_DATETIME": "27/11/2025 14:54",
+      "VIDEO_TIMESTAMP": "27/11/2025 14:54",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251127_ID028_145456.MP4",
+      "LATITUDE": "-11.89554904",
+      "LONGITUDE": "142.974173",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "29",
+      "GPS_DATETIME": "27/11/2025 15:09",
+      "VIDEO_TIMESTAMP": "27/11/2025 15:10",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251127_ID029_151023.MP4",
+      "LATITUDE": "-11.90834602",
+      "LONGITUDE": "142.98107",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "30",
+      "GPS_DATETIME": "27/11/2025 15:16",
+      "VIDEO_TIMESTAMP": "27/11/2025 15:17",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251127_ID030_151721.MP4",
+      "LATITUDE": "-11.89839704",
+      "LONGITUDE": "142.989758",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "31",
+      "GPS_DATETIME": "27/11/2025 15:28",
+      "VIDEO_TIMESTAMP": "27/11/2025 15:28",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251127_ID031_152852.MP4",
+      "LATITUDE": "-11.90411601",
+      "LONGITUDE": "142.998318",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "32",
+      "GPS_DATETIME": "28/11/2025 8:01",
+      "VIDEO_TIMESTAMP": "28/11/2025 8:01",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID032_080118.MP4",
+      "LATITUDE": "-11.88564297",
+      "LONGITUDE": "142.956663",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "33",
+      "GPS_DATETIME": "28/11/2025 8:20",
+      "VIDEO_TIMESTAMP": "28/11/2025 8:19",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID033_081955.MP4",
+      "LATITUDE": "-11.87762601",
+      "LONGITUDE": "142.951719",
+      "DEPTH": "6.3",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "34",
+      "GPS_DATETIME": "28/11/2025 8:24",
+      "VIDEO_TIMESTAMP": "28/11/2025 8:25",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID034_082519.MP4",
+      "LATITUDE": "-11.86747",
+      "LONGITUDE": "142.942696",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "35",
+      "GPS_DATETIME": "28/11/2025 8:29",
+      "VIDEO_TIMESTAMP": "28/11/2025 8:29",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID035_082917.MP4",
+      "LATITUDE": "-11.86404498",
+      "LONGITUDE": "142.94826",
+      "DEPTH": "7.2",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "36",
+      "GPS_DATETIME": "28/11/2025 8:33",
+      "VIDEO_TIMESTAMP": "28/11/2025 8:34",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID036_083408.MP4",
+      "LATITUDE": "-11.86159001",
+      "LONGITUDE": "142.937742",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "37",
+      "GPS_DATETIME": "28/11/2025 8:37",
+      "VIDEO_TIMESTAMP": "28/11/2025 8:38",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID037_083803.MP4",
+      "LATITUDE": "-11.85624696",
+      "LONGITUDE": "142.934986",
+      "DEPTH": "7.3",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "38",
+      "GPS_DATETIME": "28/11/2025 8:43",
+      "VIDEO_TIMESTAMP": "28/11/2025 8:43",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID038_084336.MP4",
+      "LATITUDE": "-11.85026103",
+      "LONGITUDE": "142.925477",
+      "DEPTH": "6.7",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "39",
+      "GPS_DATETIME": "28/11/2025 8:47",
+      "VIDEO_TIMESTAMP": "28/11/2025 8:47",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID039_084754.MP4",
+      "LATITUDE": "-11.85640999",
+      "LONGITUDE": "142.925687",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "40",
+      "GPS_DATETIME": "28/11/2025 8:52",
+      "VIDEO_TIMESTAMP": "28/11/2025 8:53",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID040_085322.MP4",
+      "LATITUDE": "-11.86445",
+      "LONGITUDE": "142.928268",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "41",
+      "GPS_DATETIME": "28/11/2025 8:56",
+      "VIDEO_TIMESTAMP": "28/11/2025 8:57",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID041_085721.MP4",
+      "LATITUDE": "-11.86976898",
+      "LONGITUDE": "142.927656",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "42",
+      "GPS_DATETIME": "28/11/2025 9:02",
+      "VIDEO_TIMESTAMP": "28/11/2025 9:02",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID042_090223.MP4",
+      "LATITUDE": "-11.87136096",
+      "LONGITUDE": "142.920211",
+      "DEPTH": "4.2",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "43",
+      "GPS_DATETIME": "28/11/2025 9:08",
+      "VIDEO_TIMESTAMP": "28/11/2025 9:09",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID043_090953.MP4",
+      "LATITUDE": "-11.85299898",
+      "LONGITUDE": "142.909386",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "44",
+      "GPS_DATETIME": "28/11/2025 9:14",
+      "VIDEO_TIMESTAMP": "28/11/2025 9:14",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID044_091429.MP4",
+      "LATITUDE": "-11.84860099",
+      "LONGITUDE": "142.916443",
+      "DEPTH": "6.3",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "45",
+      "GPS_DATETIME": "28/11/2025 9:18",
+      "VIDEO_TIMESTAMP": "28/11/2025 9:18",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID045_091853.MP4",
+      "LATITUDE": "-11.84461397",
+      "LONGITUDE": "142.910094",
+      "DEPTH": "6.1",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "46",
+      "GPS_DATETIME": "28/11/2025 9:23",
+      "VIDEO_TIMESTAMP": "28/11/2025 9:23",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID046_092350.MP4",
+      "LATITUDE": "-11.85240998",
+      "LONGITUDE": "142.901474",
+      "DEPTH": "4.3",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "46",
+      "GPS_DATETIME": "28/11/2025 9:23",
+      "VIDEO_TIMESTAMP": "28/11/2025 9:26",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID046_092602.MP4",
+      "LATITUDE": "-11.85240998",
+      "LONGITUDE": "142.901474",
+      "DEPTH": "4.3",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "47",
+      "GPS_DATETIME": "28/11/2025 9:33",
+      "VIDEO_TIMESTAMP": "28/11/2025 9:34",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID047_093403.MP4",
+      "LATITUDE": "-11.84926199",
+      "LONGITUDE": "142.894289",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "48",
+      "GPS_DATETIME": "28/11/2025 9:39",
+      "VIDEO_TIMESTAMP": "28/11/2025 9:39",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID048_093935.MP4",
+      "LATITUDE": "-11.84804301",
+      "LONGITUDE": "142.887525",
+      "DEPTH": "3.4",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "49",
+      "GPS_DATETIME": "28/11/2025 9:46",
+      "VIDEO_TIMESTAMP": "28/11/2025 9:46",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID049_094601.MP4",
+      "LATITUDE": "-11.85231803",
+      "LONGITUDE": "142.880233",
+      "DEPTH": "3.2",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "50",
+      "GPS_DATETIME": "28/11/2025 9:51",
+      "VIDEO_TIMESTAMP": "28/11/2025 9:51",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID050_095153.MP4",
+      "LATITUDE": "-11.84623201",
+      "LONGITUDE": "142.88176",
+      "DEPTH": "3.2",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "51",
+      "GPS_DATETIME": "28/11/2025 9:57",
+      "VIDEO_TIMESTAMP": "28/11/2025 9:57",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID051_095707.MP4",
+      "LATITUDE": "-11.84272704",
+      "LONGITUDE": "142.887138",
+      "DEPTH": "3.6",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "52",
+      "GPS_DATETIME": "28/11/2025 10:01",
+      "VIDEO_TIMESTAMP": "28/11/2025 10:00",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID052_100056.MP4",
+      "LATITUDE": "-11.84078101",
+      "LONGITUDE": "142.882705",
+      "DEPTH": "3.4",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "53",
+      "GPS_DATETIME": "28/11/2025 10:04",
+      "VIDEO_TIMESTAMP": "28/11/2025 10:04",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID053_100446.MP4",
+      "LATITUDE": "-11.83745599",
+      "LONGITUDE": "142.875998",
+      "DEPTH": "3.2",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "54",
+      "GPS_DATETIME": "28/11/2025 10:10",
+      "VIDEO_TIMESTAMP": "28/11/2025 10:10",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID054_101022.MP4",
+      "LATITUDE": "-11.83531601",
+      "LONGITUDE": "142.870208",
+      "DEPTH": "2.6",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "55",
+      "GPS_DATETIME": "28/11/2025 10:14",
+      "VIDEO_TIMESTAMP": "28/11/2025 10:15",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID055_101512.MP4",
+      "LATITUDE": "-11.83517402",
+      "LONGITUDE": "142.867396",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "56",
+      "GPS_DATETIME": "28/11/2025 10:24",
+      "VIDEO_TIMESTAMP": "28/11/2025 10:24",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID056_102400.MP4",
+      "LATITUDE": "-11.83454798",
+      "LONGITUDE": "142.86632",
+      "DEPTH": "2.8",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "57",
+      "GPS_DATETIME": "28/11/2025 10:28",
+      "VIDEO_TIMESTAMP": "28/11/2025 10:28",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID057_102832.MP4",
+      "LATITUDE": "-11.83216198",
+      "LONGITUDE": "142.866411",
+      "DEPTH": "2.8",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "58",
+      "GPS_DATETIME": "28/11/2025 10:34",
+      "VIDEO_TIMESTAMP": "28/11/2025 10:34",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID058_103434.MP4",
+      "LATITUDE": "-11.83162102",
+      "LONGITUDE": "142.861791",
+      "DEPTH": "2.3",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "59",
+      "GPS_DATETIME": "28/11/2025 10:42",
+      "VIDEO_TIMESTAMP": "28/11/2025 10:43",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID059_104314.MP4",
+      "LATITUDE": "-11.82798997",
+      "LONGITUDE": "142.859293",
+      "DEPTH": "2.9",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "60",
+      "GPS_DATETIME": "28/11/2025 10:47",
+      "VIDEO_TIMESTAMP": "28/11/2025 10:47",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID060_104705.MP4",
+      "LATITUDE": "-11.82465297",
+      "LONGITUDE": "142.859475",
+      "DEPTH": "29",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "61",
+      "GPS_DATETIME": "28/11/2025 10:52",
+      "VIDEO_TIMESTAMP": "28/11/2025 10:52",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID061_105213.MP4",
+      "LATITUDE": "-11.81996799",
+      "LONGITUDE": "142.859265",
+      "DEPTH": "3.2",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "62",
+      "GPS_DATETIME": "28/11/2025 10:57",
+      "VIDEO_TIMESTAMP": "28/11/2025 10:57",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID062_105720.MP4",
+      "LATITUDE": "-11.82437796",
+      "LONGITUDE": "142.866274",
+      "DEPTH": "3.5",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "63",
+      "GPS_DATETIME": "28/11/2025 11:05",
+      "VIDEO_TIMESTAMP": "28/11/2025 11:05",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID063_110506.MP4",
+      "LATITUDE": "-11.82921097",
+      "LONGITUDE": "142.864982",
+      "DEPTH": "2.9",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "64",
+      "GPS_DATETIME": "28/11/2025 11:08",
+      "VIDEO_TIMESTAMP": "28/11/2025 11:08",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID064_110845.MP4",
+      "LATITUDE": "-11.82899002",
+      "LONGITUDE": "142.868683",
+      "DEPTH": "3.2",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "65",
+      "GPS_DATETIME": "28/11/2025 11:13",
+      "VIDEO_TIMESTAMP": "28/11/2025 11:13",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID065_111327.MP4",
+      "LATITUDE": "-11.82537197",
+      "LONGITUDE": "142.873148",
+      "DEPTH": "3.5",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "66",
+      "GPS_DATETIME": "28/11/2025 11:18",
+      "VIDEO_TIMESTAMP": "28/11/2025 11:17",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID066_111759.MP4",
+      "LATITUDE": "-11.81983103",
+      "LONGITUDE": "142.87611",
+      "DEPTH": "4.6",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "67",
+      "GPS_DATETIME": "28/11/2025 11:22",
+      "VIDEO_TIMESTAMP": "28/11/2025 11:22",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID067_112236.MP4",
+      "LATITUDE": "-11.82976602",
+      "LONGITUDE": "142.88068",
+      "DEPTH": "3",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "68",
+      "GPS_DATETIME": "28/11/2025 11:27",
+      "VIDEO_TIMESTAMP": "28/11/2025 11:27",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID068_112724.MP4",
+      "LATITUDE": "-11.82637696",
+      "LONGITUDE": "142.885535",
+      "DEPTH": "3.9",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "69",
+      "GPS_DATETIME": "28/11/2025 11:32",
+      "VIDEO_TIMESTAMP": "28/11/2025 11:31",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID069_113157.MP4",
+      "LATITUDE": "-11.82312302",
+      "LONGITUDE": "142.893547",
+      "DEPTH": "6.5",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "70",
+      "GPS_DATETIME": "28/11/2025 11:36",
+      "VIDEO_TIMESTAMP": "28/11/2025 11:36",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID070_113608.MP4",
+      "LATITUDE": "-11.83102196",
+      "LONGITUDE": "142.892025",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "71",
+      "GPS_DATETIME": "28/11/2025 11:41",
+      "VIDEO_TIMESTAMP": "28/11/2025 11:40",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID071_114047.MP4",
+      "LATITUDE": "-11.83590802",
+      "LONGITUDE": "142.897651",
+      "DEPTH": "4.8",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "72",
+      "GPS_DATETIME": "28/11/2025 11:45",
+      "VIDEO_TIMESTAMP": "28/11/2025 11:45",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID072_114507.MP4",
+      "LATITUDE": "-11.84203503",
+      "LONGITUDE": "142.898301",
+      "DEPTH": "4.6",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "73",
+      "GPS_DATETIME": "28/11/2025 13:50",
+      "VIDEO_TIMESTAMP": "28/11/2025 13:50",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID073_135017.MP4",
+      "LATITUDE": "-11.86414699",
+      "LONGITUDE": "142.944085",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "74",
+      "GPS_DATETIME": "28/11/2025 13:54",
+      "VIDEO_TIMESTAMP": "28/11/2025 13:54",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID074_135455.MP4",
+      "LATITUDE": "-11.81354896",
+      "LONGITUDE": "142.884693",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "75",
+      "GPS_DATETIME": "28/11/2025 13:58",
+      "VIDEO_TIMESTAMP": "28/11/2025 13:59",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID075_135925.MP4",
+      "LATITUDE": "-11.81247599",
+      "LONGITUDE": "142.878193",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "76",
+      "GPS_DATETIME": "28/11/2025 14:03",
+      "VIDEO_TIMESTAMP": "28/11/2025 14:04",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID076_140403.MP4",
+      "LATITUDE": "-11.80971801",
+      "LONGITUDE": "142.868996",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "77",
+      "GPS_DATETIME": "28/11/2025 14:08",
+      "VIDEO_TIMESTAMP": "28/11/2025 14:08",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID077_140841.MP4",
+      "LATITUDE": "-11.80957401",
+      "LONGITUDE": "142.861639",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "78",
+      "GPS_DATETIME": "28/11/2025 14:13",
+      "VIDEO_TIMESTAMP": "28/11/2025 14:13",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID078_141328.MP4",
+      "LATITUDE": "-11.81313599",
+      "LONGITUDE": "142.859973",
+      "DEPTH": "4.3",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "79",
+      "GPS_DATETIME": "28/11/2025 14:18",
+      "VIDEO_TIMESTAMP": "28/11/2025 14:18",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID079_141818.MP4",
+      "LATITUDE": "-11.806538",
+      "LONGITUDE": "142.864912",
+      "DEPTH": "4.5",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "80",
+      "GPS_DATETIME": "28/11/2025 14:22",
+      "VIDEO_TIMESTAMP": "28/11/2025 14:22",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID080_142217.MP4",
+      "LATITUDE": "-11.80101299",
+      "LONGITUDE": "142.861721",
+      "DEPTH": "4.4",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "81",
+      "GPS_DATETIME": "28/11/2025 14:26",
+      "VIDEO_TIMESTAMP": "28/11/2025 14:26",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID081_142627.MP4",
+      "LATITUDE": "-11.79708003",
+      "LONGITUDE": "142.861322",
+      "DEPTH": "4.1",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "82",
+      "GPS_DATETIME": "28/11/2025 14:31",
+      "VIDEO_TIMESTAMP": "28/11/2025 14:31",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID082_143152.MP4",
+      "LATITUDE": "-11.79370296",
+      "LONGITUDE": "142.858394",
+      "DEPTH": "3.5",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "83",
+      "GPS_DATETIME": "28/11/2025 14:35",
+      "VIDEO_TIMESTAMP": "28/11/2025 14:35",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID083_143534.MP4",
+      "LATITUDE": "-11.79331899",
+      "LONGITUDE": "142.855591",
+      "DEPTH": "3.9",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "84",
+      "GPS_DATETIME": "28/11/2025 14:39",
+      "VIDEO_TIMESTAMP": "28/11/2025 14:39",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID084_143929.MP4",
+      "LATITUDE": "-11.78994804",
+      "LONGITUDE": "142.855688",
+      "DEPTH": "2.2",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "85",
+      "GPS_DATETIME": "28/11/2025 14:44",
+      "VIDEO_TIMESTAMP": "28/11/2025 14:44",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID085_144456.MP4",
+      "LATITUDE": "-11.78844399",
+      "LONGITUDE": "142.858157",
+      "DEPTH": "3.5",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "86",
+      "GPS_DATETIME": "28/11/2025 14:51",
+      "VIDEO_TIMESTAMP": "28/11/2025 14:52",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID086_145221.MP4",
+      "LATITUDE": "-11.78871296",
+      "LONGITUDE": "142.86176",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "87",
+      "GPS_DATETIME": "28/11/2025 14:56",
+      "VIDEO_TIMESTAMP": "28/11/2025 14:56",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID087_145620.MP4",
+      "LATITUDE": "-11.79341303",
+      "LONGITUDE": "142.861649",
+      "DEPTH": "4.6",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "88",
+      "GPS_DATETIME": "28/11/2025 15:01",
+      "VIDEO_TIMESTAMP": "28/11/2025 15:01",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID088_150124.MP4",
+      "LATITUDE": "-11.791034",
+      "LONGITUDE": "142.865061",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "88",
+      "GPS_DATETIME": "28/11/2025 15:01",
+      "VIDEO_TIMESTAMP": "28/11/2025 15:01",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID088_150130.MP4",
+      "LATITUDE": "-11.791034",
+      "LONGITUDE": "142.865061",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "89",
+      "GPS_DATETIME": "28/11/2025 15:05",
+      "VIDEO_TIMESTAMP": "28/11/2025 15:05",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID089_150524.MP4",
+      "LATITUDE": "-11.79413304",
+      "LONGITUDE": "142.867542",
+      "DEPTH": "4.7",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "90",
+      "GPS_DATETIME": "28/11/2025 15:10",
+      "VIDEO_TIMESTAMP": "28/11/2025 15:10",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID090_151041.MP4",
+      "LATITUDE": "-11.80024898",
+      "LONGITUDE": "142.871529",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "91",
+      "GPS_DATETIME": "28/11/2025 15:16",
+      "VIDEO_TIMESTAMP": "28/11/2025 15:16",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251128_ID091_151630.MP4",
+      "LATITUDE": "-11.80809997",
+      "LONGITUDE": "142.879691",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "92",
+      "GPS_DATETIME": "29/11/2025 7:55",
+      "VIDEO_TIMESTAMP": "29/11/2025 7:55",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID092_075530.MP4",
+      "LATITUDE": "-11.84969097",
+      "LONGITUDE": "142.871592",
+      "DEPTH": "0.5",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "92",
+      "GPS_DATETIME": "29/11/2025 7:55",
+      "VIDEO_TIMESTAMP": "29/11/2025 7:55",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID092_075555.MP4",
+      "LATITUDE": "-11.84969097",
+      "LONGITUDE": "142.871592",
+      "DEPTH": "0.5",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "93",
+      "GPS_DATETIME": "29/11/2025 8:08",
+      "VIDEO_TIMESTAMP": "29/11/2025 8:08",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID093_080848.MP4",
+      "LATITUDE": "-11.84622003",
+      "LONGITUDE": "142.866493",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "93",
+      "GPS_DATETIME": "29/11/2025 8:08",
+      "VIDEO_TIMESTAMP": "29/11/2025 8:11",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID093_081150.MP4",
+      "LATITUDE": "-11.84622003",
+      "LONGITUDE": "142.866493",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "94",
+      "GPS_DATETIME": "29/11/2025 8:24",
+      "VIDEO_TIMESTAMP": "29/11/2025 8:25",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID094_082517.MP4",
+      "LATITUDE": "-11.84290599",
+      "LONGITUDE": "142.867002",
+      "DEPTH": "0.9",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "95",
+      "GPS_DATETIME": "29/11/2025 8:36",
+      "VIDEO_TIMESTAMP": "29/11/2025 8:37",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID095_083738.MP4",
+      "LATITUDE": "-11.83914604",
+      "LONGITUDE": "142.863751",
+      "DEPTH": "1",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "96",
+      "GPS_DATETIME": "29/11/2025 8:43",
+      "VIDEO_TIMESTAMP": "29/11/2025 8:44",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID096_084441.MP4",
+      "LATITUDE": "-11.84055503",
+      "LONGITUDE": "142.860965",
+      "DEPTH": "0.4",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "97",
+      "GPS_DATETIME": "29/11/2025 8:54",
+      "VIDEO_TIMESTAMP": "29/11/2025 8:55",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID097_085503.MP4",
+      "LATITUDE": "-11.83341399",
+      "LONGITUDE": "142.859008",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "98",
+      "GPS_DATETIME": "29/11/2025 9:00",
+      "VIDEO_TIMESTAMP": "29/11/2025 9:00",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID098_090045.MP4",
+      "LATITUDE": "-11.82995603",
+      "LONGITUDE": "142.857008",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "99",
+      "GPS_DATETIME": "29/11/2025 9:06",
+      "VIDEO_TIMESTAMP": "29/11/2025 9:06",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID099_090623.MP4",
+      "LATITUDE": "-11.82683503",
+      "LONGITUDE": "142.856768",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "100",
+      "GPS_DATETIME": "29/11/2025 9:11",
+      "VIDEO_TIMESTAMP": "29/11/2025 9:12",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID100_091202.MP4",
+      "LATITUDE": "-11.81953699",
+      "LONGITUDE": "142.864554",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "101",
+      "GPS_DATETIME": "29/11/2025 9:16",
+      "VIDEO_TIMESTAMP": "29/11/2025 9:16",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID101_091655.MP4",
+      "LATITUDE": "-11.81609496",
+      "LONGITUDE": "142.868874",
+      "DEPTH": "4.6",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "102",
+      "GPS_DATETIME": "29/11/2025 9:21",
+      "VIDEO_TIMESTAMP": "29/11/2025 9:22",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID102_092204.MP4",
+      "LATITUDE": "-11.81108301",
+      "LONGITUDE": "142.873645",
+      "DEPTH": "4.8",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "103",
+      "GPS_DATETIME": "29/11/2025 9:30",
+      "VIDEO_TIMESTAMP": "29/11/2025 9:31",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID103_093103.MP4",
+      "LATITUDE": "-11.79358997",
+      "LONGITUDE": "142.876418",
+      "DEPTH": "4.5",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "104",
+      "GPS_DATETIME": "29/11/2025 9:34",
+      "VIDEO_TIMESTAMP": "29/11/2025 9:35",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID104_093505.MP4",
+      "LATITUDE": "-11.79148",
+      "LONGITUDE": "142.870808",
+      "DEPTH": "3.5",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "105",
+      "GPS_DATETIME": "29/11/2025 9:38",
+      "VIDEO_TIMESTAMP": "29/11/2025 9:39",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID105_093916.MP4",
+      "LATITUDE": "-11.78652001",
+      "LONGITUDE": "142.868055",
+      "DEPTH": "3.8",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "107",
+      "GPS_DATETIME": "29/11/2025 9:53",
+      "VIDEO_TIMESTAMP": "29/11/2025 9:48",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID107_094832.MP4",
+      "LATITUDE": "-11.78200099",
+      "LONGITUDE": "142.859209",
+      "DEPTH": "2.7",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "107",
+      "GPS_DATETIME": "29/11/2025 9:53",
+      "VIDEO_TIMESTAMP": "29/11/2025 9:53",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID107_095335.MP4",
+      "LATITUDE": "-11.78200099",
+      "LONGITUDE": "142.859209",
+      "DEPTH": "2.7",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "108",
+      "GPS_DATETIME": "29/11/2025 9:58",
+      "VIDEO_TIMESTAMP": "29/11/2025 9:58",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID108_095831.MP4",
+      "LATITUDE": "-11.77767601",
+      "LONGITUDE": "142.861175",
+      "DEPTH": "3.5",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "108",
+      "GPS_DATETIME": "29/11/2025 9:58",
+      "VIDEO_TIMESTAMP": "29/11/2025 10:00",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID108_100021.MP4",
+      "LATITUDE": "-11.77767601",
+      "LONGITUDE": "142.861175",
+      "DEPTH": "3.5",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "109",
+      "GPS_DATETIME": "29/11/2025 10:06",
+      "VIDEO_TIMESTAMP": "29/11/2025 10:04",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID109_100431.MP4",
+      "LATITUDE": "-11.77494099",
+      "LONGITUDE": "142.86041",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "110",
+      "GPS_DATETIME": "29/11/2025 10:13",
+      "VIDEO_TIMESTAMP": "29/11/2025 10:13",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID110_101354.MP4",
+      "LATITUDE": "-11.77203197",
+      "LONGITUDE": "142.864135",
+      "DEPTH": "3.6",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "111",
+      "GPS_DATETIME": "29/11/2025 10:19",
+      "VIDEO_TIMESTAMP": "29/11/2025 10:18",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID111_101833.MP4",
+      "LATITUDE": "-11.76886403",
+      "LONGITUDE": "142.864673",
+      "DEPTH": "2.8",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "112",
+      "GPS_DATETIME": "29/11/2025 10:22",
+      "VIDEO_TIMESTAMP": "29/11/2025 10:22",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID112_102240.MP4",
+      "LATITUDE": "-11.76922303",
+      "LONGITUDE": "142.867935",
+      "DEPTH": "3.4",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "113",
+      "GPS_DATETIME": "29/11/2025 10:28",
+      "VIDEO_TIMESTAMP": "29/11/2025 10:27",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID113_102759.MP4",
+      "LATITUDE": "-11.77612502",
+      "LONGITUDE": "142.86653",
+      "DEPTH": "4",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "114",
+      "GPS_DATETIME": "29/11/2025 10:31",
+      "VIDEO_TIMESTAMP": "29/11/2025 10:32",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID114_103234.MP4",
+      "LATITUDE": "-11.78135298",
+      "LONGITUDE": "142.866947",
+      "DEPTH": "3.1",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "115",
+      "GPS_DATETIME": "29/11/2025 10:36",
+      "VIDEO_TIMESTAMP": "29/11/2025 10:36",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID115_103632.MP4",
+      "LATITUDE": "-11.78089499",
+      "LONGITUDE": "142.872",
+      "DEPTH": "3.7",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "116",
+      "GPS_DATETIME": "29/11/2025 10:40",
+      "VIDEO_TIMESTAMP": "29/11/2025 10:40",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID116_104028.MP4",
+      "LATITUDE": "-11.78270398",
+      "LONGITUDE": "142.876477",
+      "DEPTH": "5.2",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "117",
+      "GPS_DATETIME": "29/11/2025 10:44",
+      "VIDEO_TIMESTAMP": "29/11/2025 10:44",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID117_104430.MP4",
+      "LATITUDE": "-11.77758104",
+      "LONGITUDE": "142.877554",
+      "DEPTH": "4.3",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "118",
+      "GPS_DATETIME": "29/11/2025 10:49",
+      "VIDEO_TIMESTAMP": "29/11/2025 10:49",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID118_104916.MP4",
+      "LATITUDE": "-11.77186903",
+      "LONGITUDE": "142.87692",
+      "DEPTH": "2.8",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "119",
+      "GPS_DATETIME": "29/11/2025 10:52",
+      "VIDEO_TIMESTAMP": "29/11/2025 10:52",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID119_105259.MP4",
+      "LATITUDE": "-11.77149997",
+      "LONGITUDE": "142.881817",
+      "DEPTH": "3.5",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "120",
+      "GPS_DATETIME": "29/11/2025 10:56",
+      "VIDEO_TIMESTAMP": "29/11/2025 10:56",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID120_105634.MP4",
+      "LATITUDE": "-11.77023699",
+      "LONGITUDE": "142.885804",
+      "DEPTH": "3.6",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "121",
+      "GPS_DATETIME": "29/11/2025 11:02",
+      "VIDEO_TIMESTAMP": "29/11/2025 11:04",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID121_110409.MP4",
+      "LATITUDE": "-11.77434102",
+      "LONGITUDE": "142.891896",
+      "DEPTH": "4.7",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "122",
+      "GPS_DATETIME": "29/11/2025 11:08",
+      "VIDEO_TIMESTAMP": "29/11/2025 11:08",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID122_110852.MP4",
+      "LATITUDE": "-11.77615101",
+      "LONGITUDE": "142.884111",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "123",
+      "GPS_DATETIME": "29/11/2025 11:12",
+      "VIDEO_TIMESTAMP": "29/11/2025 11:12",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID123_111244.MP4",
+      "LATITUDE": "-11.77838",
+      "LONGITUDE": "142.889205",
+      "DEPTH": "4.7",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "124",
+      "GPS_DATETIME": "29/11/2025 11:16",
+      "VIDEO_TIMESTAMP": "29/11/2025 11:16",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID124_111651.MP4",
+      "LATITUDE": "-11.77772496",
+      "LONGITUDE": "142.894505",
+      "DEPTH": "3",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "125",
+      "GPS_DATETIME": "29/11/2025 11:20",
+      "VIDEO_TIMESTAMP": "29/11/2025 11:20",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID125_112051.MP4",
+      "LATITUDE": "-11.78336598",
+      "LONGITUDE": "142.890604",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "126",
+      "GPS_DATETIME": "29/11/2025 11:25",
+      "VIDEO_TIMESTAMP": "29/11/2025 11:25",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID126_112528.MP4",
+      "LATITUDE": "-11.78287103",
+      "LONGITUDE": "142.881451",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "127",
+      "GPS_DATETIME": "29/11/2025 11:29",
+      "VIDEO_TIMESTAMP": "29/11/2025 11:30",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID127_113016.MP4",
+      "LATITUDE": "-11.78701303",
+      "LONGITUDE": "142.875986",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "128",
+      "GPS_DATETIME": "29/11/2025 13:45",
+      "VIDEO_TIMESTAMP": "29/11/2025 13:45",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID128_134503.MP4",
+      "LATITUDE": "-11.76514297",
+      "LONGITUDE": "142.88956",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "129",
+      "GPS_DATETIME": "29/11/2025 13:50",
+      "VIDEO_TIMESTAMP": "29/11/2025 13:50",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID129_135047.MP4",
+      "LATITUDE": "-11.76744598",
+      "LONGITUDE": "142.880431",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "130",
+      "GPS_DATETIME": "29/11/2025 13:55",
+      "VIDEO_TIMESTAMP": "29/11/2025 13:55",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID130_135517.MP4",
+      "LATITUDE": "-11.76673997",
+      "LONGITUDE": "142.872607",
+      "DEPTH": "3.8",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "131",
+      "GPS_DATETIME": "29/11/2025 14:00",
+      "VIDEO_TIMESTAMP": "29/11/2025 14:00",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID131_140037.MP4",
+      "LATITUDE": "-11.763566",
+      "LONGITUDE": "142.865298",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "132",
+      "GPS_DATETIME": "29/11/2025 14:05",
+      "VIDEO_TIMESTAMP": "29/11/2025 14:05",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID132_140520.MP4",
+      "LATITUDE": "-11.77471401",
+      "LONGITUDE": "142.871523",
+      "DEPTH": "4.5",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "134",
+      "GPS_DATETIME": "29/11/2025 14:12",
+      "VIDEO_TIMESTAMP": "29/11/2025 14:12",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID134_141244.MP4",
+      "LATITUDE": "-11.78691002",
+      "LONGITUDE": "142.882293",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "134",
+      "GPS_DATETIME": "29/11/2025 14:12",
+      "VIDEO_TIMESTAMP": "29/11/2025 14:14",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID134_141450.MP4",
+      "LATITUDE": "-11.78691002",
+      "LONGITUDE": "142.882293",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "135",
+      "GPS_DATETIME": "29/11/2025 14:18",
+      "VIDEO_TIMESTAMP": "29/11/2025 14:18",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID135_141846.MP4",
+      "LATITUDE": "-11.79055799",
+      "LONGITUDE": "142.890819",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "136",
+      "GPS_DATETIME": "29/11/2025 14:24",
+      "VIDEO_TIMESTAMP": "29/11/2025 14:24",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID136_142435.MP4",
+      "LATITUDE": "-11.79389399",
+      "LONGITUDE": "142.882021",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "137",
+      "GPS_DATETIME": "29/11/2025 14:29",
+      "VIDEO_TIMESTAMP": "29/11/2025 14:29",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID137_142947.MP4",
+      "LATITUDE": "-11.802942",
+      "LONGITUDE": "142.876105",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "138",
+      "GPS_DATETIME": "29/11/2025 14:33",
+      "VIDEO_TIMESTAMP": "29/11/2025 14:33",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID138_143330.MP4",
+      "LATITUDE": "-11.80222702",
+      "LONGITUDE": "142.881689",
+      "DEPTH": "5.9",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "139",
+      "GPS_DATETIME": "29/11/2025 14:38",
+      "VIDEO_TIMESTAMP": "29/11/2025 14:38",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID139_143823.MP4",
+      "LATITUDE": "-11.80206399",
+      "LONGITUDE": "142.891893",
+      "DEPTH": "6.7",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "140",
+      "GPS_DATETIME": "29/11/2025 14:42",
+      "VIDEO_TIMESTAMP": "29/11/2025 14:43",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID140_144307.MP4",
+      "LATITUDE": "-11.81074496",
+      "LONGITUDE": "142.895205",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "141",
+      "GPS_DATETIME": "29/11/2025 14:50",
+      "VIDEO_TIMESTAMP": "29/11/2025 14:51",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID141_145116.MP4",
+      "LATITUDE": "-11.82199004",
+      "LONGITUDE": "142.882816",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "142",
+      "GPS_DATETIME": "29/11/2025 14:56",
+      "VIDEO_TIMESTAMP": "29/11/2025 14:56",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID142_145654.MP4",
+      "LATITUDE": "-11.83483296",
+      "LONGITUDE": "142.887112",
+      "DEPTH": "",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "144",
+      "GPS_DATETIME": "29/11/2025 15:10",
+      "VIDEO_TIMESTAMP": "29/11/2025 15:10",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID144_151029.MP4",
+      "LATITUDE": "-11.84774696",
+      "LONGITUDE": "142.903207",
+      "DEPTH": "6.6",
+      "COMMENTS": ""
+    },
+    {
+      "POINT_ID": "145",
+      "GPS_DATETIME": "29/11/2025 15:21",
+      "VIDEO_TIMESTAMP": "29/11/2025 15:22",
+      "VIDEO_FILENAME": "Wuthathi_Subtidal_20251129_ID145_152218.MP4",
+      "LATITUDE": "-11.85978496",
+      "LONGITUDE": "142.917599",
+      "DEPTH": "",
+      "COMMENTS": ""
+    }
+  ],
+  "saved_at": "2026-02-10 08:45:28"
+}

@@ -8,13 +8,18 @@ A comprehensive video player application with integrated data entry for marine/e
 ✅ **Play/Pause Controls** - Spacebar or button to control playback  
 ✅ **Frame-by-Frame Navigation** - Arrow keys (← →) to step through frames  
 ✅ **Skip Navigation** - Shift+Arrow (±10 frames), Ctrl+Arrow (±100 frames)  
-✅ **Timeline Slider** - Fast scrubbing through video  
+✅ **Timeline Slider** - Fast scrubbing through video with tooltips  
 ✅ **Variable Speed Control** - 0.25x to 12x playback speeds  
+✅ **Video Zoom** - 50% to 400% zoom with smooth scroll/pan (great for detail work!)  
 ✅ **Auto-Load Video Queue** - Load multiple videos from `drop_videos/` folder  
 ✅ **Video Navigation** - Previous/Next video buttons for queue  
+✅ **Dual-Screen Mode** - Detach data entry panel to separate window for 2-monitor setups  
+✅ **Optimized UI** - Compact controls maximize video viewing area  
+✅ **Helpful Tooltips** - Hover over any button for description  
 
 ### Data Entry System
 ✅ **Customizable Form** - Load any CSV template to define data fields  
+✅ **Decimal Precision** - Support for decimal values (e.g., 0.7%) in percentage fields  
 ✅ **Auto-Population** - Pre-fill location/metadata from base CSV  
 ✅ **Smart Drop Numbering** - Sequential drop IDs based on POINT_ID  
 ✅ **Entry Navigation** - Browse and edit previous entries  
@@ -23,7 +28,7 @@ A comprehensive video player application with integrated data entry for marine/e
 ✅ **Validation Rules** - Built-in QAQC system with visual rule builder  
 ✅ **Auto-Fill Rules** - Automatically populate fields based on conditions  
 ✅ **Conditional Sum Validation** - Validate sums only when conditions are met  
-✅ **Calculated Fields** - Auto-calculate values from formulas  
+✅ **Calculated Fields** - Auto-calculate values from formulas with configurable decimals  
 ✅ **Copy from Previous** - Quickly reuse values from previous entries  
 ✅ **Project Save/Load** - Resume exactly where you left off  
 ✅ **Interactive Map View** - Visualize all sampling points on satellite imagery  
@@ -161,6 +166,71 @@ If you need a standalone `.exe` file (no Python required to run):
 | **Ctrl+←** | Skip back 100 frames |
 | **Ctrl+→** | Skip forward 100 frames |
 | **S** | Extract current frame |
+
+### Video Zoom Feature
+
+Zoom in to examine fine details in your video:
+
+**Zoom Controls:**
+- **Slider**: Horizontal zoom slider in control bar
+- **Range**: 50% (zoom out) to 400% (zoom in)
+- **Display**: Live percentage indicator (50%-400%)
+
+**How to Use:**
+1. Open a video
+2. Find the "Zoom:" slider in the controls (between Speed and Extract)
+3. Drag slider right to zoom in, left to zoom out
+4. At zoom levels > 100%, scrollbars appear automatically
+5. Click and drag or use scrollbars to pan around the zoomed video
+
+**Perfect For:**
+- Identifying small organisms or features
+- Reading text or numbers in video
+- Examining substrate texture in detail  
+- Quality checking coral/seagrass identification16. Verifying species at close range**Tips:**
+- Zoom to 200-300% for detailed species identification
+- Use at 100% (default) for normal navigation
+- Zoom persists across frames - set once, stays while navigating
+- Works with all playback speeds
+- Smooth transformation ensures quality at high zoom
+
+### Dual-Screen Layout Mode
+
+Perfect for users with 2+ monitors! Separate the video player and data entry panel into independent windows.
+
+**Features:**
+- **Toggle Button**: ⬌ button in control bar (orange = attached, green = detached)
+- **Smart Positioning**: Auto-detects second monitor and positions data panel there
+- **Synchronized State**: All functionality works identically in both modes
+- **Easy Toggle**: Switch back and forth anytime
+
+**How to Use:**
+
+**Detach (Dual-Screen Mode):**
+1. Click the **⬌** button in the video controls
+2. Data entry panel opens in new window
+3. If you have 2+ monitors: Window opens on second screen automatically
+4. If you have 1 monitor: Window opens to the right of main window
+5. Drag windows to your preferred positions
+6. Button turns **green** when detached
+
+**Reattach (Single Window Mode):**
+1. Click **⬌** button again (or close the data panel window)
+2. Data entry panel returns to main window
+3. Button turns **orange** when attached
+
+**Recommended Setup:**
+- **Monitor 1**: Video player (maximized for large viewing area)
+- **Monitor 2**: Data entry panel (full access to form fields)
+- Eliminates scrolling and switching between video and data entry
+
+**Benefits:**
+- **More screen space**: Maximize both video and form visibility
+- **Better workflow**: See entire form while watching video
+- **Flexible positioning**: Arrange windows however you prefer
+- **Maintains state**: All data, rules, and settings stay synchronized
+
+**Note**: Both windows close together when you exit the application.
 
 ## File Organization
 
@@ -475,6 +545,37 @@ Treat Blanks As: 0 (zero)
 **Blank Handling:**
 - **"0 (zero)"** - Blank fields count as 0 (useful when users leave absent species blank)
 - **"Skip field"** - Only counts fields with values
+
+**💡 Decimal Support**: Tolerance allows for decimal precision. Use `0.1` for values like 0.7%, 33.3%, etc.
+
+#### Calculated Fields
+
+Automatically calculate field values from formulas. Perfect for auto-filling totals.
+
+**Example:** Auto-calculate OPEN = 100 - (all other cover values)
+
+**Setup:**
+```
+Rule Type: Calculated Field
+Target Field: OPEN
+Formula: 100 - SG_COVER - AL_COVER - HC_COVER - SC_COVER - SPONGE - WHIP - OTHER_COVER
+Decimal Places: 1
+```
+
+**Decimal Places Options:**
+- **0**: Whole numbers only (e.g., 99, 100, 23)
+- **1**: One decimal (e.g., 99.3, 23.7) ← **Recommended** for percentage fields
+- **2+**: Higher precision (e.g., 99.33, 23.77)
+
+**⚠️ Important**: If you enter decimal values in fields (like SG_COVER = 0.7), set calculated field decimals to 1 or higher. Otherwise, rounding causes validation errors.
+
+**Example with Decimals:**
+- SG_COVER = 0.7
+- AL_COVER = 0
+- HC_COVER = 0
+- (other covers) = 0
+- OPEN calculates as 99.3 (with decimals=1) ✓
+- OPEN calculates as 99 (with decimals=0) ✗ → Sum = 99.7 ≠ 100
 
 #### Auto-Fill Rules
 
