@@ -1,6 +1,6 @@
 # DJI Video Renamer
 
-A tool to automatically match and rename DJI camera videos based on timestamps from a CSV file, with support for timezone conversions.
+A tool to automatically match and rename DJI camera videos based on timestamps from a CSV file, with support for timezone conversions, manual editing, and revert functionality.
 
 ## 🚀 Quick Start
 
@@ -16,7 +16,7 @@ This interactive script will guide you through installation and launch the app!
 ## 📋 What This Tool Does
 
 - ✅ Matches DJI video files to CSV timestamps (finds closest match)
-- ✅ Renames videos with standardized format: `Location_YYYYMMDD_ID###_HHMMSS.MP4`
+- ✅ Renames videos with standardized format: `Location_YYYYMMDD_HHMMSS_ID###.MP4`
 - ✅ Handles timezone conversion (e.g., UTC in CSV → IST for camera)
 - ✅ Supports multiple videos at same location (sequential recordings)
 - ✅ Interactive web interface (Shiny app)
@@ -24,6 +24,10 @@ This interactive script will guide you through installation and launch the app!
 - ✅ File browser for easy path selection
 - ✅ Export matching results as CSV log
 - ✅ **Auto-generates output CSV with all survey data + matched video info**
+- ✅ **Manual editing of matches** - Double-click to change any match
+- ✅ **Video duration warnings** - Flags videos shorter than 30 seconds
+- ✅ **Unmatched OBJECTID tracking** - See which CSV entries have no video
+- ✅ **Revert renaming** - Restore original DJI filenames anytime
 - ✅ Batch processing for multiple videos
 
 ---
@@ -92,13 +96,16 @@ runApp("video_renamer_app.R")
 
 All of these will be installed automatically if you use the setup scripts:
 
-| Package | Purpose |
-|---------|---------|
-| `shiny` | Web application framework |
-| `DT` | Interactive data tables |
-| `lubridate` | Date/time handling |
-| `shinyFiles` | File browser dialog |
-| `fs` | Cross-platform file operations |
+| Package | Purpose | Required |
+|---------|---------|----------|
+| `shiny` | Web application framework | ✅ Yes |
+| `DT` | Interactive data tables | ✅ Yes |
+| `lubridate` | Date/time handling | ✅ Yes |
+| `shinyFiles` | File browser dialog | ✅ Yes |
+| `fs` | Cross-platform file operations | ✅ Yes |
+| `av` | Video duration checking | ⚠️ Optional |
+
+**Note**: The `av` package is optional. If installed, the app will check video durations and warn you about videos shorter than 30 seconds. Install with: `install.packages("av")`
 
 ---
 
@@ -136,14 +143,33 @@ source("launch_app.R")
    - Click "Preview Matches" to see what will be renamed
    - Review results in the Results tab
    - Check for any warnings or errors
+   - Review unmatched OBJECTIDs (CSV entries without matching videos)
+   - Check for video duration warnings (videos < 30 seconds)
 
-6. **Rename Videos**
-   - If everything looks good, click "Rename Videos"
+6. **Manual Editing (Optional)**
+   - Go to "Edit Matches" tab
+   - Click "Load Current Matches"
+   - Double-click any OBJECTID (yellow column) to edit
+   - Enter a different OBJECTID or leave blank to unmatch
+   - New filename updates automatically
+   - Use "Rename Videos (Edited Matches)" when ready
+
+7. **Rename Videos**
+   - For automatic matches: Click "Rename Videos (Auto-Match)"
+   - For edited matches: Click "Rename Videos (Edited Matches)"
    - Confirm the action
    - Videos will be renamed according to the matches
    - **An output CSV will be automatically saved with all your data + video matches**
+   - Original DJI filenames are stored in the CSV for revert capability
 
-7. **Download Log**
+8. **Revert Renaming (Optional)**
+   - Go to "Revert Renaming" tab
+   - Select the output CSV file from a previous renaming
+   - Click "Load Renamed Videos"
+   - Review what will be reverted
+   - Click "Revert to Original Filenames" to restore DJI names
+
+9. **Download Log**
    - Click "Download Log" to save the matching results as CSV
 
 ### App Tabs Explained
@@ -151,7 +177,9 @@ source("launch_app.R")
 | Tab | Purpose |
 |-----|---------|
 | **Instructions** | Detailed usage guide, time format examples, timezone info |
-| **Results** | Summary statistics, detailed matching results table |
+| **Results** | Summary statistics, detailed results table, unmatched OBJECTIDs |
+| **Edit Matches** | Manually edit video-to-OBJECTID matches, double-click to change |
+| **Revert Renaming** | Restore original DJI filenames from a previous renaming |
 | **CSV Preview** | Load and preview your CSV data (first 100 rows) |
 | **Video Files** | Scan and list DJI videos in directory |
 
@@ -168,21 +196,23 @@ When you rename videos (not in preview mode), the app generates **two** files:
 
 ### 2. **Output CSV with Full Survey Data** (Automatic)
 - **Location**: Automatically saved in your video directory
-- **Filename**: `video_matching_output_YYYYMMDD_HHMMSS.csv`
+- **Filename**: `video_matching_output_YYYYMMDD_HHMMSS.csv` (or `_edited_` for manual edits)
 - **Contains**: 
   - ✅ **All original columns from your imported CSV** (OBJECTID, Date.Time, Latitude, Longitude, etc.)
+  - ✅ `original_filename` - the original DJI video filename (for revert functionality)
   - ✅ `matched_video_filename` - the new renamed video filename
   - ✅ `video_datetime` - the datetime extracted from the video file
   - ✅ `time_difference_sec` - time difference between CSV and video timestamps
 - **Purpose**: Complete dataset linking your survey data with matched videos
 - **Note**: Only includes successfully matched/renamed videos
+- **Revert**: Use this CSV file in the "Revert Renaming" tab to restore original names
 
 **Example Output CSV:**
 
-| OBJECTID | Date.Time | Latitude | Longitude | Other_Data | matched_video_filename | video_datetime | time_difference_sec |
-|----------|-----------|----------|-----------|------------|------------------------|----------------|---------------------|
-| 1 | 11/18/2025 06:51:51 | -17.234 | 139.567 | ... | Burketown_20251118_ID001_122107.MP4 | 2025-11-18 12:21:07 | 45.2 |
-| 2 | 11/18/2025 07:15:32 | -17.235 | 139.568 | ... | Burketown_20251118_ID002_124532.MP4 | 2025-11-18 12:45:32 | 12.8 |
+| OBJECTID | Date.Time | Latitude | Longitude | original_filename | matched_video_filename | video_datetime | time_difference_sec |
+|----------|-----------|----------|-----------|-------------------|------------------------|----------------|---------------------|
+| 1 | 11/18/2025 06:51:51 | -17.234 | 139.567 | DJI_20251118122107_0024_D.MP4 | Burketown_20251118_122107_ID001.MP4 | 2025-11-18 12:21:07 | 45.2 |
+| 2 | 11/18/2025 07:15:32 | -17.235 | 139.568 | DJI_20251118124532_0025_D.MP4 | Burketown_20251118_124532_ID002.MP4 | 2025-11-18 12:45:32 | 12.8 |
 
 This output CSV is ideal for importing into GIS software, databases, or further analysis!
 
@@ -198,9 +228,30 @@ This output CSV is ideal for importing into GIS software, databases, or further 
 - Location: "Burketown"
 
 **Output:**
-- Renamed: `Burketown_20251118_ID001_122107.MP4`
+- Renamed: `Burketown_20251118_122107_ID001.MP4`
+- Format: `Location_YYYYMMDD_HHMMSS_ID###.MP4`
 
 Multiple videos at the same location are differentiated by their time component (HHMMSS).
+
+### Manual Editing Example
+
+If automatic matching made an error:
+1. Go to "Edit Matches" tab
+2. Double-click the matched_objectid cell
+3. Change from "5" to "7" (for example)
+4. New filename automatically updates to use ID007
+5. Click "Rename Videos (Edited Matches)"
+
+### Revert Example
+
+To restore original DJI names:
+1. Locate the output CSV: `video_matching_output_20260213_143025.csv`
+2. Go to "Revert Renaming" tab
+3. Browse and select the CSV file
+4. Click "Load Renamed Videos"
+5. Review the files to be reverted
+6. Click "Revert to Original Filenames"
+7. Videos restored: `Burketown_20251118_122107_ID001.MP4` → `DJI_20251118122107_0024_D.MP4`
 
 ### Time Format Guide
 
@@ -231,6 +282,35 @@ The tool automatically converts between timezones:
 | 🇦🇺 Australia | `Australia/Hobart` | Hobart (UTC+10/+11 with DST) |
 | 🇺🇸 USA | `America/New_York` | Eastern Time (UTC-5/-4) |
 | 🇬🇧 UK | `Europe/London` | British Time (UTC+0/+1) |
+
+---
+
+## ✨ New Features
+
+### 🎯 Manual Match Editing
+- **Double-click to edit** any matched OBJECTID
+- **Auto-updates** new filename as you edit
+- **Validation** - only accepts OBJECTIDs from your CSV
+- **Color-coded** - Yellow = editable, Blue = auto-updates
+- **Flexible** - Unmatch videos by leaving OBJECTID blank
+
+### ⏱️ Video Duration Warnings
+- **Automatic checking** of video duration (requires `av` package)
+- **Flags videos < 30 seconds** for review
+- **Yellow highlighting** in results table
+- **Summary count** of short videos
+
+### 📋 Unmatched OBJECTID Tracking
+- **Identifies CSV entries** without matching videos
+- **Separate table** showing unmatched OBJECTIDs with timestamps
+- **Downloadable** for investigation
+- **Summary count** in results
+
+### ↩️ Revert Renaming
+- **Restore original DJI filenames** anytime
+- **Uses output CSV** to track original names
+- **Safe operation** - warns if original filename already exists
+- **Status tracking** - shows what was reverted successfully
 
 ---
 
@@ -323,17 +403,52 @@ shiny::runApp("video_renamer_app.R", launch.browser = TRUE)
 - Ensure videos follow DJI naming: `DJI_YYYYMMDDHHMMSS_####_D.MP4`
 - Check the video directory path is correct
 
+### Manual Editing Issues
+
+**"OBJECTID not found in CSV"**
+- Verify you're entering an OBJECTID that exists in your CSV
+- Check for typos or extra spaces
+- OBJECTIDs are case-sensitive if they contain letters
+
+**"Can't edit matched_objectid column"**
+- Make sure you've clicked "Load Current Matches" first
+- Double-click the cell (not single-click)
+- Only the matched_objectid column (yellow) is editable
+
+### Revert Issues
+
+**"Original filename already exists"**
+- Another file with the original DJI name is in the directory
+- Check for duplicate videos
+- Manually rename/move the conflicting file first
+
+**"CSV must contain 'original_filename' column"**
+- The CSV you selected wasn't created by this app's renaming process
+- Use only the output CSV files generated after renaming
+- File must be named like: `video_matching_output_*.csv`
+
+### Duration Warning Issues
+
+**"Duration warnings not showing"**
+- Install the `av` package: `install.packages("av")`
+- Restart the app after installation
+- If still not working, duration checking will be skipped (app still works)
+
 ---
 
 ## ⚠️ Important Notes
 
 - Always use **Preview mode first** to verify matches
+- **Review unmatched OBJECTIDs** - these CSV entries have no matching videos
+- **Check duration warnings** - videos <30 sec might be incomplete recordings
 - The app runs **locally** on your computer (not online)
 - Your files stay on **your computer** (nothing uploaded)
 - **Timezone settings** must match your data for accurate matching
 - **Backup your videos** before first use (safety first!)
+- **Output CSV files contain original filenames** - keep these for revert capability
 - Test with a few videos first before processing large batches
 - Check your **video directory** for the output CSV after renaming
+- **Manual editing** allows you to correct any automatic matching errors
 
 ---
 
