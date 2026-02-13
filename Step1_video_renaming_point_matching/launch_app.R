@@ -7,6 +7,9 @@ cat("========================================\n\n")
 # Required packages
 required_packages <- c("shiny", "DT", "lubridate", "shinyFiles", "fs")
 
+# Optional packages (nice to have but not required)
+optional_packages <- c("av")
+
 cat("Checking for required packages...\n")
 
 # Check which packages are missing
@@ -17,38 +20,48 @@ for (pkg in required_packages) {
   }
 }
 
-# If packages are missing, offer to install them
+# Auto-install missing required packages
 if (length(missing_packages) > 0) {
-  cat("\n⚠ Missing packages detected:", paste(missing_packages, collapse = ", "), "\n\n")
-  cat("Would you like to install them now? (This may take a few minutes)\n")
+  cat("\n📦 Installing missing required packages:", paste(missing_packages, collapse = ", "), "\n")
+  cat("This may take a few minutes...\n\n")
   
-  # Auto-install in non-interactive mode or prompt in interactive mode
-  if (interactive()) {
-    response <- readline(prompt = "Install now? (yes/no): ")
-    should_install <- tolower(trimws(response)) %in% c("yes", "y", "")
-  } else {
-    # In non-interactive mode, auto-install
-    should_install <- TRUE
+  for (pkg in missing_packages) {
+    cat("  - Installing", pkg, "...")
+    tryCatch({
+      install.packages(pkg, dependencies = TRUE, quiet = TRUE)
+      cat(" ✓\n")
+    }, error = function(e) {
+      cat(" ✗ FAILED\n")
+      cat("    Error:", conditionMessage(e), "\n")
+    })
   }
+  cat("\n")
+}
+
+# Check and auto-install optional packages
+missing_optional <- c()
+for (pkg in optional_packages) {
+  if (!requireNamespace(pkg, quietly = TRUE)) {
+    missing_optional <- c(missing_optional, pkg)
+  }
+}
+
+if (length(missing_optional) > 0) {
+  cat("📦 Installing optional packages:", paste(missing_optional, collapse = ", "), "\n")
+  cat("(These enable extra features like video duration warnings)\n\n")
   
-  if (should_install) {
-    cat("\nInstalling packages...\n")
-    for (pkg in missing_packages) {
-      cat("  - Installing", pkg, "...")
-      tryCatch({
-        install.packages(pkg, dependencies = TRUE, quiet = TRUE)
-        cat(" ✓\n")
-      }, error = function(e) {
-        cat(" ✗ FAILED\n")
-        cat("    Error:", conditionMessage(e), "\n")
-      })
-    }
-    cat("\n")
-  } else {
-    cat("\nPackage installation cancelled.\n")
-    cat('Please install packages manually or run: source("install_packages.R")\n\n')
-    stop("Required packages not installed.", call. = FALSE)
+  for (pkg in missing_optional) {
+    cat("  - Installing", pkg, "...")
+    tryCatch({
+      install.packages(pkg, dependencies = TRUE, quiet = TRUE)
+      cat(" ✓\n")
+    }, error = function(e) {
+      cat(" ⚠ Skipped (optional)\n")
+      cat("    Note:", conditionMessage(e), "\n")
+      cat("    The app will work without this package.\n")
+    })
   }
+  cat("\n")
 }
 
 # Load packages

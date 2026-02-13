@@ -1,0 +1,29 @@
+How to use the video renaming and point matching app
+
+Before you start 
+
+1) Place all your videos in the "Videos" folder
+2) Download your point data collection layer from ArcGIS online (export as excel to preserve date/time format). Copy/Paste the Point_ID (or OBJECTID) column, the Date_Time (in UTC), other relevant metadata field (SG_PRESENT, DEPTH...) to new .csv. Save the .csv in "data" folder. This will be used for the matching the videos to the points.
+
+
+Launch Rstudio and run launch_app.R
+
+The interactive app will start.
+
+Check the video directory path is correct
+Browse to select your newly created .csv in the data folder
+Enter the location of the survey
+ID prefix is just add something before the unique point ID
+Set how many digit you want your unique IDs
+Specify the name of your Date/Time column in the csv
+Specify the name of your point ID columns
+Specify format of the date/time column
+Specify the time zone format of your Date/Time column
+Specify the time zone used by your camera (e.g. for DJI it will be the time showing in the filename)
+Set the maximum time difference to allow a match (default is 300 sec) 
+
+When all set
+Hit preview matches - check that everything looks good. If some don't match check if you need to increase time diff but be careful as it might double match others.
+If all looks good hit "rename videos" this can't be undone so only do it when you are sure. There is a log that get's created with the original filenames if you need to revert by clicking the "Download log" button
+
+

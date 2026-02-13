@@ -26,8 +26,10 @@ This interactive script will guide you through installation and launch the app!
 - ✅ **Auto-generates output CSV with all survey data + matched video info**
 - ✅ **Manual editing of matches** - Double-click to change any match
 - ✅ **Video duration warnings** - Flags videos shorter than 30 seconds
-- ✅ **Unmatched OBJECTID tracking** - See which CSV entries have no video
+- ✅ **Unmatched mapping point tracking** - See which CSV entries have no video
 - ✅ **Revert renaming** - Restore original DJI filenames anytime
+- ✅ **Dynamic column selection** - Auto-populated dropdowns for CSV columns
+- ✅ **Auto-detect date/time format** - Automatically detects format from your data
 - ✅ Batch processing for multiple videos
 
 ---
@@ -130,9 +132,9 @@ source("launch_app.R")
    - Set number of digits for zero-padding (e.g., 3 for ID001)
 
 3. **Configure CSV Settings**
-   - Enter the column name for date/time (e.g., "Date.Time")
-   - Enter the column name for Object ID (e.g., "OBJECTID")
-   - Set the time format matching your CSV
+   - Select the date/time column from the dropdown (auto-populated from your CSV)
+   - Select the mapping point ID column from the dropdown (e.g., "OBJECTID")
+   - Date/time format is auto-detected, or select from the dropdown if needed
    - Select CSV timezone (e.g., "UTC")
    - Select camera timezone (e.g., "Australia/Brisbane")
 
@@ -143,14 +145,14 @@ source("launch_app.R")
    - Click "Preview Matches" to see what will be renamed
    - Review results in the Results tab
    - Check for any warnings or errors
-   - Review unmatched OBJECTIDs (CSV entries without matching videos)
+   - Review unmatched mapping point IDs (CSV entries without matching videos)
    - Check for video duration warnings (videos < 30 seconds)
 
 6. **Manual Editing (Optional)**
    - Go to "Edit Matches" tab
    - Click "Load Current Matches"
-   - Double-click any OBJECTID (yellow column) to edit
-   - Enter a different OBJECTID or leave blank to unmatch
+   - Double-click any mapping point ID (yellow column) to edit
+   - Enter a different ID or leave blank to unmatch
    - New filename updates automatically
    - Use "Rename Videos (Edited Matches)" when ready
 
@@ -177,8 +179,8 @@ source("launch_app.R")
 | Tab | Purpose |
 |-----|---------|
 | **Instructions** | Detailed usage guide, time format examples, timezone info |
-| **Results** | Summary statistics, detailed results table, unmatched OBJECTIDs |
-| **Edit Matches** | Manually edit video-to-OBJECTID matches, double-click to change |
+| **Results** | Summary statistics, detailed results table, unmatched mapping point IDs |
+| **Edit Matches** | Manually edit video-to-mapping point matches, double-click to change |
 | **Revert Renaming** | Restore original DJI filenames from a previous renaming |
 | **CSV Preview** | Load and preview your CSV data (first 100 rows) |
 | **Video Files** | Scan and list DJI videos in directory |
@@ -235,12 +237,19 @@ Multiple videos at the same location are differentiated by their time component 
 
 ### Manual Editing Example
 
-If automatic matching made an error:
+**Changing a match:**
 1. Go to "Edit Matches" tab
 2. Double-click the matched_objectid cell
 3. Change from "5" to "7" (for example)
 4. New filename automatically updates to use ID007
 5. Click "Rename Videos (Edited Matches)"
+
+**Excluding bad/unusable videos:**
+1. Go to "Edit Matches" tab
+2. Double-click the matched_objectid cell for a bad video
+3. Type `BAD`, `SKIP`, `EXCLUDE`, or `UNUSABLE` (or leave blank)
+4. Status changes to "Excluded - Bad/unusable video"
+5. This video will be skipped during renaming
 
 ### Revert Example
 
@@ -288,11 +297,13 @@ The tool automatically converts between timezones:
 ## ✨ New Features
 
 ### 🎯 Manual Match Editing
-- **Double-click to edit** any matched OBJECTID
+- **Double-click to edit** any matched mapping point ID
 - **Auto-updates** new filename as you edit
-- **Validation** - only accepts OBJECTIDs from your CSV
+- **Validation** - only accepts mapping point IDs from your CSV
 - **Color-coded** - Yellow = editable, Blue = auto-updates
-- **Flexible** - Unmatch videos by leaving OBJECTID blank
+- **Flexible** - Unmatch videos by leaving mapping point ID blank
+- **Exclude bad videos** - Type `SKIP`, `BAD`, `EXCLUDE`, or `UNUSABLE` to mark videos you don't want to rename (e.g., corrupted/unusable footage)
+- **CSV reference table** - See all CSV points with converted camera times for easy comparison
 
 ### ⏱️ Video Duration Warnings
 - **Automatic checking** of video duration (requires `av` package)
@@ -300,9 +311,16 @@ The tool automatically converts between timezones:
 - **Yellow highlighting** in results table
 - **Summary count** of short videos
 
-### 📋 Unmatched OBJECTID Tracking
+### 🎯 Dynamic Column Selection & Auto-Detection
+- **Auto-populated dropdowns** - CSV columns appear automatically in dropdowns
+- **Smart pre-selection** - Likely columns are pre-selected based on common names
+- **Date/time format auto-detection** - Automatically detects from 15 common formats
+- **No typing errors** - Select instead of typing column names
+- **CSV reference table** - View all CSV data with timezone-converted times while editing matches
+
+### 📋 Unmatched Mapping Point Tracking
 - **Identifies CSV entries** without matching videos
-- **Separate table** showing unmatched OBJECTIDs with timestamps
+- **Separate table** showing unmatched mapping point IDs with timestamps
 - **Downloadable** for investigation
 - **Summary count** in results
 
@@ -320,8 +338,8 @@ The tool automatically converts between timezones:
 Expected DJI format: `DJI_YYYYMMDDHHMMSS_####_D.MP4`
 
 ### CSV Requirements
-- Must have a date/time column (any format supported)
-- Must have an Object ID column (integer)
+- Must have a date/time column (any format supported - auto-detected)
+- Must have a mapping point ID column (integer or text)
 - Can be in any timezone (will be converted)
 
 ### System Requirements
@@ -405,15 +423,22 @@ shiny::runApp("video_renamer_app.R", launch.browser = TRUE)
 
 ### Manual Editing Issues
 
-**"OBJECTID not found in CSV"**
-- Verify you're entering an OBJECTID that exists in your CSV
+**"Mapping point ID not found in CSV"**
+- Verify you're entering an ID that exists in your CSV
 - Check for typos or extra spaces
-- OBJECTIDs are case-sensitive if they contain letters
+- IDs are case-sensitive if they contain letters
+- Use the CSV reference table to see all available IDs
 
-**"Can't edit matched_objectid column"**
+**"Can't edit matched mapping point ID column"**
 - Make sure you've clicked "Load Current Matches" first
 - Double-click the cell (not single-click)
-- Only the matched_objectid column (yellow) is editable
+- Only the matched_mappingid column (yellow) is editable
+
+**"Dropdowns not populating"**
+- Wait a moment after loading the CSV file
+- Check that the CSV file path is correct and file exists
+- Verify CSV is properly formatted with headers
+- If dropdowns still don't appear, check the R console for errors
 
 ### Revert Issues
 
@@ -439,7 +464,7 @@ shiny::runApp("video_renamer_app.R", launch.browser = TRUE)
 ## ⚠️ Important Notes
 
 - Always use **Preview mode first** to verify matches
-- **Review unmatched OBJECTIDs** - these CSV entries have no matching videos
+- **Review unmatched mapping point IDs** - these CSV entries have no matching videos
 - **Check duration warnings** - videos <30 sec might be incomplete recordings
 - The app runs **locally** on your computer (not online)
 - Your files stay on **your computer** (nothing uploaded)
@@ -449,6 +474,8 @@ shiny::runApp("video_renamer_app.R", launch.browser = TRUE)
 - Test with a few videos first before processing large batches
 - Check your **video directory** for the output CSV after renaming
 - **Manual editing** allows you to correct any automatic matching errors
+- **Dynamic dropdowns** eliminate typing errors for column names
+- **Auto-detection** helps identify the correct date/time format automatically
 
 ---
 

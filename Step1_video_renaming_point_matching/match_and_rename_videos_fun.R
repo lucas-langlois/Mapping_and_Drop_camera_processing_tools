@@ -6,13 +6,13 @@
 #'
 #This function matches DJI video files to the closest timestamp in a CSV dataframe
 #and renames them using a standardized format: Location_YYYYMMDD_HHMMSS_ID###.MP4.
-#The time component ensures uniqueness when multiple videos match the same OBJECTID.
+#The time component ensures uniqueness when multiple videos match the same mapping point ID.
 #'
 #@param video_dir Character. Directory containing the DJI video files
-#@param csv_path Character. Path to the CSV file with timestamp and OBJECTID data
+#@param csv_path Character. Path to the CSV file with timestamp and mapping point ID data
 #@param location Character. Location name to use in the new filename (e.g., "ReefSiteA")
 #@param date_time_col Character. Name of the date/time column in the CSV (default: "date_time")
-#@param objectid_col Character. Name of the OBJECTID column in the CSV (default: "OBJECTID")
+#@param mappingid_col Character. Name of the mapping point ID column in the CSV (default: "OBJECTID")
 #@param time_format Character. Format of the date_time column in CSV (default: "%Y-%m-%d %H:%M:%S")
 #@param csv_timezone Character. Timezone of the date_time column in CSV (default: "UTC")
 #@param camera_timezone Character. Timezone used by the DJI camera for recording (default: "Asia/Kolkata"). 
@@ -20,8 +20,8 @@
 #  Use OlsonNames() to see available timezone names.
 #@param max_time_diff Numeric. Maximum time difference in seconds to allow a match (default: 300 = 5 minutes). 
 #  Should be set to accommodate videos recorded in succession (typically 2-3 minutes apart)
-#@param id_prefix Character. Prefix for the formatted OBJECTID (default: "ID")
-#@param id_digits Integer. Number of digits for the formatted OBJECTID with zero padding (default: 3 for ID001, ID002, etc.)
+#@param id_prefix Character. Prefix for the formatted mapping point ID (default: "ID")
+#@param id_digits Integer. Number of digits for the formatted mapping point ID with zero padding (default: 3 for ID001, ID002, etc.)
 #@param dry_run Logical. If TRUE, shows what would be renamed without actually renaming (default: TRUE)
 #'
 #@return A dataframe showing the matching results and new filenames
@@ -40,7 +40,7 @@ match_and_rename_videos <- function(video_dir,
                                     csv_path,
                                     location,
                                     date_time_col = "date_time",
-                                    objectid_col = "OBJECTID",
+                                    mappingid_col = "OBJECTID",
                                     time_format = "%Y-%m-%d %H:%M:%S",
                                     csv_timezone = "UTC",
                                     camera_timezone = "Asia/Kolkata",
@@ -80,8 +80,8 @@ match_and_rename_videos <- function(video_dir,
          paste(names(df), collapse = ", "))
   }
   
-  if (!objectid_col %in% names(df)) {
-    stop("Column '", objectid_col, "' not found in CSV. Available columns: ", 
+  if (!mappingid_col %in% names(df)) {
+    stop("Column '", mappingid_col, "' not found in CSV. Available columns: ", 
          paste(names(df), collapse = ", "))
   }
   
@@ -195,7 +195,7 @@ match_and_rename_videos <- function(video_dir,
     video_timestamp = character(),
     video_duration_sec = numeric(),
     duration_warning = character(),
-    matched_objectid = character(),
+    matched_mappingid = character(),
     matched_datetime = character(),
     matched_latitude = character(),
     matched_longitude = character(),
@@ -205,11 +205,11 @@ match_and_rename_videos <- function(video_dir,
     stringsAsFactors = FALSE
   )
   
-  # Track matched OBJECTIDs
-  matched_objectids <- c()
+  # Track matched mapping IDs
+  matched_mappingids <- c()
   
   # Process each video file
-  # Note: Multiple videos may match to the same OBJECTID (e.g., successive recordings at same location)
+  # Note: Multiple videos may match to the same mapping point ID (e.g., successive recordings at same location)
   # The time component (HHMMSS) in the new filename ensures uniqueness
   for (video_file in video_files) {
     cat("Processing:", video_file, "\n")
@@ -237,7 +237,7 @@ match_and_rename_videos <- function(video_dir,
         video_timestamp = NA,
         video_duration_sec = duration_sec,
         duration_warning = duration_warning,
-        matched_objectid = NA,
+        matched_mappingid = NA,
         matched_datetime = NA,
         matched_latitude = NA,
         matched_longitude = NA,
@@ -263,7 +263,7 @@ match_and_rename_videos <- function(video_dir,
         video_timestamp = as.character(video_timestamp),
         video_duration_sec = duration_sec,
         duration_warning = duration_warning,
-        matched_objectid = NA,
+        matched_mappingid = NA,
         matched_datetime = NA,
         matched_latitude = NA,
         matched_longitude = NA,
@@ -277,7 +277,7 @@ match_and_rename_videos <- function(video_dir,
     
     # Get matched row
     matched_row <- df[min_diff_idx, ]
-    matched_objectid <- matched_row[[objectid_col]]
+    matched_mappingid <- matched_row[[mappingid_col]]
     matched_datetime <- matched_row$datetime_camera
     
     # Extract latitude and longitude if available
@@ -290,25 +290,25 @@ match_and_rename_videos <- function(video_dir,
     # Extract time for uniqueness (HHMMSS)
     time_str <- format(video_timestamp, "%H%M%S")
     
-    # Format OBJECTID as ID### (e.g., ID001, ID002, etc.)
-    # OBJECTID is an integer from the dataframe
+    # Format mapping ID as ID### (e.g., ID001, ID002, etc.)
+    # Mapping ID is an integer from the dataframe
     # Format with custom prefix and zero padding (e.g., ID001, ID002, etc.)
     format_string <- paste0("%s%0", id_digits, "d")
-    objectid_formatted <- sprintf(format_string, id_prefix, as.integer(matched_objectid))
+    mappingid_formatted <- sprintf(format_string, id_prefix, as.integer(matched_mappingid))
     
     # Get file extension
     file_ext <- sub(".*\\.", "", video_file)
     
     # Create new filename: Location_YYYYMMDD_HHMMSS_ID###.MP4
-    # Time component ensures uniqueness when multiple videos match the same OBJECTID
-    new_filename <- paste0(location, "_", date_str, "_", time_str, "_", objectid_formatted, ".", file_ext)
+    # Time component ensures uniqueness when multiple videos match the same mapping ID
+    new_filename <- paste0(location, "_", date_str, "_", time_str, "_", mappingid_formatted, ".", file_ext)
     
     cat("  Match found! Time diff:", round(min_diff, 1), "seconds\n")
-    cat("  OBJECTID:", matched_objectid, "\n")
+    cat("  Mapping ID:", matched_mappingid, "\n")
     cat("  New filename:", new_filename, "\n")
     
-    # Track matched OBJECTID
-    matched_objectids <- c(matched_objectids, as.character(matched_objectid))
+    # Track matched mapping ID
+    matched_mappingids <- c(matched_mappingids, as.character(matched_mappingid))
     
     # Add to results
     results <- rbind(results, data.frame(
@@ -316,7 +316,7 @@ match_and_rename_videos <- function(video_dir,
       video_timestamp = as.character(video_timestamp),
       video_duration_sec = duration_sec,
       duration_warning = duration_warning,
-      matched_objectid = as.character(matched_objectid),
+      matched_mappingid = as.character(matched_mappingid),
       matched_datetime = as.character(matched_datetime),
       matched_latitude = matched_lat,
       matched_longitude = matched_lon,
@@ -350,15 +350,15 @@ match_and_rename_videos <- function(video_dir,
     cat("\n")
   }
   
-  # Find unmatched OBJECTIDs
-  all_objectids <- unique(df[[objectid_col]])
-  unmatched_objectids <- setdiff(as.character(all_objectids), matched_objectids)
+  # Find unmatched mapping IDs
+  all_mappingids <- unique(df[[mappingid_col]])
+  unmatched_mappingids <- setdiff(as.character(all_mappingids), matched_mappingids)
   
-  # Create unmatched OBJECTIDs dataframe
-  if (length(unmatched_objectids) > 0) {
-    unmatched_df <- df[df[[objectid_col]] %in% unmatched_objectids, ]
+  # Create unmatched mapping IDs dataframe
+  if (length(unmatched_mappingids) > 0) {
+    unmatched_df <- df[df[[mappingid_col]] %in% unmatched_mappingids, ]
     # Select key columns
-    key_cols <- c(objectid_col, date_time_col)
+    key_cols <- c(mappingid_col, date_time_col)
     if (!is.null(lat_col)) key_cols <- c(key_cols, lat_col)
     if (!is.null(lon_col)) key_cols <- c(key_cols, lon_col)
     unmatched_df <- unmatched_df[, key_cols[key_cols %in% names(unmatched_df)], drop = FALSE]
@@ -383,14 +383,14 @@ match_and_rename_videos <- function(video_dir,
     }
   }
   
-  # Unmatched OBJECTIDs
-  cat("\nTotal OBJECTIDs in CSV:", length(all_objectids), "\n")
-  cat("OBJECTIDs matched to videos:", length(unique(matched_objectids)), "\n")
-  cat("OBJECTIDs NOT matched:", length(unmatched_objectids), "\n")
+  # Unmatched mapping IDs
+  cat("\nTotal mapping IDs in CSV:", length(all_mappingids), "\n")
+  cat("Mapping IDs matched to videos:", length(unique(matched_mappingids)), "\n")
+  cat("Mapping IDs NOT matched:", length(unmatched_mappingids), "\n")
   
-  if (length(unmatched_objectids) > 0) {
-    cat("\n** UNMATCHED OBJECTIDs (no video found): **\n")
-    cat(paste(unmatched_objectids, collapse = ", "), "\n")
+  if (length(unmatched_mappingids) > 0) {
+    cat("\n** UNMATCHED Mapping IDs (no video found): **\n")
+    cat(paste(unmatched_mappingids, collapse = ", "), "\n")
   }
   
   if (dry_run) {
@@ -405,14 +405,14 @@ match_and_rename_videos <- function(video_dir,
     matched_results <- results[results$status %in% c("Matched", "Renamed"), ]
     
     if (nrow(matched_results) > 0) {
-      # Create output dataframe by matching OBJECTID
-      output_data <- data.frame()
+      # Create output dataframe by matching mapping ID
+      output_df <- data.frame()
       
       for (i in 1:nrow(matched_results)) {
-        matched_oid <- matched_results$matched_objectid[i]
+        matched_oid <- matched_results$matched_mappingid[i]
         
         # Find the corresponding CSV row
-        csv_row <- df[df[[objectid_col]] == matched_oid, ]
+        csv_row <- df[df[[mappingid_col]] == matched_oid, ]
         
         # If multiple CSV rows match, take the first one (should be unique based on closest match)
         if (nrow(csv_row) > 0) {
@@ -440,8 +440,8 @@ match_and_rename_videos <- function(video_dir,
     }
   }
   
-  # Attach unmatched OBJECTIDs as an attribute
-  attr(results, "unmatched_objectids") <- unmatched_df
+  # Attach unmatched mapping IDs as an attribute
+  attr(results, "unmatched_mappingids") <- unmatched_df
   
   # Return results dataframe
   return(results)
@@ -456,12 +456,12 @@ match_and_rename_videos <- function(video_dir,
 #  csv_path = "E:/Data/survey_data.csv",
 #  location = "ReefSiteA",
 #  date_time_col = "date_time",
-#  objectid_col = "OBJECTID",
+#  mappingid_col = "OBJECTID",
 #  time_format = "%Y-%m-%d %H:%M:%S",
 #  csv_timezone = "UTC",           # CSV data is in UTC
 #  camera_timezone = "Asia/Kolkata",  # DJI camera records in IST
 #  max_time_diff = 300,  # 5 minutes max difference
-#  id_prefix = "ID",     # Prefix for OBJECTID (default: "ID")
+#  id_prefix = "ID",     # Prefix for mapping ID (default: "ID")
 #  id_digits = 3,        # Zero-pad to 3 digits (default: 3) -> ID001, ID002, etc.
 #  dry_run = TRUE
 #)

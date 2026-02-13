@@ -56,11 +56,11 @@ ui <- fluidPage(
       hr(),
       
       h4("CSV Settings"),
-      textInput("date_time_col", "Date/Time Column:", value = "Date.Time"),
+      uiOutput("date_time_col_ui"),
       
-      textInput("objectid_col", "Object ID Column:", value = "OBJECTID"),
+      uiOutput("mappingid_col_ui"),
       
-      textInput("time_format", "Time Format:", value = "%d/%m/%Y %H:%M:%S"),
+      uiOutput("time_format_ui"),
       
       selectInput("csv_timezone", 
                   "CSV Timezone:",
@@ -146,8 +146,8 @@ ui <- fluidPage(
                    tags$li("Adjust CSV column names and time format if needed"),
                    tags$li("Set the correct timezones for your data"),
                    tags$li("Click 'Preview Matches' to see what will be renamed"),
-                   tags$li("Review the results in the 'Results' tab - check for duration warnings and unmatched OBJECTIDs"),
-                   tags$li("(Optional) Go to 'Edit Matches' tab to manually adjust matches - double-click OBJECTID cells to edit"),
+                   tags$li("Review the results in the 'Results' tab - check for duration warnings and unmatched mapping point IDs"),
+                   tags$li("(Optional) Go to 'Edit Matches' tab to manually adjust matches - double-click mapping point ID cells to edit"),
                    tags$li("Click 'Rename Videos (Auto-Match)' for automatic matches or 'Rename Videos (Edited Matches)' if you made manual edits"),
                    tags$li("An output CSV will be saved in the video directory with all CSV data + matched video info")
                  ),
@@ -156,7 +156,7 @@ ui <- fluidPage(
                  p("Use the 'Browse...' buttons next to the path fields to visually navigate and select:"),
                  tags$ul(
                    tags$li(tags$strong("Video Directory:"), " Select the folder containing your DJI videos"),
-                   tags$li(tags$strong("CSV File:"), " Select your CSV file with timestamps and object IDs")
+                   tags$li(tags$strong("CSV File:"), " Select your CSV file with timestamps and mapping point IDs")
                  ),
                  hr(),
                  h4("Time Format Examples"),
@@ -197,15 +197,15 @@ ui <- fluidPage(
                  
                  hr(),
                  
-                 h4("Unmatched OBJECTIDs from CSV"),
-                 p("These OBJECTIDs from your CSV file were not matched to any video:"),
-                 DTOutput("unmatched_objectids_table")
+                 h4("Unmatched Mapping Point IDs from CSV"),
+                 p("These mapping point IDs from your CSV file were not matched to any video:"),
+                 DTOutput("unmatched_mappingids_table")
         ),
         
         tabPanel("Edit Matches",
                  h3("Manually Edit Video Matches"),
                  
-                 p("Manually edit the matches below. You can change the matched OBJECTID for each video, or set it to blank to unmatch."),
+                 p("Manually edit the matches below. You can change the matched mapping point ID for each video, or set it to blank to unmatch."),
                  
                  actionButton("load_matches", "Load Current Matches", class = "btn-info"),
                  actionButton("reset_matches", "Reset to Auto-Matches", class = "btn-warning"),
@@ -218,16 +218,25 @@ ui <- fluidPage(
                  
                  p(strong("Instructions:")),
                  tags$ul(
-                   tags$li("Double-click on any cell in the 'matched_objectid' column (yellow) to edit it"),
-                   tags$li("Enter a valid OBJECTID from your CSV file"),
+                   tags$li("Double-click on any cell in the 'matched_mappingid' column (yellow) to edit it"),
+                   tags$li("Enter a valid mapping point ID from your CSV file to change the match"),
                    tags$li("The 'new_filename' (blue) will automatically update to show what the file will be renamed to"),
-                   tags$li("Leave blank to unmatch a video"),
-                   tags$li("After editing, use 'Rename Videos (Edited Matches)' button in the sidebar")
+                   tags$li(strong("To exclude bad/unusable videos:"), " Type ", tags$code("SKIP"), ", ", tags$code("BAD"), ", ", tags$code("EXCLUDE"), ", or leave blank"),
+                   tags$li("After editing, use 'Rename Videos (Edited Matches)' button in the sidebar - excluded videos will be skipped")
                  ),
                  
                  hr(),
                  
-                 DTOutput("editable_matches_table")
+                 h4("Current Video Matches"),
+                 p("Edit the 'matched_mappingid' column (yellow) by double-clicking:"),
+                 DTOutput("editable_matches_table"),
+                 
+                 hr(),
+                 
+                 h4("Reference: All Available Points from CSV"),
+                 p("Use this table to find the correct mapping point ID to match with your videos:"),
+                 p(tags$em("The 'camera_time_converted' column (green) shows the time in camera timezone - compare this with your video timestamps.")),
+                 DTOutput("csv_reference_table")
         ),
         
         tabPanel("Revert Renaming",
@@ -314,10 +323,11 @@ server <- function(input, output, session) {
   results <- reactiveVal(NULL)
   csv_data <- reactiveVal(NULL)
   video_files <- reactiveVal(NULL)
-  unmatched_objectids <- reactiveVal(NULL)
+  unmatched_mappingids <- reactiveVal(NULL)
   edited_matches <- reactiveVal(NULL)
-  available_objectids <- reactiveVal(NULL)
+  available_mappingids <- reactiveVal(NULL)
   revert_data <- reactiveVal(NULL)
+  csv_columns <- reactiveVal(NULL)
   
   # Set up file browser volumes (roots for browsing)
   # This allows browsing from root on Windows or home directory on Unix
@@ -352,6 +362,164 @@ server <- function(input, output, session) {
     }
   })
   
+  # Update column choices when CSV path changes
+  observeEvent(input$csv_path, {
+    if (!is.null(input$csv_path) && input$csv_path != "" && file.exists(input$csv_path)) {
+      tryCatch({
+        df <- read.csv(input$csv_path, stringsAsFactors = FALSE, nrows = 1)
+        csv_columns(names(df))
+      }, error = function(e) {
+        csv_columns(NULL)
+      })
+    } else {
+      csv_columns(NULL)
+    }
+  })
+  
+  # Dynamic UI for date_time_col dropdown
+  output$date_time_col_ui <- renderUI({
+    cols <- csv_columns()
+    if (is.null(cols)) {
+      textInput("date_time_col", "Date/Time Column:", value = "Date.Time")
+    } else {
+      # Try to pre-select a likely datetime column
+      default_col <- if ("Date.Time" %in% cols) {
+        "Date.Time"
+      } else if (any(grepl("date|time|datetime", cols, ignore.case = TRUE))) {
+        cols[grepl("date|time|datetime", cols, ignore.case = TRUE)][1]
+      } else {
+        cols[1]
+      }
+      
+      selectInput("date_time_col", "Date/Time Column:", 
+                  choices = cols, 
+                  selected = default_col)
+    }
+  })
+  
+  # Dynamic UI for mappingid_col dropdown
+  output$mappingid_col_ui <- renderUI({
+    cols <- csv_columns()
+    if (is.null(cols)) {
+      textInput("mappingid_col", "Mapping Point ID Column:", value = "OBJECTID")
+    } else {
+      # Try to pre-select a likely ID column
+      default_col <- if ("OBJECTID" %in% cols) {
+        "OBJECTID"
+      } else if (any(grepl("object.*id|id|oid", cols, ignore.case = TRUE))) {
+        cols[grepl("object.*id|id|oid", cols, ignore.case = TRUE)][1]
+      } else {
+        cols[1]
+      }
+      
+      selectInput("mappingid_col", "Mapping Point ID Column:", 
+                  choices = cols, 
+                  selected = default_col)
+    }
+  })
+  
+  # Dynamic UI for time_format with auto-detection
+  output$time_format_ui <- renderUI({
+    if (!is.null(input$csv_path) && input$csv_path != "" && 
+        file.exists(input$csv_path) && !is.null(input$date_time_col)) {
+      
+      tryCatch({
+        # Read a sample of the CSV to detect format
+        df <- read.csv(input$csv_path, stringsAsFactors = FALSE, nrows = 10)
+        
+        if (input$date_time_col %in% names(df)) {
+          sample_dates <- df[[input$date_time_col]][1:min(5, nrow(df))]
+          sample_dates <- sample_dates[!is.na(sample_dates) & sample_dates != ""]
+          
+          if (length(sample_dates) > 0) {
+            # Common date/time formats to try
+            formats <- c(
+              "%d/%m/%Y %H:%M:%S",
+              "%m/%d/%Y %H:%M:%S",
+              "%Y-%m-%d %H:%M:%S",
+              "%d-%m-%Y %H:%M:%S",
+              "%Y/%m/%d %H:%M:%S",
+              "%d/%m/%Y %H:%M",
+              "%m/%d/%Y %H:%M",
+              "%Y-%m-%d %H:%M",
+              "%d-%m-%Y %H:%M",
+              "%Y/%m/%d %H:%M",
+              "%d/%m/%Y",
+              "%m/%d/%Y",
+              "%Y-%m-%d",
+              "%d-%m-%Y",
+              "%Y/%m/%d"
+            )
+            
+            format_names <- c(
+              "DD/MM/YYYY HH:MM:SS (e.g., 18/11/2025 14:30:45)",
+              "MM/DD/YYYY HH:MM:SS (e.g., 11/18/2025 14:30:45)",
+              "YYYY-MM-DD HH:MM:SS (e.g., 2025-11-18 14:30:45)",
+              "DD-MM-YYYY HH:MM:SS (e.g., 18-11-2025 14:30:45)",
+              "YYYY/MM/DD HH:MM:SS (e.g., 2025/11/18 14:30:45)",
+              "DD/MM/YYYY HH:MM (e.g., 18/11/2025 14:30)",
+              "MM/DD/YYYY HH:MM (e.g., 11/18/2025 14:30)",
+              "YYYY-MM-DD HH:MM (e.g., 2025-11-18 14:30)",
+              "DD-MM-YYYY HH:MM (e.g., 18-11-2025 14:30)",
+              "YYYY/MM/DD HH:MM (e.g., 2025/11/18 14:30)",
+              "DD/MM/YYYY (e.g., 18/11/2025)",
+              "MM/DD/YYYY (e.g., 11/18/2025)",
+              "YYYY-MM-DD (e.g., 2025-11-18)",
+              "DD-MM-YYYY (e.g., 18-11-2025)",
+              "YYYY/MM/DD (e.g., 2025/11/18)"
+            )
+            
+            # Try each format
+            detected_format <- NULL
+            for (i in seq_along(formats)) {
+              parsed <- try(as.POSIXct(sample_dates[1], format = formats[i]), silent = TRUE)
+              if (!inherits(parsed, "try-error") && !is.na(parsed)) {
+                detected_format <- formats[i]
+                break
+              }
+            }
+            
+            if (!is.null(detected_format)) {
+              # Create named choices with detected format first
+              format_choices <- setNames(formats, format_names)
+              
+              return(selectInput("time_format", 
+                               "Time Format:", 
+                               choices = format_choices,
+                               selected = detected_format))
+            }
+          }
+        }
+      }, error = function(e) {
+        # Fall back to default on error
+      })
+    }
+    
+    # Default fallback when no CSV or detection fails
+    format_choices <- c(
+      "DD/MM/YYYY HH:MM:SS (e.g., 18/11/2025 14:30:45)" = "%d/%m/%Y %H:%M:%S",
+      "MM/DD/YYYY HH:MM:SS (e.g., 11/18/2025 14:30:45)" = "%m/%d/%Y %H:%M:%S",
+      "YYYY-MM-DD HH:MM:SS (e.g., 2025-11-18 14:30:45)" = "%Y-%m-%d %H:%M:%S",
+      "DD-MM-YYYY HH:MM:SS (e.g., 18-11-2025 14:30:45)" = "%d-%m-%Y %H:%M:%S",
+      "YYYY/MM/DD HH:MM:SS (e.g., 2025/11/18 14:30:45)" = "%Y/%m/%d %H:%M:%S",
+      "DD/MM/YYYY HH:MM (e.g., 18/11/2025 14:30)" = "%d/%m/%Y %H:%M",
+      "MM/DD/YYYY HH:MM (e.g., 11/18/2025 14:30)" = "%m/%d/%Y %H:%M",
+      "YYYY-MM-DD HH:MM (e.g., 2025-11-18 14:30)" = "%Y-%m-%d %H:%M",
+      "DD-MM-YYYY HH:MM (e.g., 18-11-2025 14:30)" = "%d-%m-%Y %H:%M",
+      "YYYY/MM/DD HH:MM (e.g., 2025/11/18 14:30)" = "%Y/%m/%d %H:%M",
+      "DD/MM/YYYY (e.g., 18/11/2025)" = "%d/%m/%Y",
+      "MM/DD/YYYY (e.g., 11/18/2025)" = "%m/%d/%Y",
+      "YYYY-MM-DD (e.g., 2025-11-18)" = "%Y-%m-%d",
+      "DD-MM-YYYY (e.g., 18-11-2025)" = "%d-%m-%Y",
+      "YYYY/MM/DD (e.g., 2025/11/18)" = "%Y/%m/%d"
+    )
+    
+    selectInput("time_format", 
+                "Time Format:", 
+                choices = format_choices,
+                selected = "%d/%m/%Y %H:%M:%S")
+  })
+  
   # File browser for revert CSV file
   shinyFileChoose(input, "revert_csv_browse", 
                   roots = volumes, 
@@ -381,6 +549,12 @@ server <- function(input, output, session) {
       return()
     }
     
+    # Validate that column inputs are available (dynamic UI may not be ready yet)
+    if (is.null(input$date_time_col) || is.null(input$mappingid_col)) {
+      showNotification("Please wait for CSV column dropdowns to load, then try again.", type = "warning")
+      return()
+    }
+    
     # Show progress
     withProgress(message = 'Matching videos...', value = 0, {
       
@@ -391,7 +565,7 @@ server <- function(input, output, session) {
           csv_path = input$csv_path,
           location = input$location,
           date_time_col = input$date_time_col,
-          objectid_col = input$objectid_col,
+          mappingid_col = input$mappingid_col,
           time_format = input$time_format,
           csv_timezone = input$csv_timezone,
           camera_timezone = input$camera_timezone,
@@ -403,10 +577,10 @@ server <- function(input, output, session) {
         
         results(res)
         
-        # Extract unmatched OBJECTIDs if available
-        unmatched <- attr(res, "unmatched_objectids")
+        # Extract unmatched mapping IDs if available
+        unmatched <- attr(res, "unmatched_mappingids")
         if (!is.null(unmatched)) {
-          unmatched_objectids(unmatched)
+          unmatched_mappingids(unmatched)
         }
         
         # Switch to results tab
@@ -421,10 +595,10 @@ server <- function(input, output, session) {
           }
         }
         
-        if ("unmatched_objectids" %in% names(attributes(res))) {
-          unmatched_count <- nrow(attr(res, "unmatched_objectids"))
+        if ("unmatched_mappingids" %in% names(attributes(res))) {
+          unmatched_count <- nrow(attr(res, "unmatched_mappingids"))
           if (unmatched_count > 0) {
-            warnings_msg <- paste0(warnings_msg, "\n", unmatched_count, " OBJECTID(s) from CSV were not matched to any video.")
+            warnings_msg <- paste0(warnings_msg, "\n", unmatched_count, " mapping point ID(s) from CSV were not matched to any video.")
           }
         }
         
@@ -466,6 +640,12 @@ server <- function(input, output, session) {
       return()
     }
     
+    # Validate that column inputs are available (dynamic UI may not be ready yet)
+    if (is.null(input$date_time_col) || is.null(input$mappingid_col)) {
+      showNotification("Please wait for CSV column dropdowns to load, then try again.", type = "warning")
+      return()
+    }
+    
     # Show progress
     withProgress(message = 'Renaming videos...', value = 0, {
       
@@ -476,7 +656,7 @@ server <- function(input, output, session) {
           csv_path = input$csv_path,
           location = input$location,
           date_time_col = input$date_time_col,
-          objectid_col = input$objectid_col,
+          mappingid_col = input$mappingid_col,
           time_format = input$time_format,
           csv_timezone = input$csv_timezone,
           camera_timezone = input$camera_timezone,
@@ -488,10 +668,10 @@ server <- function(input, output, session) {
         
         results(res)
         
-        # Extract unmatched OBJECTIDs if available
-        unmatched <- attr(res, "unmatched_objectids")
+        # Extract unmatched mapping IDs if available
+        unmatched <- attr(res, "unmatched_mappingids")
         if (!is.null(unmatched)) {
-          unmatched_objectids(unmatched)
+          unmatched_mappingids(unmatched)
         }
         
         # Switch to results tab
@@ -530,9 +710,9 @@ server <- function(input, output, session) {
       df <- read.csv(input$csv_path, stringsAsFactors = FALSE)
       csv_data(df)
       
-      # Store available OBJECTIDs for editing
-      if (input$objectid_col %in% names(df)) {
-        available_objectids(unique(df[[input$objectid_col]]))
+      # Store available mapping IDs for editing
+      if (input$mappingid_col %in% names(df)) {
+        available_mappingids(unique(df[[input$mappingid_col]]))
       }
       
       # Switch to CSV preview tab
@@ -598,9 +778,9 @@ server <- function(input, output, session) {
       short_videos <- sum(res$duration_warning != "", na.rm = TRUE)
     }
     
-    # Count unmatched OBJECTIDs
+    # Count unmatched mapping IDs
     unmatched_count <- 0
-    unmatched <- unmatched_objectids()
+    unmatched <- unmatched_mappingids()
     if (!is.null(unmatched)) {
       unmatched_count <- nrow(unmatched)
     }
@@ -616,7 +796,7 @@ server <- function(input, output, session) {
           tags$li(strong("Failed to match:"), failed),
           if (short_videos > 0) tags$li(strong("Videos < 30 sec:"), short_videos, 
                                         tags$span(style="color: orange;", " (Warning)")),
-          if (unmatched_count > 0) tags$li(strong("Unmatched OBJECTIDs:"), unmatched_count,
+          if (unmatched_count > 0) tags$li(strong("Unmatched Mapping Point IDs:"), unmatched_count,
                                           tags$span(style="color: orange;", " (See table below)"))
         )
     )
@@ -664,11 +844,11 @@ server <- function(input, output, session) {
     return(dt)
   })
   
-  # Display unmatched OBJECTIDs table
-  output$unmatched_objectids_table <- renderDT({
-    unmatched <- unmatched_objectids()
+  # Display unmatched mapping point IDs table
+  output$unmatched_mappingids_table <- renderDT({
+    unmatched <- unmatched_mappingids()
     if (is.null(unmatched) || nrow(unmatched) == 0) {
-      return(data.frame(Message = "All OBJECTIDs were successfully matched to videos!"))
+      return(data.frame(Message = "All mapping point IDs were successfully matched to videos!"))
     }
     
     datatable(
@@ -747,7 +927,7 @@ server <- function(input, output, session) {
       return()
     }
     
-    # Load CSV to get available OBJECTIDs
+    # Load CSV to get available mapping IDs
     if (!file.exists(input$csv_path)) {
       showNotification("CSV file does not exist!", type = "error")
       return()
@@ -755,9 +935,12 @@ server <- function(input, output, session) {
     
     tryCatch({
       df <- read.csv(input$csv_path, stringsAsFactors = FALSE)
-      if (input$objectid_col %in% names(df)) {
-        available_objectids(unique(df[[input$objectid_col]]))
+      if (input$mappingid_col %in% names(df)) {
+        available_mappingids(unique(df[[input$mappingid_col]]))
       }
+      
+      # Store CSV data for reference table
+      csv_data(df)
       
       # Create editable version
       edit_df <- res
@@ -795,21 +978,29 @@ server <- function(input, output, session) {
       col <- info$col + 1  # DT uses 0-based indexing
       value <- info$value
       
-      # Find the matched_objectid column
-      objectid_col_idx <- which(names(em) == "matched_objectid")
+      # Find the matched_mappingid column
+      mappingid_col_idx <- which(names(em) == "matched_mappingid")
       
-      # Only allow editing of matched_objectid column
-      if (col == objectid_col_idx) {
-        # Validate the new OBJECTID
-        if (value == "" || is.na(value)) {
-          # Allow blank to unmatch
+      # Only allow editing of matched_mappingid column
+      if (col == mappingid_col_idx) {
+        # Check for special keywords to exclude video
+        exclude_keywords <- c("SKIP", "NONE", "EXCLUDE", "BAD", "UNUSABLE", "EXCLUDE VIDEO")
+        if (toupper(trimws(value)) %in% exclude_keywords || value == "" || is.na(value)) {
+          # Unmatch/exclude the video
           em[row, col] <- NA
-          em$status[row] <- "Manually unmatched"
+          if (toupper(trimws(value)) %in% exclude_keywords) {
+            em$status[row] <- "Excluded - Bad/unusable video"
+          } else {
+            em$status[row] <- "Manually unmatched"
+          }
           em$matched_datetime[row] <- NA
           em$time_difference_sec[row] <- NA
           em$new_filename[row] <- NA
+          
+          showNotification(paste("Excluded", em$original_filename[row], "from renaming"), 
+                         type = "message", duration = 2)
         } else {
-          # Check if OBJECTID exists in CSV
+          # Check if mapping ID exists in CSV
           if (!file.exists(input$csv_path)) {
             showNotification("CSV file not found!", type = "error")
             return()
@@ -823,9 +1014,9 @@ server <- function(input, output, session) {
           df$datetime_parsed <- force_tz(df$datetime_parsed, tzone = input$csv_timezone)
           df$datetime_camera <- with_tz(df$datetime_parsed, tzone = input$camera_timezone)
           
-          # Check if the OBJECTID exists
-          if (!(value %in% df[[input$objectid_col]])) {
-            showNotification(paste("OBJECTID", value, "not found in CSV!"), 
+          # Check if the mapping ID exists
+          if (!(value %in% df[[input$mappingid_col]])) {
+            showNotification(paste("Mapping point ID", value, "not found in CSV!"), 
                            type = "warning", duration = 5)
             return()
           }
@@ -833,8 +1024,8 @@ server <- function(input, output, session) {
           # Update the match
           em[row, col] <- value
           
-          # Get the datetime for this OBJECTID
-          matched_row <- df[df[[input$objectid_col]] == value, ][1, ]
+          # Get the datetime for this mapping ID
+          matched_row <- df[df[[input$mappingid_col]] == value, ][1, ]
           em$matched_datetime[row] <- as.character(matched_row$datetime_camera)
           
           # Calculate time difference
@@ -844,14 +1035,14 @@ server <- function(input, output, session) {
           em$time_difference_sec[row] <- time_diff
           em$status[row] <- "Manually matched"
           
-          # Generate new filename with updated OBJECTID
+          # Generate new filename with updated mapping ID
           date_str <- format(video_ts, "%Y%m%d")
           time_str <- format(video_ts, "%H%M%S")
           format_string <- paste0("%s%0", input$id_digits, "d")
-          objectid_formatted <- sprintf(format_string, input$id_prefix, as.integer(value))
+          mappingid_formatted <- sprintf(format_string, input$id_prefix, as.integer(value))
           file_ext <- sub(".*\\.", "", em$original_filename[row])
           new_filename <- paste0(input$location, "_", date_str, "_", time_str, "_", 
-                                objectid_formatted, ".", file_ext)
+                                mappingid_formatted, ".", file_ext)
           em$new_filename[row] <- new_filename
           
           showNotification(paste("Updated match for", em$original_filename[row], "-> New filename:", new_filename), 
@@ -868,10 +1059,10 @@ server <- function(input, output, session) {
     em <- edited_matches()
     if (is.null(em)) return(NULL)
     
-    # Find which columns to disable (all except matched_objectid)
-    objectid_col_idx <- which(names(em) == "matched_objectid") - 1  # DT uses 0-based
+    # Find which columns to disable (all except matched_mappingid)
+    mappingid_col_idx <- which(names(em) == "matched_mappingid") - 1  # DT uses 0-based
     all_cols <- 0:(ncol(em) - 1)
-    disabled_cols <- all_cols[all_cols != objectid_col_idx]
+    disabled_cols <- all_cols[all_cols != mappingid_col_idx]
     
     datatable(
       em,
@@ -879,21 +1070,27 @@ server <- function(input, output, session) {
       options = list(
         pageLength = 25,
         scrollX = TRUE,
+        scrollCollapse = FALSE,
+        autoWidth = FALSE,
         dom = 'Bfrtip',
-        buttons = c('copy', 'csv', 'excel')
+        buttons = c('copy', 'csv', 'excel'),
+        columnDefs = list(
+          list(className = 'dt-center', targets = '_all')
+        )
       ),
-      rownames = FALSE
+      rownames = FALSE,
+      class = 'cell-border stripe'
     ) %>%
       formatStyle(
         'status',
         backgroundColor = styleEqual(
           c('Matched', 'Renamed', 'Manually matched', 'Manually unmatched', 
-            'Failed to parse timestamp', 'No match within time threshold'),
-          c('#d4edda', '#c3e6cb', '#b8daff', '#f8f9fa', '#f8d7da', '#fff3cd')
+            'Excluded - Bad/unusable video', 'Failed to parse timestamp', 'No match within time threshold'),
+          c('#d4edda', '#c3e6cb', '#b8daff', '#f8f9fa', '#fff0f0', '#f8d7da', '#fff3cd')
         )
       ) %>%
       formatStyle(
-        'matched_objectid',
+        'matched_mappingid',
         backgroundColor = '#ffffcc',
         fontWeight = 'bold'
       ) %>%
@@ -901,6 +1098,68 @@ server <- function(input, output, session) {
         'new_filename',
         backgroundColor = '#e6f3ff',
         fontStyle = 'italic'
+      )
+  })
+  
+  # Display CSV reference table for editing
+  output$csv_reference_table <- renderDT({
+    df <- csv_data()
+    if (is.null(df)) return(NULL)
+    
+    # Highlight the datetime and mappingid columns for easy reference
+    datetime_col <- input$date_time_col
+    mappingid_col <- input$mappingid_col
+    csv_tz <- input$csv_timezone
+    camera_tz <- input$camera_timezone
+    time_fmt <- input$time_format
+    
+    # Add converted camera time column
+    tryCatch({
+      df$csv_datetime_original <- df[[datetime_col]]
+      
+      # Parse and convert timezone
+      csv_times <- as.POSIXct(df[[datetime_col]], format = time_fmt, tz = csv_tz)
+      camera_times <- format(with_tz(csv_times, camera_tz), "%Y-%m-%d %H:%M:%S")
+      
+      df$camera_time_converted <- camera_times
+      
+      # Reorder columns to show mapping ID, original time, converted time first
+      col_order <- c(mappingid_col, "csv_datetime_original", "camera_time_converted", 
+                     setdiff(names(df), c(mappingid_col, "csv_datetime_original", "camera_time_converted")))
+      df <- df[, col_order]
+      
+    }, error = function(e) {
+      # If conversion fails, just show original data
+      df$camera_time_converted <- "Conversion failed - check timezone/format settings"
+    })
+    
+    datatable(
+      df,
+      options = list(
+        pageLength = 15,
+        scrollX = TRUE,
+        scrollCollapse = FALSE,
+        autoWidth = FALSE,
+        dom = 'Bfrtip',
+        buttons = c('copy', 'csv', 'excel'),
+        order = list(list(which(names(df) == mappingid_col) - 1, 'asc'))
+      ),
+      rownames = FALSE,
+      class = 'cell-border stripe'
+    ) %>%
+      formatStyle(
+        mappingid_col,
+        backgroundColor = '#ffffcc',
+        fontWeight = 'bold'
+      ) %>%
+      formatStyle(
+        "csv_datetime_original",
+        backgroundColor = '#e6f3ff'
+      ) %>%
+      formatStyle(
+        "camera_time_converted",
+        backgroundColor = '#d4edda',
+        fontWeight = 'bold'
       )
   })
   
@@ -915,7 +1174,8 @@ server <- function(input, output, session) {
     auto_matched <- sum(em$status %in% c("Matched", "Renamed"), na.rm = TRUE)
     manual_matched <- sum(em$status == "Manually matched", na.rm = TRUE)
     manual_unmatched <- sum(em$status == "Manually unmatched", na.rm = TRUE)
-    unmatched <- sum(!em$status %in% c("Matched", "Renamed", "Manually matched"), na.rm = TRUE)
+    excluded <- sum(em$status == "Excluded - Bad/unusable video", na.rm = TRUE)
+    unmatched <- sum(!em$status %in% c("Matched", "Renamed", "Manually matched", "Manually unmatched", "Excluded - Bad/unusable video"), na.rm = TRUE)
     
     div(class = "alert alert-info",
         h4("Edit Summary"),
@@ -923,8 +1183,10 @@ server <- function(input, output, session) {
           tags$li(strong("Total videos:"), total),
           tags$li(strong("Auto-matched:"), auto_matched),
           tags$li(strong("Manually matched:"), manual_matched),
+          if (excluded > 0) tags$li(strong("Excluded (bad/unusable):"), excluded, 
+                                    tags$span(style="color: #dc3545;", " (will be skipped)")),
           tags$li(strong("Manually unmatched:"), manual_unmatched),
-          tags$li(strong("Unmatched:"), unmatched)
+          tags$li(strong("Other unmatched:"), unmatched)
         )
     )
   })
@@ -972,6 +1234,12 @@ server <- function(input, output, session) {
       return()
     }
     
+    # Validate that column inputs are available (dynamic UI may not be ready yet)
+    if (is.null(input$date_time_col) || is.null(input$mappingid_col)) {
+      showNotification("Please wait for CSV column dropdowns to load, then try again.", type = "warning")
+      return()
+    }
+    
     # Show progress
     withProgress(message = 'Renaming videos with edited matches...', value = 0, {
       
@@ -991,7 +1259,7 @@ server <- function(input, output, session) {
         
         for (i in 1:nrow(em)) {
           video_file <- em$original_filename[i]
-          matched_oid <- em$matched_objectid[i]
+          matched_oid <- em$matched_mappingid[i]
           
           # Skip if no match or already renamed
           if (is.na(matched_oid) || matched_oid == "" || em$status[i] == "Renamed") {
@@ -1005,16 +1273,16 @@ server <- function(input, output, session) {
           date_str <- format(video_timestamp, "%Y%m%d")
           time_str <- format(video_timestamp, "%H%M%S")
           
-          # Format OBJECTID
+          # Format mapping ID
           format_string <- paste0("%s%0", input$id_digits, "d")
-          objectid_formatted <- sprintf(format_string, input$id_prefix, as.integer(matched_oid))
+          mappingid_formatted <- sprintf(format_string, input$id_prefix, as.integer(matched_oid))
           
           # Get file extension
           file_ext <- sub(".*\\.", "", video_file)
           
           # Create new filename
           new_filename <- paste0(input$location, "_", date_str, "_", time_str, "_", 
-                               objectid_formatted, ".", file_ext)
+                               mappingid_formatted, ".", file_ext)
           
           # Rename file
           old_path <- file.path(input$video_dir, video_file)
@@ -1054,11 +1322,11 @@ server <- function(input, output, session) {
         # Create output CSV
         output_data <- data.frame()
         for (i in 1:nrow(em)) {
-          if (em$status[i] == "Renamed" && !is.na(em$matched_objectid[i])) {
-            matched_oid <- em$matched_objectid[i]
-            csv_row <- df[df[[input$objectid_col]] == matched_oid, ][1, ]
+          if (em$status[i] == "Renamed" && !is.na(em$matched_mappingid[i])) {
+            matched_oid <- em$matched_mappingid[i]
+            csv_row <- df[df[[input$mappingid_col]] == matched_oid, ][1, ]
             
-            if (!is.na(csv_row[[input$objectid_col]])) {
+            if (!is.na(csv_row[[input$mappingid_col]])) {
               csv_row$original_filename <- em$original_filename[i]
               csv_row$matched_video_filename <- em$new_filename[i]
               csv_row$video_datetime <- em$video_timestamp[i]
