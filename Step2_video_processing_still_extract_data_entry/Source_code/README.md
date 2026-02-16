@@ -28,10 +28,12 @@ A comprehensive video player application with integrated data entry for marine/e
 ✅ **Validation Rules** - Built-in QAQC system with visual rule builder  
 ✅ **Auto-Fill Rules** - Automatically populate fields based on conditions  
 ✅ **Conditional Sum Validation** - Validate sums only when conditions are met  
+✅ **Template-Driven Subgroup Normalization** - Species subgroups auto-fill blanks as 0 (when present) and NA (when absent) based on rules  
 ✅ **Calculated Fields** - Auto-calculate values from formulas with configurable decimals  
 ✅ **Copy from Previous** - Quickly reuse values from previous entries  
 ✅ **Project Save/Load** - Resume exactly where you left off  
 ✅ **Interactive Map View** - Visualize all sampling points on satellite imagery  
+✅ **Batch Aggregation Method Editing** - Apply one aggregation method to selected or all fields in one click  
 
 ### Frame Extraction
 ✅ **Single Frame Export** - Extract current frame with 'S' key  
@@ -355,7 +357,7 @@ The application includes a built-in validation rules system to ensure data quali
 - **Visual Rule Builder** - Create rules using dropdown menus and forms
 - **Auto-Save/Load** - Rules automatically saved with your template
 - **Real-time Feedback** - Invalid fields highlighted in red
-- **Flexible Validation** - Option to "Save Anyway" for edge cases
+- **Blocking Validation** - Invalid entries are blocked until fixed
 
 ### How to Use
 
@@ -365,7 +367,7 @@ After loading your template, click the **"⚙ Manage Validation Rules"** button 
 
 #### 2. Add Rules
 
-Click **"+ Add New Rule"** and choose from 5 rule types:
+Click **"+ Add New Rule"** and choose from rule types:
 
 **Allowed Values** - Restricts a field to specific values
 - Example: SG_PRESENT can only be 0 or 1
@@ -383,6 +385,15 @@ Click **"+ Add New Rule"** and choose from 5 rule types:
 **Sum Equals** - Ensures multiple numeric fields sum to a target value
 - Example: All cover percentages must sum to 100
 
+**Conditional Sum** - Validates a sum only when a condition is true
+- Example: Species percentages must sum to 100 only when SG_PRESENT = 1
+
+**Auto-Fill** - Automatically populates fields when a trigger is matched
+- Example: If SG_PRESENT = 0, set SG species fields to NA and SG_COVER to 0
+
+**Calculated Field** - Automatically computes a field from a formula
+- Example: OPEN = 100 - SG_COVER - AL_COVER - HC_COVER - ...
+
 #### 3. Save Rules
 
 Rules are automatically saved as `[template_name]_rules.json` in the same directory as your template.
@@ -397,16 +408,16 @@ Next time you load the same template, your rules will automatically load!
 - Rules checked when clicking "Save Entry"
 - Invalid fields highlighted in red
 - List of all errors shown
-- Option to "Save Anyway" or cancel
+- Save is blocked until fields are corrected
 
 **When Extracting Stills:**
 - Rules checked during auto-save
-- Warnings shown but data still saved
+- Extract + save is blocked until fields are corrected
 - Invalid fields remain highlighted for correction
 
 **When Navigating Entries:**
 - Rules checked when moving between entries
-- Same behavior as manual save
+- Navigation save is blocked until fields are corrected
 
 ### Example Validation Rules
 
@@ -514,11 +525,11 @@ Error Message: Custom message
 
 **Validation too strict:**
 - Edit rules and add tolerance for numeric comparisons
-- Use "Save Anyway" option for edge cases
+- Relax/adjust rules for legitimate edge cases
 
 **Need to disable validation temporarily:**
 - Open Rules Manager and delete all rules
-- Or just click "Save Anyway" when prompted
+- Or temporarily disable/adjust strict rules
 
 **Advanced Users:**
 If comfortable with JSON, you can edit the rules file directly in a text editor.
@@ -607,6 +618,27 @@ Then Set Fields: SG_COVER=0, CR=NA, CS=NA, HO=NA, HD=NA, HS=NA, HU=NA, SI=NA, EA
 3. ✨ All species fields instantly fill with "NA"
 4. Fill remaining fields (SUBSTRATE, COMMENTS, etc.)
 5. Done!
+
+### Aggregated Export: Batch Method Editing
+
+When using **Export Aggregated Data**, the **Aggregation Methods** dialog now supports batch editing:
+
+- **Select all** checkbox
+- **Batch method** dropdown
+- **Apply to Selected** button
+- **Apply to All** button
+
+This is useful when setting many related species fields (for example all SG, AL, or HC subgroups) to the same method quickly.
+
+### Template-Driven Percentage Group Handling
+
+The save and export pipeline now applies your rules directly to row data before aggregation.
+
+- If a `conditional_sum` rule uses `blank_as_zero = true` and its condition is met, missing subgroup values are set to `0`.
+- If a subgroup condition (such as cover > 0) is not met, subgroup values are set to `NA`.
+- Matching `autofill` rules are also applied before validation and export.
+
+This means new templates with additional species groups work automatically as long as the rules are defined in the template rules JSON.
 
 ## Copy from Previous Entry
 

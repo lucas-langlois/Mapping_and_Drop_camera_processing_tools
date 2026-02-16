@@ -10,7 +10,8 @@ This tutorial will guide you through the complete workflow of using the Drop Cam
 3. [Loading Videos](#loading-videos)
 4. [Extracting Stills and Entering Data](#extracting-stills-and-entering-data)
 5. [Navigating and Editing Entries](#navigating-and-editing-entries)
-6. [Tips and Best Practices](#tips-and-best-practices)
+6. [Aggregated Export and Batch Methods](#aggregated-export-and-batch-methods)
+7. [Tips and Best Practices](#tips-and-best-practices)
 
 ---
 
@@ -250,6 +251,36 @@ While navigation auto-saves, you can also manually save:
 1. Click **"Save Entry"** button
 2. Confirmation: "Data entry saved to: data/data_entries.csv"
 3. Option to clear form for new manual entry (usually click "No")
+
+---
+
+## Aggregated Export and Batch Methods
+
+Use this when you are ready to produce site/point summaries.
+
+### Step 1: Open Aggregated Export
+
+1. Click **Export Aggregated Data**
+2. The **Aggregation Methods** dialog appears
+
+### Step 2: Batch-edit methods
+
+You can still edit one field at a time, but now you can also update many fields quickly:
+
+1. Tick the fields you want to change (or use **Select all**)
+2. Choose a method in **Batch method**
+3. Click **Apply to Selected**
+4. Use **Apply to All** when every field should use the same method
+5. Click **OK** to run export
+
+### Step 3: Ensure new species templates behave correctly
+
+For each species subgroup in a new template, define both:
+
+- An **Auto-Fill** rule for "absent" states (for example parent cover = 0 or NA) to set subgroup fields to NA
+- A **Conditional Sum** rule with `blank_as_zero = true` and target 100 for "present" states
+
+With those two rules in place, save + aggregation will auto-normalize subgroup values consistently (missing values become 0 when present, and NA when absent).
 
 ---
 

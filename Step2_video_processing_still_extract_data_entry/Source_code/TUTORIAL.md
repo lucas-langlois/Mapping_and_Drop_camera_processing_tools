@@ -12,8 +12,9 @@ This tutorial will guide you through the complete workflow of using the Drop Cam
 7. [Extracting Stills and Entering Data](#extracting-stills-and-entering-data)
 8. [Navigating and Editing Entries](#navigating-and-editing-entries)
 9. [Project Save/Load](#project-saveload)
-10. [Interactive Map View](#interactive-map-view)
-11. [Tips and Best Practices](#tips-and-best-practices)
+10. [Aggregated Export and Batch Methods](#aggregated-export-and-batch-methods)
+11. [Interactive Map View](#interactive-map-view)
+12. [Tips and Best Practices](#tips-and-best-practices)
 
 ---
 
@@ -284,7 +285,7 @@ The system checks your data against these rules and:
 - ❌ **If invalid:** 
   - Highlights problem fields in **red**
   - Shows list of all errors
-  - Gives you option to fix or "Save Anyway"
+   - Blocks save/extract until issues are fixed
 
 ### Example Validation in Action
 
@@ -294,15 +295,12 @@ You extract a still and the form shows:
 
 When navigating to next entry, you see:
 ```
-⚠ Validation Errors:
+❌ Validation Failed
 
 • If seagrass is present, cover must be greater than 0
-
-Do you want to save anyway?
-[Yes] [No]
 ```
 
-The SG_COVER field is highlighted in red. You click "No", correct the value to 30, then navigate - it saves successfully!
+The SG_COVER field is highlighted in red. Correct the value to 30, then navigate - it saves successfully.
 
 ### Advanced: Conditional Sum & Auto-Fill
 
@@ -363,7 +361,7 @@ Save massive time by auto-filling fields based on conditions:
 
 **Don't over-validate:**
 - Avoid rules that are too strict for edge cases
-- Use "Save Anyway" option when needed
+- Use tolerances and practical ranges when needed
 - Remember: you can always edit entries later
 
 ### Editing or Deleting Rules
@@ -816,6 +814,43 @@ Projects are saved in: `Source_code/projects/[your_project_name].json`
 
 ---
 
+## Aggregated Export and Batch Methods
+
+When field-level data entry is complete, use aggregated export to produce one summary row per Site/Point.
+
+### Step 1: Open aggregated export
+
+1. Click **"Export Aggregated Data"** in the data panel
+2. The **Aggregation Methods** dialog opens
+
+### Step 2: Review or batch-edit methods
+
+You can edit methods one field at a time, or apply one method to many fields at once:
+
+1. Tick the field checkboxes you want to change
+2. Choose a method in **Batch method**
+3. Click **Apply to Selected**
+4. Use **Select all** + **Apply to Selected** (or **Apply to All**) for global changes
+
+### Step 3: Confirm export
+
+1. Click **OK** to export
+2. The app writes:
+   - Aggregated CSV (`data_entries_aggregated_YYYYMMDD_HHMMSS.csv`)
+   - Shapefile outputs (when lat/lon are valid and pyshp is available)
+
+### Rule-driven normalization (important)
+
+Before validation and aggregation, the app applies template rules to keep subgroup percentages consistent:
+
+- Matching **Auto-Fill** rules are applied first
+- **Conditional Sum** rules with `blank_as_zero = true` fill missing subgroup values as `0` when the condition is met
+- For cover-driven subgroups where the condition is not met (for example cover `<= 0`), subgroup values are normalized to `NA`
+
+This is template-driven, so new species groups work without code changes as long as the rules are configured.
+
+---
+
 ## Interactive Map View
 
 Visualize all your sampling points on an interactive satellite map!
@@ -1018,8 +1053,8 @@ Bottom-right corner shows:
 
 9. **Pay attention to validation warnings**
    - Red highlights indicate rule violations
-   - Fix issues immediately rather than clicking "Save Anyway"
-   - If you frequently need "Save Anyway", revise the rule
+   - Fix issues immediately (invalid entries are blocked)
+   - If rules block valid field scenarios, revise the rule
    - Use validation errors to identify systematic mistakes
 
 10. **Use "Copy from Previous" for similar drops** ⚡
@@ -1115,7 +1150,7 @@ If you have multiple videos for the same sampling point:
 - Open Rules Manager and review your rules
 - Edit rules to add tolerance (for sum rules)
 - Delete problematic rules temporarily
-- Use "Save Anyway" for legitimate edge cases
+- Relax conditions for legitimate edge cases
 
 **Validation rules not loading:**
 - Check that `[template_name]_rules.json` exists in `data/` folder

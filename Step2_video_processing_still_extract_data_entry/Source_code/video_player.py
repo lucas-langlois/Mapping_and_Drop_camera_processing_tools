@@ -9,6 +9,7 @@ from datetime import datetime
 import csv
 import json
 import re
+import math
 
 # Set environment variable BEFORE importing cv2 to handle videos with multiple streams (video + audio)
 os.environ['OPENCV_FFMPEG_READ_ATTEMPTS'] = '100000'
@@ -24,7 +25,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QShortcut, QInputDialog, QDialog, QListWidget, QListWidgetItem,
                              QDialogButtonBox, QFrame, QDoubleSpinBox, QCheckBox, QSizePolicy,
                              QDesktopWidget)
-from PyQt5.QtCore import QTimer, Qt, QUrl
+from PyQt5.QtCore import QTimer, Qt, QUrl, QEvent
 from PyQt5.QtGui import QImage, QPixmap, QKeySequence, QColor
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 
@@ -833,6 +834,154 @@ class ValidationRulesDialog(QDialog):
         return self.rules
 
 
+class AggregationConfigDialog(QDialog):
+    """Dialog for reviewing/editing aggregation method per field before export."""
+
+    METHOD_OPTIONS = [
+        ("Auto (recommended)", "auto"),
+        ("First non-NA (metadata)", "first_non_na"),
+        ("Binary 0/1 (any 1 => 1)", "binary_any"),
+        ("Most common categories (split by '/')", "token_freq_slash"),
+        ("Sum (numeric)", "sum"),
+        ("Mean + SE (numeric)", "mean_se"),
+        ("Mean (numeric)", "mean"),
+        ("Exclude field", "exclude")
+    ]
+
+    def __init__(self, fieldnames, default_methods, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Aggregation Methods")
+        self.setMinimumSize(700, 600)
+
+        self.fieldnames = fieldnames
+        self.default_methods = default_methods
+        self.method_combos = {}
+        self.field_checkboxes = {}
+
+        self.init_ui()
+
+    def init_ui(self):
+        layout = QVBoxLayout()
+
+        title = QLabel("Review / Edit aggregation method for each field")
+        title.setStyleSheet("font-size: 14px; font-weight: bold; padding: 4px;")
+        layout.addWidget(title)
+
+        subtitle = QLabel("Defaults are inferred from your template + data. Adjust any field if needed.")
+        subtitle.setStyleSheet("color: #666; padding-bottom: 6px;")
+        layout.addWidget(subtitle)
+
+        batch_layout = QHBoxLayout()
+        self.select_all_checkbox = QCheckBox("Select all")
+        self.select_all_checkbox.toggled.connect(self._toggle_all_field_checks)
+        batch_layout.addWidget(self.select_all_checkbox)
+
+        batch_layout.addWidget(QLabel("Batch method:"))
+        self.batch_method_combo = QComboBox()
+        for label, code in self.METHOD_OPTIONS:
+            self.batch_method_combo.addItem(label, code)
+        batch_layout.addWidget(self.batch_method_combo)
+
+        apply_selected_btn = QPushButton("Apply to Selected")
+        apply_selected_btn.clicked.connect(self._apply_batch_method_to_selected)
+        batch_layout.addWidget(apply_selected_btn)
+
+        apply_all_btn = QPushButton("Apply to All")
+        apply_all_btn.clicked.connect(self._apply_batch_method_to_all)
+        batch_layout.addWidget(apply_all_btn)
+
+        batch_layout.addStretch()
+        layout.addLayout(batch_layout)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        container = QWidget()
+        grid = QGridLayout()
+
+        header_select = QLabel("Select")
+        header_select.setStyleSheet("font-weight: bold;")
+        grid.addWidget(header_select, 0, 0)
+
+        header_field = QLabel("Field")
+        header_field.setStyleSheet("font-weight: bold;")
+        grid.addWidget(header_field, 0, 1)
+
+        header_method = QLabel("Aggregation Method")
+        header_method.setStyleSheet("font-weight: bold;")
+        grid.addWidget(header_method, 0, 2)
+
+        for row_idx, field_name in enumerate(self.fieldnames, start=1):
+            field_check = QCheckBox()
+            self.field_checkboxes[field_name] = field_check
+            grid.addWidget(field_check, row_idx, 0)
+
+            field_label = QLabel(field_name)
+            grid.addWidget(field_label, row_idx, 1)
+
+            combo = QComboBox()
+            for label, code in self.METHOD_OPTIONS:
+                combo.addItem(label, code)
+
+            default_code = self.default_methods.get(field_name, "auto")
+            selected_index = 0
+            for index in range(combo.count()):
+                if combo.itemData(index) == default_code:
+                    selected_index = index
+                    break
+            combo.setCurrentIndex(selected_index)
+
+            self.method_combos[field_name] = combo
+            grid.addWidget(combo, row_idx, 2)
+
+        container.setLayout(grid)
+        scroll.setWidget(container)
+        layout.addWidget(scroll)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+        self.setLayout(layout)
+
+    def get_methods(self):
+        """Return selected method code per field."""
+        selected = {}
+        for field_name, combo in self.method_combos.items():
+            selected[field_name] = combo.currentData()
+        return selected
+
+    def _toggle_all_field_checks(self, checked):
+        """Toggle all row checkboxes in the aggregation table."""
+        for checkbox in self.field_checkboxes.values():
+            checkbox.setChecked(checked)
+
+    def _apply_batch_method_to_selected(self):
+        """Apply currently selected batch method to checked fields."""
+        method_code = self.batch_method_combo.currentData()
+        for field_name, checkbox in self.field_checkboxes.items():
+            if not checkbox.isChecked():
+                continue
+
+            combo = self.method_combos.get(field_name)
+            if combo is None:
+                continue
+
+            for index in range(combo.count()):
+                if combo.itemData(index) == method_code:
+                    combo.setCurrentIndex(index)
+                    break
+
+    def _apply_batch_method_to_all(self):
+        """Apply currently selected batch method to all fields."""
+        method_code = self.batch_method_combo.currentData()
+        for combo in self.method_combos.values():
+            for index in range(combo.count()):
+                if combo.itemData(index) == method_code:
+                    combo.setCurrentIndex(index)
+                    break
+
+
 class MapDialog(QDialog):
     """Dialog for displaying points on a Leaflet map"""
     def __init__(self, points_data, current_point_id, parent=None):
@@ -862,7 +1011,7 @@ class MapDialog(QDialog):
         layout.addWidget(close_btn)
         
         self.setLayout(layout)
-    
+
     def generate_map_html(self):
         """Generate HTML with Leaflet map"""
         # Calculate center of map (use current point if available, otherwise first point)
@@ -886,7 +1035,7 @@ class MapDialog(QDialog):
             icon_html = f"'<div style=\"background-color: {color}; width: 25px; height: 25px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.5);\"></div>'"
             
             # Build popup content with available fields
-            popup_content = f"<div style='min-width: 200px;'><h3 style='margin: 0 0 10px 0; color: {color};'>{point['point_id']}</h3>"
+            popup_content = f"<div style='min-width: 200px;'><h3 style='margin: 0 0 10px 0; color: {color};'>Site/Point ID: {point['point_id']}</h3>"
             popup_content += f"<b>Latitude:</b> {point['lat']:.6f}<br>"
             popup_content += f"<b>Longitude:</b> {point['lon']:.6f}<br>"
             
@@ -1046,6 +1195,8 @@ class VideoPlayer(QMainWindow):
         self.zoom_level = 1.0
         self.cached_frame = None
         self.cached_frame_number = -1
+        self.is_panning = False
+        self.pan_last_pos = None
         
         # Auto-loader variables
         self.video_queue = []
@@ -1203,10 +1354,8 @@ class VideoPlayer(QMainWindow):
             
             if base_path:
                 try:
-                    with open(base_path, 'r', encoding='utf-8') as f:
-                        reader = csv.DictReader(f)
-                        self.base_data_csv = list(reader)
-                        self.base_data_csv_path = base_path  # Store the path
+                    self.base_data_csv = self._load_base_csv_rows_uppercase_headers(base_path)
+                    self.base_data_csv_path = base_path  # Store the path
                     
                     QMessageBox.information(
                         self, "Base CSV Loaded",
@@ -1227,6 +1376,42 @@ class VideoPlayer(QMainWindow):
         # Auto-fill connections are set up during field creation (no need for separate setup)
         
         return True
+
+    def _load_base_csv_rows_uppercase_headers(self, csv_path):
+        """Load base CSV rows and normalize all column names to uppercase."""
+        with open(csv_path, 'r', encoding='utf-8') as csv_file:
+            reader = csv.DictReader(csv_file)
+            normalized_rows = []
+            for row in reader:
+                normalized_rows.append(self._normalize_row_keys_uppercase(row))
+            return normalized_rows
+
+    def _normalize_row_keys_uppercase(self, row):
+        """Return a copy of a dictionary with keys normalized to uppercase."""
+        normalized_row = {}
+        for key, value in row.items():
+            normalized_key = str(key).strip().upper() if key is not None else ""
+            normalized_row[normalized_key] = value
+        return normalized_row
+
+    def _get_row_value(self, row, candidate_fields):
+        """Return first non-empty value for any candidate field name from a row dict."""
+        if not isinstance(row, dict):
+            return ''
+
+        for field in candidate_fields:
+            value = row.get(field, '')
+            if value not in (None, ''):
+                return str(value)
+        return ''
+
+    def _get_video_filename_from_row(self, row):
+        """Get video filename value from a row using flexible field aliases."""
+        return self._get_row_value(row, ['VIDEO_FILENAME', 'MATCHED_VIDEO_FILENAME', 'VIDEO_FILE', 'VIDEO_NAME'])
+
+    def _get_point_identifier_from_row(self, row):
+        """Get point/site identifier value from a row using flexible field aliases."""
+        return self._get_row_value(row, ['POINT_ID', 'SITE', 'SITE_ID', 'POINT', 'STATION', 'STATION_ID'])
         
     def init_ui(self):
         """Initialize the user interface"""
@@ -1249,6 +1434,8 @@ class VideoPlayer(QMainWindow):
         self.video_label.setStyleSheet("QLabel { background-color: black; color: white; }")
         
         self.video_scroll.setWidget(self.video_label)
+        self.video_scroll.viewport().installEventFilter(self)
+        self.video_scroll.viewport().setMouseTracking(True)
         video_layout.addWidget(self.video_scroll, 1)  # Stretch factor 1 to take available space
         
         # Frame info label
@@ -1353,7 +1540,7 @@ class VideoPlayer(QMainWindow):
         speed_label = QLabel("Speed:")
         controls_layout.addWidget(speed_label)
         self.speed_combo = QComboBox()
-        self.speed_combo.addItems(["0.25x", "0.5x", "1x", "2x", "4x", "8x", "12x"])
+        self.speed_combo.addItems(["0.25x", "0.5x", "1x", "2x", "4x", "8x", "12x", "24x", "48x"])
         self.speed_combo.setCurrentIndex(2)  # 1x default
         self.speed_combo.setToolTip("Playback speed")
         self.speed_combo.currentTextChanged.connect(self.change_speed)
@@ -1426,6 +1613,14 @@ class VideoPlayer(QMainWindow):
         self.next_video_btn.setEnabled(False)
         self.next_video_btn.setMaximumWidth(60)
         autoload_layout.addWidget(self.next_video_btn)
+
+        # Go to specific video button
+        self.goto_video_btn = QPushButton("Go To...")
+        self.goto_video_btn.setToolTip("Jump to a specific video in queue")
+        self.goto_video_btn.clicked.connect(self.goto_video)
+        self.goto_video_btn.setEnabled(False)
+        self.goto_video_btn.setMaximumWidth(70)
+        autoload_layout.addWidget(self.goto_video_btn)
         
         # Video queue status label
         self.queue_label = QLabel("No videos")
@@ -1619,12 +1814,12 @@ class VideoPlayer(QMainWindow):
         delete_btn.clicked.connect(self.delete_current_entry)
         delete_btn.setStyleSheet("background-color: #F44336; color: white; font-weight: bold; padding: 8px;")
         button_layout2.addWidget(delete_btn)
-        
-        reset_drop_btn = QPushButton("Reset Drop Count")
-        reset_drop_btn.setToolTip("Manually set the next DROP_ID number")
-        reset_drop_btn.clicked.connect(self.reset_drop_count)
-        reset_drop_btn.setStyleSheet("background-color: #FF9800; color: white; font-weight: bold; padding: 8px;")
-        button_layout2.addWidget(reset_drop_btn)
+
+        export_btn = QPushButton("Export Aggregated Data")
+        export_btn.setToolTip("Create Site/Point aggregated CSV and shapefile export")
+        export_btn.clicked.connect(self.export_aggregated_data)
+        export_btn.setStyleSheet("background-color: #FF9800; color: white; font-weight: bold; padding: 8px;")
+        button_layout2.addWidget(export_btn)
         
         layout.addLayout(button_layout2)
         layout.addStretch()
@@ -1644,21 +1839,19 @@ class VideoPlayer(QMainWindow):
         if file_path:
             if self.cap:
                 self.cap.release()
-            
-        self.video_path = file_path
-        # Use FFMPEG backend explicitly and reduce buffer size for better seeking
-        self.cap = cv2.VideoCapture(file_path, cv2.CAP_FFMPEG)
-        self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Minimum buffer for better frame accuracy
-        # Try to open only video stream (ignore audio)
-        try:
-            self.cap.set(cv2.CAP_PROP_AUDIO_STREAM, -1)
-        except:
-            pass
-        
-        if not self.cap.isOpened():
-            QMessageBox.critical(self, "Error", "Failed to open video file")
-            return
-            
+
+            self.cap = cv2.VideoCapture(file_path, cv2.CAP_FFMPEG)
+            self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Minimum buffer for better frame accuracy
+            # Try to open only video stream (ignore audio)
+            try:
+                self.cap.set(cv2.CAP_PROP_AUDIO_STREAM, -1)
+            except:
+                pass
+
+            if not self.cap.isOpened():
+                QMessageBox.critical(self, "Error", "Failed to open video file")
+                return
+
             self.total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
             self.fps = self.cap.get(cv2.CAP_PROP_FPS)
             self.current_frame = 0
@@ -1672,11 +1865,11 @@ class VideoPlayer(QMainWindow):
             self.next_frame_btn.setEnabled(True)
             self.skip_back_btn.setEnabled(True)
             self.skip_forward_btn.setEnabled(True)
-        self.speed_combo.setEnabled(True)
-        self.zoom_slider.setEnabled(True)
-        self.extract_btn.setEnabled(True)
-        
-        self.display_frame()
+            self.speed_combo.setEnabled(True)
+            self.zoom_slider.setEnabled(True)
+            self.update_extract_button_state()
+
+            self.display_frame()
             
     def toggle_play(self):
         """Toggle play/pause"""
@@ -1687,18 +1880,38 @@ class VideoPlayer(QMainWindow):
         
         if self.is_playing:
             self.play_btn.setText("⏸")
-            interval = int(1000 / (self.fps * self.playback_speed))
-            # Ensure minimum interval of 1ms for smooth high-speed playback
-            interval = max(1, interval)
+            interval = self._get_playback_interval_ms()
             self.timer.start(interval)
         else:
             self.play_btn.setText("▶")
             self.timer.stop()
+
+    def _get_playback_interval_ms(self):
+        """Get timer interval for current playback speed.
+
+        - Speeds < 1x: slower by increasing interval.
+        - Speeds >= 1x: keep near base frame cadence and use frame stepping in play loop.
+        """
+        if self.fps <= 0:
+            return 33  # Fallback ~30 FPS
+
+        if self.playback_speed < 1.0:
+            interval = int(1000 / (self.fps * self.playback_speed))
+        else:
+            interval = int(1000 / self.fps)
+
+        return max(1, interval)
     
     def change_zoom(self, value):
         """Change video zoom level"""
         self.zoom_level = value / 100.0
         self.zoom_label.setText(f"{value}%")
+
+        # Show hand cursor when panning is useful (zoomed in)
+        if self.cap and self.zoom_level > 1.0:
+            self.video_scroll.viewport().setCursor(Qt.OpenHandCursor)
+        else:
+            self.video_scroll.viewport().setCursor(Qt.ArrowCursor)
         
         # Redisplay current frame with new zoom
         if self.cap and self.cached_frame is not None:
@@ -1706,15 +1919,149 @@ class VideoPlayer(QMainWindow):
             
     def change_speed(self, speed_text):
         """Change playback speed"""
-        speed_map = {"0.25x": 0.25, "0.5x": 0.5, "1x": 1.0, "2x": 2.0, "4x": 4.0, "8x": 8.0, "12x": 12.0}
+        speed_map = {
+            "0.25x": 0.25,
+            "0.5x": 0.5,
+            "1x": 1.0,
+            "2x": 2.0,
+            "4x": 4.0,
+            "8x": 8.0,
+            "12x": 12.0,
+            "24x": 24.0,
+            "48x": 48.0
+        }
         self.playback_speed = speed_map.get(speed_text, 1.0)
         
         if self.is_playing:
-            interval = int(1000 / (self.fps * self.playback_speed))
-            # Ensure minimum interval of 1ms for smooth high-speed playback
-            interval = max(1, interval)
+            interval = self._get_playback_interval_ms()
             self.timer.start(interval)
-            
+
+    def eventFilter(self, obj, event):
+        """Handle mouse interactions for video zoom and drag-panning."""
+        try:
+            if obj == self.video_scroll.viewport():
+                if event.type() == QEvent.Wheel:
+                    if not self.cap:
+                        return False
+
+                    wheel_delta = event.angleDelta().y()
+                    if wheel_delta == 0:
+                        return False
+
+                    global_pos = self._get_event_global_pos_qpoint(event)
+                    if global_pos is None:
+                        return False
+
+                    viewport_pos = self.video_scroll.viewport().mapFromGlobal(global_pos)
+                    zoom_step = 10 if wheel_delta > 0 else -10
+                    self._zoom_at_viewport_pos(viewport_pos, zoom_step)
+                    event.accept()
+                    return True
+
+                if event.type() == QEvent.MouseButtonPress and event.button() == Qt.LeftButton:
+                    if not self.cap or self.zoom_level <= 1.0:
+                        return False
+
+                    local_pos = self._get_event_pos_qpoint(event)
+                    if local_pos is None:
+                        return False
+
+                    self.is_panning = True
+                    self.pan_last_pos = local_pos
+                    self.video_scroll.viewport().setCursor(Qt.ClosedHandCursor)
+                    event.accept()
+                    return True
+
+                if event.type() == QEvent.MouseMove and self.is_panning:
+                    current_pos = self._get_event_pos_qpoint(event)
+                    if current_pos is None or self.pan_last_pos is None:
+                        return False
+
+                    dx = current_pos.x() - self.pan_last_pos.x()
+                    dy = current_pos.y() - self.pan_last_pos.y()
+
+                    h_scroll = self.video_scroll.horizontalScrollBar()
+                    v_scroll = self.video_scroll.verticalScrollBar()
+                    h_scroll.setValue(h_scroll.value() - dx)
+                    v_scroll.setValue(v_scroll.value() - dy)
+
+                    self.pan_last_pos = current_pos
+                    event.accept()
+                    return True
+
+                if event.type() == QEvent.MouseButtonRelease and event.button() == Qt.LeftButton and self.is_panning:
+                    self.is_panning = False
+                    self.pan_last_pos = None
+                    if self.cap and self.zoom_level > 1.0:
+                        self.video_scroll.viewport().setCursor(Qt.OpenHandCursor)
+                    else:
+                        self.video_scroll.viewport().setCursor(Qt.ArrowCursor)
+                    event.accept()
+                    return True
+        except Exception as e:
+            print(f"Event filter error: {e}")
+
+        return super().eventFilter(obj, event)
+
+    def _get_event_pos_qpoint(self, event):
+        """Get event position as QPoint across PyQt versions/event types."""
+        if hasattr(event, 'pos'):
+            pos = event.pos()
+            if hasattr(pos, 'toPoint'):
+                return pos.toPoint()
+            return pos
+
+        if hasattr(event, 'position'):
+            posf = event.position()
+            if hasattr(posf, 'toPoint'):
+                return posf.toPoint()
+
+        return None
+
+    def _get_event_global_pos_qpoint(self, event):
+        """Get global mouse position as QPoint across PyQt versions/event types."""
+        if hasattr(event, 'globalPos'):
+            gpos = event.globalPos()
+            if hasattr(gpos, 'toPoint'):
+                return gpos.toPoint()
+            return gpos
+
+        if hasattr(event, 'globalPosition'):
+            gposf = event.globalPosition()
+            if hasattr(gposf, 'toPoint'):
+                return gposf.toPoint()
+
+        return None
+
+    def _zoom_at_viewport_pos(self, viewport_pos, zoom_step):
+        """Zoom in/out while keeping the mouse position anchored to the same content point."""
+        old_width = max(1, self.video_label.width())
+        old_height = max(1, self.video_label.height())
+
+        h_scroll = self.video_scroll.horizontalScrollBar()
+        v_scroll = self.video_scroll.verticalScrollBar()
+
+        content_x = h_scroll.value() + viewport_pos.x()
+        content_y = v_scroll.value() + viewport_pos.y()
+
+        rel_x = content_x / old_width
+        rel_y = content_y / old_height
+
+        new_zoom_value = max(self.zoom_slider.minimum(), min(self.zoom_slider.maximum(), self.zoom_slider.value() + zoom_step))
+        if new_zoom_value == self.zoom_slider.value():
+            return
+
+        self.zoom_slider.setValue(new_zoom_value)
+
+        new_width = max(1, self.video_label.width())
+        new_height = max(1, self.video_label.height())
+
+        new_content_x = rel_x * new_width
+        new_content_y = rel_y * new_height
+
+        h_scroll.setValue(int(new_content_x - viewport_pos.x()))
+        v_scroll.setValue(int(new_content_y - viewport_pos.y()))
+
     def slider_changed(self, value):
         """Handle timeline slider changes"""
         if not self.cap:
@@ -1810,33 +2157,36 @@ class VideoPlayer(QMainWindow):
         """Play next frame during playback (optimized for smooth playback)"""
         if not self.cap or not self.is_playing:
             return
-            
+
         if self.current_frame >= self.total_frames - 1:
             self.toggle_play()
             return
-        
-        ret, frame = self.cap.read()
-        if ret and frame is not None:
+
+        # For 1x and slower, read sequentially to preserve natural playback cadence.
+        # For faster speeds, read multiple sequential frames per tick and show the last one.
+        frame_step = 1 if self.playback_speed <= 1.0 else max(1, int(round(self.playback_speed)))
+
+        frame_to_display = None
+        frames_read = 0
+        for _ in range(frame_step):
+            ret, frame = self.cap.read()
+            if not ret or frame is None:
+                break
+            frame_to_display = frame
             self.current_frame += 1
-            self.timeline_slider.blockSignals(True)  # Prevent slider feedback during playback
-            self.timeline_slider.setValue(self.current_frame)
-            self.timeline_slider.blockSignals(False)
-            self.display_frame_data(frame)
-        else:
-            # Try to recover by seeking to next frame
-            if self.current_frame < self.total_frames - 1:
-                self.current_frame += 1
-                self.cap.set(cv2.CAP_PROP_POS_FRAMES, self.current_frame)
-                ret, frame = self.cap.read()
-                if ret and frame is not None:
-                    self.timeline_slider.blockSignals(True)
-                    self.timeline_slider.setValue(self.current_frame)
-                    self.timeline_slider.blockSignals(False)
-                    self.display_frame_data(frame)
-                else:
-                    self.toggle_play()
-            else:
-                self.toggle_play()
+            frames_read += 1
+
+            if self.current_frame >= self.total_frames - 1:
+                break
+
+        if frames_read == 0 or frame_to_display is None:
+            self.toggle_play()
+            return
+
+        self.timeline_slider.blockSignals(True)  # Prevent slider feedback during playback
+        self.timeline_slider.setValue(self.current_frame)
+        self.timeline_slider.blockSignals(False)
+        self.display_frame_data(frame_to_display)
                 
     def display_frame(self):
         """Display current frame"""
@@ -1849,6 +2199,10 @@ class VideoPlayer(QMainWindow):
             
     def display_frame_data(self, frame):
         """Display frame data on label"""
+        # Cache current frame so zoom redraw works even when paused
+        self.cached_frame = frame.copy()
+        self.cached_frame_number = self.current_frame
+
         # Convert BGR to RGB
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         h, w, ch = rgb_frame.shape
@@ -1901,6 +2255,26 @@ class VideoPlayer(QMainWindow):
         """Extract and save current frame"""
         if not self.cap:
             return
+
+        data_row = self.get_current_data_row()
+        if self.is_entry_blank(data_row):
+            QMessageBox.critical(
+                self,
+                "Data Entry Required",
+                "Cannot extract frame because the data entry is empty.\n\n"
+                "Please fill in the data entry fields first, then extract."
+            )
+            return
+
+        is_valid, errors = self.validate_data_entry(data_row)
+        if not is_valid:
+            self.highlight_invalid_fields(errors)
+            error_msg = "❌ Validation Failed - Cannot Extract Frame\n\n" + "\n".join([f"• {error}" for error in errors])
+            error_msg += "\n\nPlease fix the highlighted fields before extracting."
+            QMessageBox.critical(self, "Validation Failed", error_msg)
+            return
+        else:
+            self.highlight_invalid_fields([])
             
         self.cap.set(cv2.CAP_PROP_POS_FRAMES, self.current_frame)
         ret, frame = self.cap.read()
@@ -1916,53 +2290,32 @@ class VideoPlayer(QMainWindow):
                 # (Compare current POINT_ID with last entry's POINT_ID)
                 self.drop_counter = self.get_next_drop_number_for_point()
                 
-                # VALIDATE DATA BEFORE EXTRACTING FRAME
-                # Prepare data row for validation
-                data_row = {}
-                for field_name, widget in self.data_fields.items():
-                    if isinstance(widget, QTextEdit):
-                        data_row[field_name] = widget.toPlainText().strip()
-                    else:
-                        data_row[field_name] = widget.text().strip()
-                
-                # Check if validation should be skipped (mostly empty entry)
-                skip_validation = self.is_mostly_empty_entry(data_row)
-                
-                if self.validation_rules and not skip_validation:
-                    is_valid, errors = self.validate_data_entry(data_row)
-                    
-                    if not is_valid:
-                        self.highlight_invalid_fields(errors)
-                        
-                        # BLOCK extraction and show error
-                        error_msg = "❌ Validation Failed - Cannot Extract Frame\n\n" + "\n".join([f"• {error}" for error in errors])
-                        error_msg += "\n\nPlease fix the highlighted fields before pressing 'S' to extract."
-                        
-                        QMessageBox.critical(self, "Validation Failed", error_msg)
-                        return  # Block extraction completely
-                
-                # Clear any previous highlights
-                self.highlight_invalid_fields([])
-                
                 # Save to drop_stills with auto-naming using video filename format
                 os.makedirs(self.drop_stills_dir, exist_ok=True)
-                
-                # Use video filename as base
-                video_name = os.path.splitext(os.path.basename(self.video_path))[0]
-                still_filename = f"{video_name}_drop{self.drop_counter}.jpg"
+
+                # Use unified queue filename format
+                still_filename, drop_id = self._generate_queue_still_filename(f"drop{self.drop_counter}")
                 
                 output_path = os.path.join(self.drop_stills_dir, still_filename)
-                cv2.imwrite(output_path, frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
+                image_saved = cv2.imwrite(output_path, frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
+                if not image_saved:
+                    QMessageBox.warning(self, "Error", "Failed to save extracted frame image")
+                    return
                 
                 # Auto-save data entry with drop information
-                drop_id = f"drop{self.drop_counter}"
-                self.auto_save_data_entry(drop_id, still_filename)
+                save_ok = self.auto_save_data_entry(drop_id, still_filename)
+                if not save_ok:
+                    try:
+                        if os.path.exists(output_path):
+                            os.remove(output_path)
+                    except Exception:
+                        pass
+                    return
                 
                 self.drop_counter += 1
                 
                 # Update DROP_ID and FILENAME fields in the form to show the NEXT drop information
-                next_drop_id = f"drop{self.drop_counter}"
-                next_filename = f"{video_name}_drop{self.drop_counter}.jpg"
+                next_filename, next_drop_id = self._generate_queue_still_filename(f"drop{self.drop_counter}")
                 
                 if 'DROP_ID' in self.data_fields:
                     widget = self.data_fields['DROP_ID']
@@ -2004,10 +2357,95 @@ class VideoPlayer(QMainWindow):
                     output_dir, 
                     f"frame_{self.current_frame:06d}_{timestamp}.jpg"
                 )
-                cv2.imwrite(output_path, frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
+                image_saved = cv2.imwrite(output_path, frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
+                if not image_saved:
+                    QMessageBox.warning(self, "Error", "Failed to save extracted frame image")
+                    return
                 QMessageBox.information(self, "Success", f"Frame saved to:\n{output_path}")
         else:
             QMessageBox.warning(self, "Error", "Failed to extract frame")
+
+    def extract_current_frame_without_data_save(self, preferred_filename=''):
+        """Extract and save current frame image only (without saving another data row)."""
+        if not self.cap:
+            return
+
+        self.cap.set(cv2.CAP_PROP_POS_FRAMES, self.current_frame)
+        ret, frame = self.cap.read()
+        if not ret or frame is None:
+            QMessageBox.warning(self, "Error", "Failed to extract frame")
+            return
+
+        in_queue_mode = self.video_queue and self.video_path in self.video_queue
+
+        if in_queue_mode:
+            os.makedirs(self.drop_stills_dir, exist_ok=True)
+
+            filename = (preferred_filename or '').strip()
+            valid_image_ext = ('.jpg', '.jpeg', '.png')
+            if not filename or not filename.lower().endswith(valid_image_ext):
+                current_drop_id = self._get_current_drop_id_text()
+                filename, _ = self._generate_queue_still_filename(current_drop_id)
+            else:
+                filename = os.path.basename(filename)
+
+            output_path = os.path.join(self.drop_stills_dir, filename)
+        else:
+            video_name = os.path.splitext(os.path.basename(self.video_path))[0]
+            output_dir = os.path.join(os.path.dirname(self.video_path), f"{video_name}_frames")
+            os.makedirs(output_dir, exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_path = os.path.join(
+                output_dir,
+                f"frame_{self.current_frame:06d}_{timestamp}.jpg"
+            )
+
+        image_saved = cv2.imwrite(output_path, frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
+        if not image_saved:
+            QMessageBox.warning(self, "Error", "Failed to save extracted frame image")
+            return
+
+        if in_queue_mode:
+            extracted_name = os.path.basename(output_path)
+            match = re.search(r'_drop(\d+)\.', extracted_name, re.IGNORECASE)
+            if match:
+                extracted_drop_number = int(match.group(1))
+                self.drop_counter = extracted_drop_number + 1
+            else:
+                self.drop_counter = max(1, self.drop_counter + 1)
+
+            next_filename, next_drop_id = self._generate_queue_still_filename(f"drop{self.drop_counter}")
+
+            if 'DROP_ID' in self.data_fields:
+                widget = self.data_fields['DROP_ID']
+                widget.blockSignals(True)
+                if isinstance(widget, QTextEdit):
+                    widget.setPlainText(next_drop_id)
+                else:
+                    widget.setText(next_drop_id)
+                widget.blockSignals(False)
+
+            if 'FILENAME' in self.data_fields:
+                widget = self.data_fields['FILENAME']
+                widget.blockSignals(True)
+                if isinstance(widget, QTextEdit):
+                    widget.setPlainText(next_filename)
+                else:
+                    widget.setText(next_filename)
+                widget.blockSignals(False)
+
+            if self.video_queue and hasattr(self, 'queue_label'):
+                self.queue_label.setText(
+                    f"{self.current_video_index + 1}/{len(self.video_queue)}: Drop {self.drop_counter}"
+                )
+
+            self.update_extract_button_state()
+
+        QMessageBox.information(
+            self,
+            "Frame Extracted",
+            f"Frame saved to:\n{output_path}\n\nNo additional data row was created."
+        )
             
     def choose_video_folder(self):
         """Choose a custom video folder and load videos from it"""
@@ -2059,6 +2497,7 @@ class VideoPlayer(QMainWindow):
         # Enable navigation buttons
         self.prev_video_btn.setEnabled(True)
         self.next_video_btn.setEnabled(True)
+        self.goto_video_btn.setEnabled(True)
         
         QMessageBox.information(
             self, "Videos Loaded",
@@ -2079,20 +2518,20 @@ class VideoPlayer(QMainWindow):
         self.video_path = video_path
         video_name = os.path.splitext(os.path.basename(video_path))[0]
         
-        # Load base data FIRST - this sets the correct POINT_ID
+        # Load base data FIRST - this sets the correct Site/Point ID
         # Do NOT call populate_fields_from_base_data() yet
         if self.base_data_csv:
             # Find matching base data without populating fields yet
             for row in self.base_data_csv:
-                video_fn = row.get('VIDEO_FILENAME', '')
+                video_fn = self._get_video_filename_from_row(row)
                 if video_fn:
                     csv_video_name = os.path.splitext(video_fn)[0]
                     if csv_video_name == video_name or video_fn == os.path.basename(video_path):
                         self.base_data = row
-                        print(f"  Loaded base data for POINT_ID: {row.get('POINT_ID', 'N/A')}")
+                        print(f"  Loaded base data for ID: {self._get_point_identifier_from_row(row) or 'N/A'}")
                         break
         
-        # NOW reset drop counter with the correct POINT_ID from new base_data
+        # NOW reset drop counter with the correct Site/Point ID from new base_data
         self.drop_counter = self.get_next_drop_number_for_point()
         
         # NOW populate fields (this will call update_drop_fields_for_next() with correct counter)
@@ -2131,7 +2570,7 @@ class VideoPlayer(QMainWindow):
         self.skip_forward_btn.setEnabled(True)
         self.speed_combo.setEnabled(True)
         self.zoom_slider.setEnabled(True)
-        self.extract_btn.setEnabled(True)
+        self.update_extract_button_state()
         
         # Update queue label
         self.queue_label.setText(
@@ -2145,6 +2584,9 @@ class VideoPlayer(QMainWindow):
         """Load previous video from queue"""
         if not self.video_queue:
             return
+
+        if not self.validate_current_video_entry_still_match(show_message=True):
+            return
         
         # Confirm before moving to previous video
         reply = QMessageBox.question(
@@ -2152,7 +2594,7 @@ class VideoPlayer(QMainWindow):
             "⚠️ Have you extracted and saved ALL drops for this video?\n\n"
             "IMPORTANT: Make sure the last drop is saved before continuing.\n\n"
             "Moving to the previous video will:\n"
-            "• Reset drop counter\n"
+            "• Set DROP_ID for that video automatically\n"
             "• Load base data for that video\n"
             "• Clear observation fields\n\n"
             "Continue to previous video?",
@@ -2173,6 +2615,9 @@ class VideoPlayer(QMainWindow):
         """Load next video from queue"""
         if not self.video_queue:
             return
+
+        if not self.validate_current_video_entry_still_match(show_message=True):
+            return
         
         # Confirm before moving to next video
         reply = QMessageBox.question(
@@ -2180,7 +2625,7 @@ class VideoPlayer(QMainWindow):
             "⚠️ Have you extracted and saved ALL drops for this video?\n\n"
             "IMPORTANT: Make sure the last drop is saved before continuing.\n\n"
             "Moving to the next video will:\n"
-            "• Reset drop counter to drop1\n"
+            "• Set DROP_ID for that video automatically\n"
             "• Load base data for the new video\n"
             "• Clear observation fields\n\n"
             "Continue to next video?",
@@ -2196,6 +2641,57 @@ class VideoPlayer(QMainWindow):
         
         new_index = (self.current_video_index + 1) % len(self.video_queue)
         self.load_video_from_queue(new_index)
+
+    def goto_video(self):
+        """Jump directly to a specific video in the queue"""
+        if not self.video_queue:
+            return
+
+        if not self.validate_current_video_entry_still_match(show_message=True):
+            return
+
+        items = [
+            f"{idx + 1}/{len(self.video_queue)} - {os.path.basename(path)}"
+            for idx, path in enumerate(self.video_queue)
+        ]
+
+        selected_item, ok = QInputDialog.getItem(
+            self,
+            "Go To Video",
+            "Select a video:",
+            items,
+            self.current_video_index,
+            False
+        )
+
+        if not ok or not selected_item:
+            return
+
+        target_index = items.index(selected_item)
+        if target_index == self.current_video_index:
+            return
+
+        # Confirm before moving to selected video
+        reply = QMessageBox.question(
+            self, "Move to Selected Video?",
+            "⚠️ Have you extracted and saved ALL drops for this video?\n\n"
+            "IMPORTANT: Make sure the last drop is saved before continuing.\n\n"
+            "Moving to the selected video will:\n"
+            "• Set DROP_ID for that video automatically\n"
+            "• Load base data for that video\n"
+            "• Clear observation fields\n\n"
+            "Continue to selected video?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+
+        if reply == QMessageBox.No:
+            return
+
+        if self.is_playing:
+            self.toggle_play()
+
+        self.load_video_from_queue(target_index)
     
     def save_data_entry(self):
         """Save current data entry to CSV file"""
@@ -2207,15 +2703,36 @@ class VideoPlayer(QMainWindow):
             else:
                 data_row[field_name] = widget.text().strip()
         
-        # Auto-fill FILENAME if empty and video is loaded
-        if not data_row.get('FILENAME') and self.video_path:
-            data_row['FILENAME'] = os.path.basename(self.video_path)
+        # Auto-fill FILENAME if empty/placeholder and video is loaded
+        filename_value = data_row.get('FILENAME', '').strip()
+        filename_is_placeholder = filename_value.lower() == '[will be set on next extraction]'
+
+        if (not filename_value or filename_is_placeholder) and self.video_path:
+            if self.video_queue and self.video_path in self.video_queue:
+                current_drop_id = data_row.get('DROP_ID', '').strip()
+                queue_filename, _ = self._generate_queue_still_filename(current_drop_id)
+                data_row['FILENAME'] = queue_filename
+            else:
+                data_row['FILENAME'] = os.path.basename(self.video_path)
+
+            if 'FILENAME' in self.data_fields:
+                filename_widget = self.data_fields['FILENAME']
+                filename_widget.blockSignals(True)
+                if isinstance(filename_widget, QTextEdit):
+                    filename_widget.setPlainText(data_row['FILENAME'])
+                else:
+                    filename_widget.setText(data_row['FILENAME'])
+                filename_widget.blockSignals(False)
         
         # Auto-fill DATE_TIME if DATE and TIME are provided
         if data_row.get('DATE') and data_row.get('TIME'):
             data_row['DATE_TIME'] = f"{data_row['DATE']} {data_row['TIME']}"
         else:
             data_row['DATE_TIME'] = ''
+
+        normalized = self._normalize_percentage_fields_in_row(data_row)
+        if normalized:
+            self._update_widgets_from_data_row(data_row)
         
         # Validate data entry if rules exist
         if self.validation_rules:
@@ -2272,6 +2789,35 @@ class VideoPlayer(QMainWindow):
                 self, "Success", 
                 f"Data entry saved to:\n{output_file}"
             )
+
+            # Prompt to also extract a frame after saving entry
+            extracted_after_save = False
+            if self.cap:
+                extract_reply = QMessageBox.question(
+                    self,
+                    "Extract Frame Too?",
+                    "Data entry is saved.\n\nDo you also want to extract the current frame now?",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.Yes
+                )
+                if extract_reply == QMessageBox.Yes:
+                    self.extract_current_frame_without_data_save(data_row.get('FILENAME', ''))
+                    extracted_after_save = True
+
+            # In queue mode, Save+Extract should initialize a fresh next entry
+            if extracted_after_save and self.video_queue and self.video_path in self.video_queue:
+                if not self.base_data:
+                    self.auto_load_base_data_from_csv()
+
+                if self.base_data:
+                    self.populate_fields_from_base_data()
+                else:
+                    self.clear_data_entry()
+
+                self.current_entry_index = len(self.all_data_entries)
+                self.unsaved_changes = False
+                self.update_navigation_buttons()
+                return
             
             # Optionally clear form after saving
             reply = QMessageBox.question(
@@ -2298,6 +2844,8 @@ class VideoPlayer(QMainWindow):
                 widget.clear()
             else:
                 widget.clear()
+
+        self.update_extract_button_state()
     
     def initialise_new_entry(self):
         """Save current entry (without extracting frame) and prepare for next entry"""
@@ -2315,24 +2863,34 @@ class VideoPlayer(QMainWindow):
             self.auto_load_base_data_from_csv()
         
         # ALWAYS calculate the next drop number using the simple logic
-        # (Compare current POINT_ID with last entry's POINT_ID)
+        # based on existing entries for this current video
         self.drop_counter = self.get_next_drop_number_for_point()
-        
-        # Save current data entry without extracting frame
-        drop_id = f"drop{self.drop_counter}"
-        
-        # Use video filename as base for still filename (even though no still is extracted)
-        video_name = os.path.splitext(os.path.basename(self.video_path))[0]
-        still_filename = f"{video_name}_drop{self.drop_counter}.jpg"  # Placeholder - no actual file created
-        
-        # Auto-save data entry
-        self.auto_save_data_entry(drop_id, still_filename)
-        
-        self.drop_counter += 1
+
+        current_data_row = self.get_current_data_row()
+        has_data = not self.is_entry_blank(current_data_row)
+        is_existing_entry_selected = 0 <= self.current_entry_index < len(self.all_data_entries)
+        should_save_current = has_data and (self.unsaved_changes or not is_existing_entry_selected)
+
+        saved_entry = False
+        if should_save_current:
+            drop_id = f"drop{self.drop_counter}"
+            still_filename, _ = self._generate_queue_still_filename(drop_id)
+
+            save_ok = self.auto_save_data_entry(drop_id, still_filename)
+            if not save_ok:
+                return
+
+            saved_entry = True
+            self.drop_counter += 1
+        else:
+            # Initialize a fresh next entry without creating a duplicate saved row
+            if self.base_data:
+                self.populate_fields_from_base_data()
+            else:
+                self.clear_data_entry()
         
         # Update DROP_ID and FILENAME fields in the form to show the NEXT drop information
-        next_drop_id = f"drop{self.drop_counter}"
-        next_filename = f"{video_name}_drop{self.drop_counter}.jpg"
+        next_filename, next_drop_id = self._generate_queue_still_filename(f"drop{self.drop_counter}")
         
         if 'DROP_ID' in self.data_fields:
             widget = self.data_fields['DROP_ID']
@@ -2358,10 +2916,18 @@ class VideoPlayer(QMainWindow):
         self.queue_label.setText(
             f"{self.current_video_index + 1}/{len(self.video_queue)}: Drop {self.drop_counter}"
         )
+
+        # Mark UI state as a new (unsaved) entry after initialization
+        self.current_entry_index = len(self.all_data_entries)
+        self.unsaved_changes = False
+        self.update_navigation_buttons()
         
         # Show success message
-        msg = f"Entry initialized with DROP_ID: {drop_id}\n\n"
-        msg += "Data saved (no frame extracted).\n\n"
+        msg = f"Entry initialized with DROP_ID: {next_drop_id}\n\n"
+        if saved_entry:
+            msg += "Data saved (no frame extracted).\n\n"
+        else:
+            msg += "No new row was saved (current entry unchanged).\n\n"
         msg += "Form is now ready for your next observation."
         QMessageBox.information(self, "Success", msg)
     
@@ -2376,24 +2942,22 @@ class VideoPlayer(QMainWindow):
             return
         
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                reader = csv.DictReader(f)
-                rows = list(reader)
+            rows = self._load_base_csv_rows_uppercase_headers(file_path)
                 
-                if not rows:
-                    QMessageBox.warning(self, "No Data", "The CSV file contains no data rows.")
-                    return
+            if not rows:
+                QMessageBox.warning(self, "No Data", "The CSV file contains no data rows.")
+                return
                 
-                # Store all rows for matching later
-                self.base_data_csv = rows
-                self.base_data_csv_path = file_path  # Store the path
+            # Store all rows for matching later
+            self.base_data_csv = rows
+            self.base_data_csv_path = file_path  # Store the path
                 
-                QMessageBox.information(
-                    self, "Success",
-                    f"Loaded {len(rows)} rows from:\n{file_path}\n\n"
-                    f"When you extract stills, the form will auto-populate\n"
-                    f"with data matching the video filename."
-                )
+            QMessageBox.information(
+                self, "Success",
+                f"Loaded {len(rows)} rows from:\n{file_path}\n\n"
+                f"When you extract stills, the form will auto-populate\n"
+                f"with data matching the video filename."
+            )
         except Exception as e:
             QMessageBox.critical(
                 self, "Error",
@@ -2433,6 +2997,8 @@ class VideoPlayer(QMainWindow):
         # Unblock signals
         for widget in self.data_fields.values():
             widget.blockSignals(False)
+
+        self.update_extract_button_state()
         
         # Set DROP_ID and FILENAME for next extraction
         self.update_drop_fields_for_next()
@@ -2449,7 +3015,7 @@ class VideoPlayer(QMainWindow):
         # Search through preloaded CSV rows
         for row in self.base_data_csv:
             # Check if VIDEO_FILENAME matches (with or without extension)
-            video_fn = row.get('VIDEO_FILENAME', '')
+            video_fn = self._get_video_filename_from_row(row)
             if video_fn:
                 # Remove extension for comparison
                 csv_video_name = os.path.splitext(video_fn)[0]
@@ -2461,45 +3027,226 @@ class VideoPlayer(QMainWindow):
     
     def get_next_drop_number_for_point(self):
         """
-        Get the next drop number using simple logic:
-        - If no previous entries OR POINT_ID changed: drop1
-        - If POINT_ID same as previous entry: increment drop number
+        Get next drop number for the CURRENT video based on existing saved entries.
+        - No prior entries for this video -> drop1
+        - Prior entries found (e.g., drop1) -> next drop increments (drop2)
         """
-        # Get current POINT_ID from base_data
-        current_point_id = self.base_data.get('POINT_ID', '') if self.base_data else ''
-        
         print(f"  get_next_drop_number_for_point called")
-        print(f"    Current POINT_ID: '{current_point_id}'")
-        print(f"    Total entries: {len(self.all_data_entries)}")
-        
-        # If no entries exist, start at drop1
-        if not self.all_data_entries or len(self.all_data_entries) == 0:
-            print(f"    No previous entries → drop1")
+        if not self.video_path:
+            print("    No current video path → drop1")
             return 1
-        
-        # Get the last entry
-        last_entry = self.all_data_entries[-1]
-        last_point_id = last_entry.get('POINT_ID', '')
-        last_drop_id = last_entry.get('DROP_ID', '')
-        
-        print(f"    Last entry: POINT_ID='{last_point_id}', DROP_ID='{last_drop_id}'")
-        
-        # Extract drop number from last entry
-        last_drop_num = 1
-        if last_drop_id and last_drop_id.startswith('drop'):
-            try:
-                last_drop_num = int(last_drop_id.replace('drop', ''))
-            except:
-                last_drop_num = 1
-        
-        # Simple logic: Same POINT_ID = increment, Different POINT_ID = reset to 1
-        if current_point_id == last_point_id:
-            next_drop = last_drop_num + 1
-            print(f"    Same POINT_ID → increment to drop{next_drop}")
-            return next_drop
+
+        current_video_name = os.path.splitext(os.path.basename(self.video_path))[0].lower()
+        print(f"    Current video: '{current_video_name}'")
+
+        # Prefer currently loaded in-memory entries (reflects live edits/deletes).
+        # Only fall back to CSV when no entries are loaded in memory.
+        if self.all_data_entries:
+            entries_to_scan = list(self.all_data_entries)
+            print(f"    Using in-memory entries for drop lookup: {len(entries_to_scan)}")
         else:
-            print(f"    Different POINT_ID → reset to drop1")
-            return 1
+            entries_to_scan = []
+            output_file = os.path.join(self.data_dir, "data_entries.csv")
+            if os.path.exists(output_file):
+                try:
+                    with open(output_file, 'r', encoding='utf-8') as f:
+                        reader = csv.DictReader(f)
+                        entries_to_scan = list(reader)
+                    print(f"    Using CSV entries for drop lookup: {len(entries_to_scan)}")
+                except Exception as e:
+                    print(f"    Warning: failed reading data_entries.csv for drop lookup: {str(e)}")
+
+        max_drop_for_video = 0
+
+        for entry in entries_to_scan:
+            if not isinstance(entry, dict):
+                continue
+
+            belongs_to_current_video = False
+
+            # Prefer explicit video filename fields if present
+            entry_video = self._get_video_filename_from_row(entry)
+            if entry_video:
+                entry_video_name = os.path.splitext(os.path.basename(str(entry_video).strip()))[0].lower()
+                belongs_to_current_video = (entry_video_name == current_video_name)
+
+            # Fallback: derive video name from still FILENAME pattern <video>_dropN.jpg
+            if not belongs_to_current_video:
+                still_name = str(entry.get('FILENAME', '') or '').strip()
+                still_base = os.path.splitext(os.path.basename(still_name))[0]
+                match_video = re.match(r'(.+)_drop\d+$', still_base, re.IGNORECASE)
+                if match_video:
+                    belongs_to_current_video = (match_video.group(1).lower() == current_video_name)
+
+            if not belongs_to_current_video:
+                continue
+
+            # Read drop number from DROP_ID or filename suffix
+            drop_number = None
+            drop_id = str(entry.get('DROP_ID', '') or '').strip()
+            match_drop_id = re.search(r'drop\s*(\d+)', drop_id, re.IGNORECASE)
+            if match_drop_id:
+                drop_number = int(match_drop_id.group(1))
+            else:
+                still_name = str(entry.get('FILENAME', '') or '').strip()
+                match_filename = re.search(r'_drop(\d+)(?:\.[A-Za-z0-9]+)?$', os.path.basename(still_name), re.IGNORECASE)
+                if match_filename:
+                    drop_number = int(match_filename.group(1))
+
+            if drop_number is not None and drop_number > max_drop_for_video:
+                max_drop_for_video = drop_number
+
+        next_drop = max_drop_for_video + 1 if max_drop_for_video > 0 else 1
+        print(f"    Found max drop for current video: {max_drop_for_video} → next drop{next_drop}")
+        return next_drop
+
+    def _get_current_drop_id_text(self):
+        """Get current DROP_ID field value (e.g., drop3) if available."""
+        if 'DROP_ID' not in self.data_fields:
+            return ''
+
+        widget = self.data_fields['DROP_ID']
+        if isinstance(widget, QTextEdit):
+            return widget.toPlainText().strip()
+        return widget.text().strip()
+
+    def _generate_queue_still_filename(self, drop_id=''):
+        """Generate consistent queue still filename: <video_name>_dropN.jpg."""
+        video_name = os.path.splitext(os.path.basename(self.video_path))[0]
+        drop_text = (drop_id or '').strip()
+        match = re.search(r'drop\s*(\d+)', drop_text, re.IGNORECASE)
+
+        if match:
+            drop_number = int(match.group(1))
+        else:
+            drop_number = max(1, int(self.drop_counter))
+
+        return f"{video_name}_drop{drop_number}.jpg", f"drop{drop_number}"
+
+    def _count_current_video_entries_and_stills(self):
+        """Return (entry_count, still_count) for current video based on drop filename pattern."""
+        if not self.video_path:
+            return 0, 0
+
+        video_name = os.path.splitext(os.path.basename(self.video_path))[0]
+        still_pattern = re.compile(r'^' + re.escape(video_name) + r'_drop\d+\.(jpg|jpeg|png)$', re.IGNORECASE)
+
+        still_count = 0
+        if os.path.exists(self.drop_stills_dir):
+            for filename in os.listdir(self.drop_stills_dir):
+                if still_pattern.match(filename):
+                    still_count += 1
+
+        entry_count = 0
+        output_file = os.path.join(self.data_dir, "data_entries.csv")
+        if os.path.exists(output_file):
+            try:
+                with open(output_file, 'r', encoding='utf-8') as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        filename = os.path.basename(str(row.get('FILENAME', '') or '').strip())
+                        if still_pattern.match(filename):
+                            entry_count += 1
+            except Exception:
+                pass
+
+        return entry_count, still_count
+
+    def validate_current_video_entry_still_match(self, show_message=True):
+        """Ensure current video has matching counts between data entries and extracted still files."""
+        if not self.video_queue or not self.video_path or self.video_path not in self.video_queue:
+            return True
+
+        entry_count, still_count = self._count_current_video_entries_and_stills()
+        if entry_count == still_count:
+            return True
+
+        if show_message:
+            QMessageBox.warning(
+                self,
+                "Entry/Still Count Mismatch",
+                f"Current video has mismatched outputs:\n\n"
+                f"• Data entries: {entry_count}\n"
+                f"• Extracted stills: {still_count}\n\n"
+                f"Please resolve this mismatch before moving to another video."
+            )
+        return False
+
+    def _split_datetime_parts(self, datetime_text):
+        """Return (year, date, time) parsed from a datetime-like string."""
+        text = str(datetime_text or '').strip()
+        if not text:
+            return '', '', ''
+
+        normalized = text.replace('T', ' ')
+
+        # Try common explicit formats first
+        common_formats = [
+            "%d/%m/%Y %H:%M:%S",
+            "%d/%m/%Y %H:%M",
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%d %H:%M",
+            "%d-%m-%Y %H:%M:%S",
+            "%d-%m-%Y %H:%M",
+            "%Y/%m/%d %H:%M:%S",
+            "%Y/%m/%d %H:%M",
+        ]
+        for fmt in common_formats:
+            try:
+                parsed = datetime.strptime(normalized, fmt)
+                return str(parsed.year), parsed.strftime("%d/%m/%Y"), parsed.strftime("%H:%M")
+            except Exception:
+                pass
+
+        # Fallback: split date and time tokens directly
+        parts = normalized.split()
+        if not parts:
+            return '', '', ''
+
+        date_part = parts[0]
+        time_part = parts[1] if len(parts) > 1 else ''
+
+        if time_part.endswith('Z'):
+            time_part = time_part[:-1]
+        timezone_split = re.split(r'([+-]\d{2}:?\d{2})$', time_part)
+        if timezone_split and timezone_split[0]:
+            time_part = timezone_split[0]
+
+        # Normalize parsed time to HH:MM when possible
+        normalized_time = time_part
+        for time_fmt in ["%H:%M:%S", "%H:%M"]:
+            try:
+                parsed_time = datetime.strptime(time_part, time_fmt)
+                normalized_time = parsed_time.strftime("%H:%M")
+                break
+            except Exception:
+                pass
+
+        year = ''
+        if '/' in date_part:
+            date_tokens = date_part.split('/')
+        elif '-' in date_part:
+            date_tokens = date_part.split('-')
+        else:
+            date_tokens = []
+
+        if len(date_tokens) == 3:
+            if len(date_tokens[0]) == 4 and date_tokens[0].isdigit():
+                year = date_tokens[0]
+            elif len(date_tokens[2]) == 4 and date_tokens[2].isdigit():
+                year = date_tokens[2]
+
+        # Normalize parsed date to DD/MM/YYYY when possible
+        normalized_date = date_part
+        for date_fmt in ["%d/%m/%Y", "%Y/%m/%d", "%d-%m-%Y", "%Y-%m-%d"]:
+            try:
+                parsed_date = datetime.strptime(date_part, date_fmt)
+                normalized_date = parsed_date.strftime("%d/%m/%Y")
+                break
+            except Exception:
+                pass
+
+        return year, normalized_date, normalized_time
     
     def update_drop_fields_for_next(self):
         """Update DROP_ID and FILENAME fields for the next drop"""
@@ -2518,46 +3265,37 @@ class VideoPlayer(QMainWindow):
         
         # Auto-fill YEAR, DATE, TIME from base data if available
         if self.base_data:
-            # Try to parse VIDEO_TIMESTAMP field (format: DD/MM/YYYY HH:MM or similar)
+            base_datetime = self.base_data.get('DATE_TIME', '')
             video_timestamp = self.base_data.get('VIDEO_TIMESTAMP', '')
-            if video_timestamp:
-                try:
-                    # Parse formats like "27/11/2025 9:22" or "27/11/2025 9:22:00"
-                    parts = video_timestamp.strip().split()
-                    if len(parts) >= 2:
-                        date_part = parts[0]  # e.g., "27/11/2025"
-                        time_part = parts[1]  # e.g., "9:22"
-                        
-                        # Extract year from date
-                        date_components = date_part.split('/')
-                        if len(date_components) == 3:
-                            day, month, year = date_components
-                            if 'YEAR' in self.data_fields:
-                                self.data_fields['YEAR'].setText(year)
-                            if 'DATE' in self.data_fields:
-                                self.data_fields['DATE'].setText(date_part)
-                        
-                        # Set time
-                        if 'TIME' in self.data_fields:
-                            self.data_fields['TIME'].setText(time_part)
-                except Exception as e:
-                    pass  # If parsing fails, just skip
-            
-            # Fallback to direct YEAR, DATE, TIME fields if VIDEO_TIMESTAMP not available
-            if not video_timestamp:
-                if self.base_data.get('YEAR') and 'YEAR' in self.data_fields:
-                    self.data_fields['YEAR'].setText(self.base_data['YEAR'])
-                if self.base_data.get('DATE') and 'DATE' in self.data_fields:
-                    self.data_fields['DATE'].setText(self.base_data['DATE'])
-                if self.base_data.get('TIME') and 'TIME' in self.data_fields:
-                    self.data_fields['TIME'].setText(self.base_data['TIME'])
-            
-            # Set DATE_TIME if it exists in base_data
-            if self.base_data.get('DATE_TIME') and 'DATE_TIME' in self.data_fields:
-                self.data_fields['DATE_TIME'].setText(self.base_data['DATE_TIME'])
-            # Or construct from VIDEO_TIMESTAMP if DATE_TIME field exists
-            elif video_timestamp and 'DATE_TIME' in self.data_fields:
-                self.data_fields['DATE_TIME'].setText(video_timestamp)
+            datetime_source = base_datetime or video_timestamp
+
+            parsed_year = ''
+            parsed_date = ''
+            parsed_time = ''
+            if datetime_source:
+                parsed_year, parsed_date, parsed_time = self._split_datetime_parts(datetime_source)
+
+            # Use parsed values first
+            if parsed_year and 'YEAR' in self.data_fields:
+                self.data_fields['YEAR'].setText(parsed_year)
+            if parsed_date and 'DATE' in self.data_fields:
+                self.data_fields['DATE'].setText(parsed_date)
+            if parsed_time and 'TIME' in self.data_fields:
+                self.data_fields['TIME'].setText(parsed_time)
+
+            # Fallback to direct YEAR/DATE/TIME columns for any missing parsed pieces
+            if not parsed_year and self.base_data.get('YEAR') and 'YEAR' in self.data_fields:
+                self.data_fields['YEAR'].setText(self.base_data['YEAR'])
+            if not parsed_date and self.base_data.get('DATE') and 'DATE' in self.data_fields:
+                self.data_fields['DATE'].setText(self.base_data['DATE'])
+            if not parsed_time and self.base_data.get('TIME') and 'TIME' in self.data_fields:
+                self.data_fields['TIME'].setText(self.base_data['TIME'])
+
+            # Set DATE_TIME field when available
+            if base_datetime and 'DATE_TIME' in self.data_fields:
+                self.data_fields['DATE_TIME'].setText(base_datetime)
+            elif datetime_source and 'DATE_TIME' in self.data_fields:
+                self.data_fields['DATE_TIME'].setText(datetime_source)
         
         # Unblock signals
         for widget in self.data_fields.values():
@@ -2569,11 +3307,50 @@ class VideoPlayer(QMainWindow):
             self.mark_entry_changed()
             self.check_autofill_rules(field_name)
             self.check_calculated_rules(field_name)
+            self.update_extract_button_state()
         return handler
     
     def mark_entry_changed(self):
         """Mark that the current entry has been modified"""
         self.unsaved_changes = True
+
+    def get_current_data_row(self):
+        """Collect current form data into a dictionary."""
+        data_row = {}
+        for field_name, widget in self.data_fields.items():
+            if isinstance(widget, QTextEdit):
+                data_row[field_name] = widget.toPlainText().strip()
+            else:
+                data_row[field_name] = widget.text().strip()
+
+        # Keep DATE_TIME behavior consistent with save/extract workflows
+        if data_row.get('DATE') and data_row.get('TIME'):
+            data_row['DATE_TIME'] = f"{data_row['DATE']} {data_row['TIME']}"
+        elif 'DATE_TIME' in data_row and not data_row.get('DATE_TIME'):
+            data_row['DATE_TIME'] = ''
+
+        return data_row
+
+    def can_extract_current_entry(self):
+        """Return (can_extract, validation_errors, is_blank) for current form state."""
+        if not self.cap:
+            return False, [], True
+
+        data_row = self.get_current_data_row()
+        is_blank = self.is_entry_blank(data_row)
+        if is_blank:
+            return False, [], True
+
+        is_valid, errors = self.validate_data_entry(data_row)
+        if not is_valid:
+            return False, errors, False
+
+        return True, [], False
+
+    def update_extract_button_state(self):
+        """Enable Extract only when a video is loaded and entry is non-blank + validation-clean."""
+        can_extract, _, _ = self.can_extract_current_entry()
+        self.extract_btn.setEnabled(can_extract)
     
     def load_all_entries(self):
         """Load all data entries from CSV file"""
@@ -2604,9 +3381,8 @@ class VideoPlayer(QMainWindow):
             video_filename = None
             
             # Try to get video filename from various fields
-            if 'VIDEO_FILENAME' in last_entry:
-                video_filename = last_entry['VIDEO_FILENAME']
-            elif 'FILENAME' in last_entry:
+            video_filename = self._get_video_filename_from_row(last_entry)
+            if not video_filename and 'FILENAME' in last_entry:
                 # Extract video name from still filename (e.g., "video_drop3.jpg" -> "video.mp4")
                 filename = last_entry['FILENAME']
                 if '_drop' in filename:
@@ -2690,18 +3466,9 @@ class VideoPlayer(QMainWindow):
         for widget in self.data_fields.values():
             widget.blockSignals(False)
         
-        # Update drop_counter based on the loaded entry's DROP_ID
-        # This ensures the next extraction uses the correct drop number
-        drop_id = entry.get('DROP_ID', '')
-        if drop_id:
-            # Extract number from DROP_ID (e.g., "drop3" -> 3)
-            import re
-            match = re.search(r'drop(\d+)', drop_id, re.IGNORECASE)
-            if match:
-                current_drop_num = int(match.group(1))
-                # Set counter to next drop number
-                self.drop_counter = current_drop_num + 1
-                print(f"  Loaded entry with DROP_ID={drop_id}, set drop_counter={self.drop_counter} for next extraction")
+        # Always recompute next drop from all existing entries for current video
+        self.drop_counter = self.get_next_drop_number_for_point()
+        print(f"  Recomputed drop_counter={self.drop_counter} for current video")
         
         self.unsaved_changes = False
         self.update_navigation_buttons()
@@ -2751,6 +3518,10 @@ class VideoPlayer(QMainWindow):
         # Update DATE_TIME if needed
         if data_row.get('DATE') and data_row.get('TIME'):
             data_row['DATE_TIME'] = f"{data_row['DATE']} {data_row['TIME']}"
+
+        normalized = self._normalize_percentage_fields_in_row(data_row)
+        if normalized:
+            self._update_widgets_from_data_row(data_row)
         
         # Validate if rules exist
         if self.validation_rules:
@@ -2995,7 +3766,10 @@ class VideoPlayer(QMainWindow):
         QMessageBox.information(self, "Observation Fields Copied", msg)
     
     def auto_save_data_entry(self, drop_id, still_filename):
-        """Automatically save data entry when extracting a still"""
+        """Automatically save data entry when extracting a still.
+
+        Returns True if saved successfully, else False.
+        """
         # Collect data from all fields
         data_row = {}
         for field_name, widget in self.data_fields.items():
@@ -3013,23 +3787,23 @@ class VideoPlayer(QMainWindow):
             data_row['DATE_TIME'] = f"{data_row['DATE']} {data_row['TIME']}"
         else:
             data_row['DATE_TIME'] = ''
+
+        normalized = self._normalize_percentage_fields_in_row(data_row)
+        if normalized:
+            self._update_widgets_from_data_row(data_row)
         
-        # Validate if rules exist and BLOCK if validation fails
-        # Skip validation if this is the first extraction and fields are mostly empty
-        skip_validation = self.is_mostly_empty_entry(data_row)
-        
-        if self.validation_rules and not skip_validation:
-            is_valid, errors = self.validate_data_entry(data_row)
-            
-            if not is_valid:
-                self.highlight_invalid_fields(errors)
-                
-                # BLOCK saving and show error
-                error_msg = "❌ Validation Failed - Cannot Extract Frame\n\n" + "\n".join([f"• {error}" for error in errors])
-                error_msg += "\n\nPlease fix the highlighted fields before extracting."
-                
-                QMessageBox.critical(self, "Validation Failed", error_msg)
-                return  # Block extraction/saving completely
+        # Validate and BLOCK if validation fails
+        is_valid, errors = self.validate_data_entry(data_row)
+
+        if not is_valid:
+            self.highlight_invalid_fields(errors)
+
+            # BLOCK saving and show error
+            error_msg = "❌ Validation Failed - Cannot Extract Frame\n\n" + "\n".join([f"• {error}" for error in errors])
+            error_msg += "\n\nPlease fix the highlighted fields before extracting."
+
+            QMessageBox.critical(self, "Validation Failed", error_msg)
+            return False  # Block extraction/saving completely
         
         # Clear any previous highlights
         self.highlight_invalid_fields([])
@@ -3073,11 +3847,13 @@ class VideoPlayer(QMainWindow):
             
             # Update navigation display
             self.update_navigation_buttons()
+            return True
         except Exception as e:
             QMessageBox.critical(
                 self, "Error",
                 f"Failed to auto-save data entry:\n{str(e)}"
             )
+            return False
     
     def delete_current_entry(self):
         """Delete the currently displayed entry"""
@@ -3136,44 +3912,583 @@ class VideoPlayer(QMainWindow):
                 self, "Error",
                 f"Failed to delete entry:\n{str(e)}"
             )
-    
-    def reset_drop_count(self):
-        """Reset the drop counter for the current video"""
-        if not self.video_path:
+
+    def _is_na_value(self, value):
+        """Check if a value should be treated as NA/missing."""
+        if value is None:
+            return True
+        value_str = str(value).strip()
+        if value_str == '':
+            return True
+        return value_str.upper() in {'NA', 'N/A', 'NONE', 'NULL', 'NAN'}
+
+    def _try_parse_float(self, value):
+        """Try to parse a numeric value, returning None if not numeric/valid."""
+        if self._is_na_value(value):
+            return None
+        try:
+            return float(str(value).strip())
+        except Exception:
+            return None
+
+    def _first_non_na_value(self, values):
+        """Return first non-NA value from list, else empty string."""
+        for value in values:
+            if not self._is_na_value(value):
+                return str(value).strip()
+        return ''
+
+    def _is_binary_field_values(self, values):
+        """Check if values are a binary 0/1 field (ignoring NA)."""
+        numeric_values = []
+        for value in values:
+            parsed = self._try_parse_float(value)
+            if parsed is None:
+                continue
+            numeric_values.append(parsed)
+
+        if not numeric_values:
+            return False
+
+        for number in numeric_values:
+            if number not in (0.0, 1.0):
+                return False
+
+        return True
+
+    def _aggregate_tokens_by_frequency(self, values, delimiter='/'):
+        """Aggregate text tokens by frequency (R-style split/count/order/collapse)."""
+        token_stats = {}
+        order_counter = 0
+
+        for value in values:
+            if self._is_na_value(value):
+                continue
+
+            tokens = str(value).split(delimiter)
+            for token in tokens:
+                token_clean = token.strip()
+                if not token_clean:
+                    continue
+
+                key = token_clean.lower()
+                if key not in token_stats:
+                    token_stats[key] = {
+                        'label': token_clean,
+                        'count': 0,
+                        'first_order': order_counter
+                    }
+                    order_counter += 1
+
+                token_stats[key]['count'] += 1
+
+        if not token_stats:
+            return ''
+
+        ordered_tokens = sorted(
+            token_stats.values(),
+            key=lambda item: (-item['count'], item['first_order'])
+        )
+
+        return delimiter.join([item['label'] for item in ordered_tokens])
+
+    def _aggregate_mean_and_se(self, values):
+        """Return (mean_str, se_str) for numeric values with NA omitted."""
+        numeric_values = [self._try_parse_float(value) for value in values]
+        numeric_values = [number for number in numeric_values if number is not None]
+
+        if not numeric_values:
+            return '', ''
+
+        mean_value = sum(numeric_values) / len(numeric_values)
+        mean_str = f"{mean_value:.6f}".rstrip('0').rstrip('.')
+
+        if len(numeric_values) < 2:
+            return mean_str, ''
+
+        variance = sum((number - mean_value) ** 2 for number in numeric_values) / (len(numeric_values) - 1)
+        std_dev = math.sqrt(variance)
+        std_error = std_dev / math.sqrt(len(numeric_values))
+        se_str = f"{std_error:.6f}".rstrip('0').rstrip('.')
+
+        return mean_str, se_str
+
+    def _compare_values_with_condition(self, current_value, expected_value, condition='equals'):
+        """Compare two values using a rule condition operator."""
+        condition_map = {
+            'equal': 'equals',
+            'equals': 'equals',
+            'not_equal': 'not_equals',
+            'not_equals': 'not_equals',
+            'greater_than': 'greater',
+            'greater': 'greater',
+            'greater_equal': 'greater_equal',
+            'less_than': 'less',
+            'less': 'less',
+            'less_equal': 'less_equal',
+        }
+        normalized_condition = condition_map.get(str(condition or 'equals').strip(), 'equals')
+
+        current_num = self._try_parse_float(current_value)
+        expected_num = self._try_parse_float(expected_value)
+
+        if current_num is not None and expected_num is not None:
+            if normalized_condition == 'equals':
+                return current_num == expected_num
+            if normalized_condition == 'not_equals':
+                return current_num != expected_num
+            if normalized_condition == 'greater':
+                return current_num > expected_num
+            if normalized_condition == 'greater_equal':
+                return current_num >= expected_num
+            if normalized_condition == 'less':
+                return current_num < expected_num
+            if normalized_condition == 'less_equal':
+                return current_num <= expected_num
+            return False
+
+        current_text = str(current_value or '').strip()
+        expected_text = str(expected_value or '').strip()
+
+        if normalized_condition == 'equals':
+            return current_text == expected_text
+        if normalized_condition == 'not_equals':
+            return current_text != expected_text
+
+        return False
+
+    def _conditional_rule_applies(self, data_row, rule):
+        """Return True when a conditional/conditional_sum rule applies to a data row."""
+        if_field = rule.get('if_field')
+        if not if_field:
+            return False
+
+        current_value = str(data_row.get(if_field, '') or '').strip()
+        target_value = str(rule.get('if_value', '') or '').strip()
+        condition = rule.get('if_condition', 'equals')
+        return self._compare_values_with_condition(current_value, target_value, condition)
+
+    def _update_widgets_from_data_row(self, data_row):
+        """Push updated row values back into visible form widgets without firing signals."""
+        if not self.data_fields:
+            return
+
+        for widget in self.data_fields.values():
+            widget.blockSignals(True)
+
+        try:
+            for field_name, widget in self.data_fields.items():
+                if field_name not in data_row:
+                    continue
+
+                value = str(data_row.get(field_name, '') or '')
+                if isinstance(widget, QTextEdit):
+                    widget.setPlainText(value)
+                else:
+                    widget.setText(value)
+        finally:
+            for widget in self.data_fields.values():
+                widget.blockSignals(False)
+
+    def _apply_autofill_rules_to_row(self, data_row):
+        """Apply matching autofill rules directly to a data row."""
+        if not isinstance(data_row, dict) or not self.validation_rules:
+            return False
+
+        changed = False
+        for rule in self.validation_rules:
+            if rule.get('type') != 'autofill':
+                continue
+
+            trigger_field = rule.get('trigger_field')
+            if not trigger_field or trigger_field not in data_row:
+                continue
+
+            trigger_value = str(rule.get('trigger_value', '') or '').strip()
+            current_value = str(data_row.get(trigger_field, '') or '').strip()
+            if current_value != trigger_value:
+                continue
+
+            actions = rule.get('actions', {})
+            if not isinstance(actions, dict):
+                continue
+
+            for field_name, value in actions.items():
+                if field_name not in data_row:
+                    continue
+                old_value = str(data_row.get(field_name, '') or '').strip()
+                new_value = str(value).strip()
+                if old_value != new_value:
+                    data_row[field_name] = new_value
+                    changed = True
+
+        return changed
+
+    def _normalize_percentage_fields_in_row(self, data_row):
+        """Normalize percentage subgroup fields using conditional_sum rules.
+
+        Template-driven behavior:
+        - Apply matching autofill rules first (e.g., parent cover 0/NA -> child fields NA).
+        - For conditional_sum groups with blank_as_zero=True, if condition applies and any value
+          exists in the subgroup, blanks/NA are converted to 0 so means aggregate correctly.
+        - For conditional_sum groups gated by "> 0" or ">= 0" style checks, if the condition
+          does not apply, subgroup fields are forced to NA.
+        """
+        if not isinstance(data_row, dict) or not self.validation_rules:
+            return False
+
+        changed = self._apply_autofill_rules_to_row(data_row)
+
+        def set_value(field_name, value):
+            nonlocal changed
+            if field_name not in data_row:
+                return
+            old_value = str(data_row.get(field_name, '') or '').strip()
+            new_value = str(value).strip()
+            if old_value != new_value:
+                data_row[field_name] = new_value
+                changed = True
+
+        for rule in self.validation_rules:
+            if rule.get('type') != 'conditional_sum':
+                continue
+
+            fields = [field for field in rule.get('fields', []) if field in data_row]
+            if not fields:
+                continue
+
+            condition_applies = self._conditional_rule_applies(data_row, rule)
+
+            blank_as_zero = bool(rule.get('blank_as_zero', False))
+
+            if blank_as_zero and condition_applies:
+                has_any_value = any(not self._is_na_value(data_row.get(field, '')) for field in fields)
+                if has_any_value:
+                    for field in fields:
+                        if self._is_na_value(data_row.get(field, '')):
+                            set_value(field, '0')
+
+            if_condition = str(rule.get('if_condition', 'equals') or '').strip()
+            if_value_num = self._try_parse_float(rule.get('if_value', ''))
+            if (
+                if_condition in {'greater', 'greater_equal'}
+                and if_value_num is not None
+                and abs(if_value_num) < 1e-9
+                and not condition_applies
+            ):
+                for field in fields:
+                    set_value(field, 'NA')
+
+        return changed
+
+    def _infer_field_aggregation_method(self, field_name, values, metadata_fields_upper):
+        """Infer default aggregation method for a field."""
+        field_upper = str(field_name).strip().upper()
+
+        if field_upper == 'DROP_ID':
+            return 'exclude'
+
+        if field_upper in metadata_fields_upper:
+            return 'first_non_na'
+
+        # Substrate-like categorical text fields often contain slash-delimited classes.
+        if 'SUBSTRATE' in field_upper:
+            return 'token_freq_slash'
+
+        if self._is_binary_field_values(values):
+            return 'binary_any'
+
+        numeric_values = [self._try_parse_float(value) for value in values]
+        numeric_values = [number for number in numeric_values if number is not None]
+        if numeric_values:
+            return 'mean'
+
+        return 'first_non_na'
+
+    def _infer_aggregation_methods(self, fieldnames_out, rows, metadata_fields_upper):
+        """Infer aggregation methods for all output fields."""
+        inferred = {}
+        for field_name in fieldnames_out:
+            values = [row.get(field_name, '') for row in rows]
+            inferred[field_name] = self._infer_field_aggregation_method(field_name, values, metadata_fields_upper)
+        return inferred
+
+    def _aggregate_field_values(self, field_name, values, metadata_fields_upper, method_code='auto'):
+        """Aggregate values for one field based on explicit/auto method selection."""
+        if method_code == 'exclude':
+            return ''
+
+        if method_code == 'auto':
+            method_code = self._infer_field_aggregation_method(field_name, values, metadata_fields_upper)
+
+        if method_code == 'first_non_na':
+            return self._first_non_na_value(values)
+
+        if method_code == 'binary_any':
+            numeric_values = [self._try_parse_float(value) for value in values]
+            numeric_values = [number for number in numeric_values if number is not None]
+            if not numeric_values:
+                return ''
+            return '1' if any(number == 1.0 for number in numeric_values) else '0'
+
+        if method_code == 'token_freq_slash':
+            return self._aggregate_tokens_by_frequency(values, delimiter='/')
+
+        if method_code == 'sum':
+            numeric_values = [self._try_parse_float(value) for value in values]
+            numeric_values = [number for number in numeric_values if number is not None]
+            if not numeric_values:
+                return ''
+            sum_value = sum(numeric_values)
+            return f"{sum_value:.6f}".rstrip('0').rstrip('.')
+
+        if method_code == 'mean_se':
+            mean_str, _ = self._aggregate_mean_and_se(values)
+            return mean_str
+
+        if method_code == 'mean':
+            numeric_values = [self._try_parse_float(value) for value in values]
+            numeric_values = [number for number in numeric_values if number is not None]
+            if not numeric_values:
+                if values and all(self._is_na_value(value) for value in values):
+                    return 'NA'
+                return ''
+            mean_value = sum(numeric_values) / len(numeric_values)
+            return f"{mean_value:.6f}".rstrip('0').rstrip('.')
+
+        return self._first_non_na_value(values)
+
+    def _build_shapefile_field_names(self, fieldnames):
+        """Build shapefile-safe field names (<=10 chars, unique)."""
+        used_names = set()
+        mapped_names = []
+
+        for field_name in fieldnames:
+            safe = re.sub(r'[^A-Za-z0-9_]', '_', str(field_name).upper())
+            if not safe:
+                safe = 'FIELD'
+            safe = safe[:10]
+
+            base_name = safe
+            suffix = 1
+            while safe in used_names:
+                suffix_text = str(suffix)
+                safe = (base_name[:10 - len(suffix_text)] + suffix_text)
+                suffix += 1
+
+            used_names.add(safe)
+            mapped_names.append(safe)
+
+        return mapped_names
+
+    def _write_aggregated_shapefile(self, aggregated_rows, fieldnames_out, shp_base_path):
+        """Write aggregated rows to a point shapefile using LAT/LON fields."""
+        try:
+            import shapefile
+        except Exception:
+            return False, 0, 0, "Shapefile export requires 'pyshp'. Install with: pip install pyshp"
+
+        lat_candidates = ['LATITUDE', 'LAT', 'Y']
+        lon_candidates = ['LONGITUDE', 'LON', 'LONG', 'X']
+
+        shp_field_names = self._build_shapefile_field_names(fieldnames_out)
+        writer = shapefile.Writer(shp_base_path, shapeType=shapefile.POINT)
+
+        for field_name, shp_field in zip(fieldnames_out, shp_field_names):
+            column_values = [row.get(field_name, '') for row in aggregated_rows]
+            non_na_values = [value for value in column_values if not self._is_na_value(value)]
+            numeric_values = [self._try_parse_float(value) for value in non_na_values]
+            numeric_values = [value for value in numeric_values if value is not None]
+
+            if non_na_values and len(numeric_values) == len(non_na_values):
+                writer.field(shp_field, 'F', size=18, decimal=6)
+            else:
+                writer.field(shp_field, 'C', size=254)
+
+        written_count = 0
+        skipped_count = 0
+
+        for row in aggregated_rows:
+            lat_value = self._get_row_value(row, lat_candidates)
+            lon_value = self._get_row_value(row, lon_candidates)
+            lat = self._try_parse_float(lat_value)
+            lon = self._try_parse_float(lon_value)
+
+            if lat is None or lon is None:
+                skipped_count += 1
+                continue
+
+            writer.point(lon, lat)
+
+            record_values = []
+            for field_name in fieldnames_out:
+                value = row.get(field_name, '')
+                if self._is_na_value(value):
+                    record_values.append('')
+                else:
+                    record_values.append(str(value))
+
+            writer.record(*record_values)
+            written_count += 1
+
+        writer.close()
+
+        prj_path = shp_base_path + '.prj'
+        with open(prj_path, 'w', encoding='utf-8') as prj_file:
+            prj_file.write('GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]]')
+
+        return True, written_count, skipped_count, ''
+
+    def _write_shapefile_field_mapping_csv(self, fieldnames_out, shp_base_path):
+        """Write CSV mapping of original field names to shapefile field names."""
+        shp_field_names = self._build_shapefile_field_names(fieldnames_out)
+        mapping_path = shp_base_path + '_field_mapping.csv'
+
+        with open(mapping_path, 'w', newline='', encoding='utf-8') as mapping_file:
+            writer = csv.DictWriter(mapping_file, fieldnames=['original_field', 'shapefile_field'])
+            writer.writeheader()
+            for original_name, shp_name in zip(fieldnames_out, shp_field_names):
+                writer.writerow({
+                    'original_field': original_name,
+                    'shapefile_field': shp_name
+                })
+
+        return mapping_path
+
+    def export_aggregated_data(self):
+        """Export Site/Point aggregated CSV and shapefile from data_entries.csv."""
+        output_file = os.path.join(self.data_dir, "data_entries.csv")
+
+        if not os.path.exists(output_file):
             QMessageBox.warning(
-                self, "No Video",
-                "No video is currently loaded. Load a video first."
+                self,
+                "No Data",
+                "No data entries file found. Save or extract entries first."
             )
             return
-        
-        # Ask for new drop number
-        current_count = self.drop_counter
-        video_name = os.path.basename(self.video_path)
-        
-        new_count, ok = QInputDialog.getInt(
-            self, "Reset Drop Count",
-            f"Current video: {video_name}\n\nCurrent drop count: {current_count}\n\nEnter new drop count:",
-            value=1, minValue=1, maxValue=9999
-        )
-        
-        if ok:
-            self.drop_counter = new_count
-            
-            # Update the queue label if using video queue
-            if self.video_queue and self.video_path in self.video_queue:
-                self.queue_label.setText(
-                    f"{self.current_video_index + 1}/{len(self.video_queue)}: Drop {self.drop_counter}"
+
+        try:
+            with open(output_file, 'r', encoding='utf-8') as csv_file:
+                reader = csv.DictReader(csv_file)
+                rows = list(reader)
+                source_fieldnames = reader.fieldnames if reader.fieldnames else []
+
+            for row in rows:
+                self._normalize_percentage_fields_in_row(row)
+
+            if not rows:
+                QMessageBox.warning(self, "No Data", "The data entries file is empty.")
+                return
+
+            grouped_rows = {}
+            skipped_no_id = 0
+            for row in rows:
+                site_id = self._get_point_identifier_from_row(row)
+                if self._is_na_value(site_id):
+                    skipped_no_id += 1
+                    continue
+                site_id = str(site_id).strip()
+                grouped_rows.setdefault(site_id, []).append(row)
+
+            if not grouped_rows:
+                QMessageBox.warning(
+                    self,
+                    "No Aggregatable Data",
+                    "No rows with a valid Site/Point ID were found in data_entries.csv."
                 )
-            
-            # Update DROP_ID field if data is loaded
-            if self.data_fields and 'DROP_ID' in self.data_fields:
-                self.data_fields['DROP_ID'].blockSignals(True)
-                self.data_fields['DROP_ID'].setText(f"drop{self.drop_counter}")
-                self.data_fields['DROP_ID'].blockSignals(False)
-            
-            QMessageBox.information(
-                self, "Success",
-                f"Drop count reset to {new_count} for current video.\n\nNext extracted frame will be: drop{new_count}"
+                return
+
+            metadata_fields_upper = {field.upper() for field in self.non_copyable_fields if field.upper() != 'DROP_ID'}
+            fieldnames_out = [field for field in source_fieldnames if field.upper() != 'DROP_ID']
+
+            default_methods = self._infer_aggregation_methods(fieldnames_out, rows, metadata_fields_upper)
+            method_dialog = AggregationConfigDialog(fieldnames_out, default_methods, self)
+            if method_dialog.exec_() != QDialog.Accepted:
+                return
+
+            selected_methods = method_dialog.get_methods()
+            selected_fieldnames = [
+                field_name for field_name in fieldnames_out
+                if selected_methods.get(field_name, 'auto') != 'exclude'
+            ]
+
+            if not selected_fieldnames:
+                QMessageBox.warning(
+                    self,
+                    "No Fields Selected",
+                    "All fields were set to 'Exclude field'. Please include at least one field for export."
+                )
+                return
+
+            export_fieldnames = []
+            for field_name in selected_fieldnames:
+                export_fieldnames.append(field_name)
+                if selected_methods.get(field_name, 'auto') == 'mean_se':
+                    export_fieldnames.append(f"{field_name}_SE")
+
+            aggregated_rows = []
+            for _, group in grouped_rows.items():
+                aggregated_row = {}
+                for field_name in selected_fieldnames:
+                    values = [row.get(field_name, '') for row in group]
+                    method_code = selected_methods.get(field_name, 'auto')
+                    if method_code == 'mean_se':
+                        mean_str, se_str = self._aggregate_mean_and_se(values)
+                        aggregated_row[field_name] = mean_str
+                        aggregated_row[f"{field_name}_SE"] = se_str
+                    else:
+                        aggregated_row[field_name] = self._aggregate_field_values(
+                            field_name,
+                            values,
+                            metadata_fields_upper,
+                            method_code=method_code
+                        )
+                aggregated_rows.append(aggregated_row)
+
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            csv_export_path = os.path.join(self.data_dir, f"data_entries_aggregated_{timestamp}.csv")
+
+            with open(csv_export_path, 'w', newline='', encoding='utf-8') as csv_file:
+                writer = csv.DictWriter(csv_file, fieldnames=export_fieldnames)
+                writer.writeheader()
+                writer.writerows(aggregated_rows)
+
+            shp_base_path = os.path.join(self.data_dir, f"data_entries_aggregated_{timestamp}")
+            shp_ok, shp_written, shp_skipped, shp_message = self._write_aggregated_shapefile(
+                aggregated_rows,
+                export_fieldnames,
+                shp_base_path
+            )
+
+            mapping_path = ''
+            if shp_ok:
+                mapping_path = self._write_shapefile_field_mapping_csv(export_fieldnames, shp_base_path)
+
+            message = (
+                f"Aggregated export completed.\n\n"
+                f"Input rows: {len(rows)}\n"
+                f"Groups (Site/Point ID): {len(aggregated_rows)}\n"
+                f"Rows skipped (missing Site/Point ID): {skipped_no_id}\n\n"
+                f"CSV export:\n{csv_export_path}\n"
+            )
+
+            if shp_ok:
+                message += (
+                    f"\nShapefile export:\n{shp_base_path}.shp\n"
+                    f"Features written: {shp_written}\n"
+                    f"Features skipped (invalid lat/lon): {shp_skipped}\n"
+                    f"Field mapping CSV:\n{mapping_path}"
+                )
+                QMessageBox.information(self, "Export Complete", message)
+            else:
+                message += f"\nShapefile export not created:\n{shp_message}"
+                QMessageBox.warning(self, "CSV Export Complete (Shapefile Skipped)", message)
+
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Export Error",
+                f"Failed to export aggregated data:\n{str(e)}"
             )
     
     def manage_validation_rules(self):
@@ -3206,16 +4521,16 @@ class VideoPlayer(QMainWindow):
         # base_data_csv contains dictionaries (from csv.DictReader)
         # Check if required fields exist
         first_row = self.base_data_csv[0]
-        if 'POINT_ID' not in first_row or 'LATITUDE' not in first_row or 'LONGITUDE' not in first_row:
+        if (not self._get_point_identifier_from_row(first_row)) or 'LATITUDE' not in first_row or 'LONGITUDE' not in first_row:
             QMessageBox.warning(
                 self, "Missing Fields",
-                "Required fields not found in base CSV.\n\nMake sure your CSV has POINT_ID, LATITUDE, and LONGITUDE columns."
+                "Required fields not found in base CSV.\n\nMake sure your CSV has SITE (or POINT_ID), LATITUDE, and LONGITUDE columns."
             )
             return
         
         # Collect unique points
         for row in self.base_data_csv:
-            point_id = row.get('POINT_ID', '')
+            point_id = self._get_point_identifier_from_row(row)
             lat_str = row.get('LATITUDE', '')
             lon_str = row.get('LONGITUDE', '')
             
@@ -3251,7 +4566,7 @@ class VideoPlayer(QMainWindow):
             return
         
         # Get current point ID
-        current_point_id = self.base_data.get('POINT_ID', '') if self.base_data else ''
+        current_point_id = self._get_point_identifier_from_row(self.base_data) if self.base_data else ''
         
         # Show map dialog
         dialog = MapDialog(points_data, current_point_id, self)
@@ -3259,8 +4574,11 @@ class VideoPlayer(QMainWindow):
     
     def load_validation_rules(self):
         """Load validation rules from JSON file"""
+        self.validation_rules = []
+
         if not self.template_path:
             print("No template path - skipping rule load")
+            self.update_extract_button_state()
             return
         
         # Generate rules filename based on template
@@ -3285,6 +4603,8 @@ class VideoPlayer(QMainWindow):
                 print(f"❌ Failed to load validation rules: {str(e)}")
         else:
             print(f"No rules file found at: {rules_path}")
+
+        self.update_extract_button_state()
     
     def save_validation_rules(self):
         """Save validation rules to JSON file"""
@@ -3361,6 +4681,15 @@ class VideoPlayer(QMainWindow):
         
         fill_percentage = non_empty_observation_fields / total_observation_fields
         return fill_percentage < 0.2
+
+    def is_entry_blank(self, data_row):
+        """Check if all non-metadata fields are empty."""
+        for field_name, value in data_row.items():
+            if field_name in self.non_copyable_fields:
+                continue
+            if value and str(value).strip():
+                return False
+        return True
     
     def validate_data_entry(self, data_row):
         """Validate a data entry against all rules. Returns (is_valid, errors_list)"""
@@ -3721,22 +5050,32 @@ class VideoPlayer(QMainWindow):
 
 <h2 style="color: #2196F3;">📖 Quick Start Guide</h2>
 
-<h3 style="color: #F44336;">⚠️ CRITICAL: Correct Workflow Order</h3>
-<p><b>Press 'S' to "Save and Snapshot"</b> - it saves current form data + captures image</p>
-<p><b style="color: #4CAF50;">✓ Correct:</b> Find frame → Fill data → Press 'S' (saves + extracts)</p>
-<p><b style="color: #F44336;">✗ Wrong:</b> Press 'S' first → Fill data (will save empty data!)</p>
+<h3 style="color: #F44336;">⚠️ Workflow Safeguards (Now Enforced)</h3>
+<p><b>Extract is disabled</b> until at least one non-metadata field is filled <b>and</b> validation rules pass.</p>
+<p><b>Press 'S'</b> to save data + extract still image when entry is valid.</p>
+<p><b>Save Entry</b> saves data only, then prompts whether to extract the current frame too.</p>
 
 <hr>
 
 <h3 style="color: #2196F3;">🎯 Step-by-Step Workflow</h3>
 <ol>
-  <li><b>Load Videos:</b> Click "Load Videos from drop_videos/"</li>
+    <li><b>Load Videos:</b> Click "Load drop_videos/" (or choose a custom folder)</li>
+    <li><b>Jump to Video:</b> Use "Go To..." to jump directly to any queued video</li>
   <li><b>Find Frame:</b> Use Play/Pause and arrow keys to navigate</li>
-  <li><b>Fill Data FIRST:</b> Enter observations (or copy from previous)</li>
-  <li><b>Press 'S':</b> Saves data + extracts still image</li>
+    <li><b>Fill Data:</b> Enter observations (or copy from previous entry)</li>
+    <li><b>Extract:</b> Press 'S' to save data + extract still image</li>
   <li><b>Repeat:</b> Find next frame → Fill data → Press 'S'</li>
-  <li><b>Last Drop:</b> Click "Save Entry" manually or "Next Video"</li>
+    <li><b>Last Drop / No Extract Needed:</b> Click "Save Entry"</li>
 </ol>
+
+<hr>
+
+<h3 style="color: #2196F3;">🖱️ Mouse Controls</h3>
+<ul>
+    <li><b>Mouse Wheel:</b> Zoom in/out (works while paused)</li>
+    <li><b>Left Click + Drag:</b> Pan the zoomed video</li>
+    <li><b>Zoom Slider:</b> Alternate zoom control</li>
+</ul>
 
 <hr>
 
@@ -3757,8 +5096,8 @@ class VideoPlayer(QMainWindow):
 <ul>
   <li><b>◄ Copy All from Previous Entry</b> (purple button) - Copies ALL observation fields</li>
   <li><b>◄ buttons</b> next to each field - Copy individual fields</li>
-  <li><b>What's copied:</b> SUBSTRATE, species, coverage, COMMENTS</li>
-  <li><b>What's preserved:</b> DROP_ID, POINT_ID, FILENAME, coordinates, dates</li>
+    <li><b>What's copied:</b> Observation fields (e.g., species, cover, comments)</li>
+    <li><b>What's preserved:</b> DROP_ID, Site/Point ID, FILENAME, coordinates, dates</li>
   <li><b>Time saved:</b> 67% faster for similar drops!</li>
 </ul>
 
@@ -3771,10 +5110,10 @@ class VideoPlayer(QMainWindow):
 
 <h4>3. Validation Rules (QAQC)</h4>
 <ul>
-  <li>Automatically checks data quality before saving</li>
+    <li>Automatically checks data quality before save/extract</li>
   <li>Highlights invalid fields in red</li>
-  <li>Prevents common errors (wrong values, sum errors, missing data)</li>
-  <li><b>⚠️ STRICT MODE:</b> You CANNOT save if validation fails!</li>
+    <li>Prevents common errors (wrong values, sum errors, missing data)</li>
+    <li><b>⚠️ STRICT MODE:</b> You cannot extract while validation fails</li>
   <li>Click "⚙ Manage Validation Rules" to set up</li>
 </ul>
 
@@ -3785,6 +5124,8 @@ class VideoPlayer(QMainWindow):
   <li><b>First drop:</b> Fill all fields manually (~2 minutes)</li>
   <li><b>Similar drops:</b> Click "Copy All" → Adjust differences (~30 seconds)</li>
   <li><b>No seagrass:</b> Type SG_PRESENT=0 → Auto-fill handles the rest!</li>
+    <li><b>Base CSV headers:</b> Column names are normalized to UPPERCASE when loaded</li>
+    <li><b>ID flexibility:</b> Site/Point matching supports SITE, POINT_ID and similar aliases</li>
   <li><b>Review data:</b> Click "Load All Entries" to browse and edit</li>
   <li><b>Backup regularly:</b> Copy data_entries.csv to safe location</li>
 </ul>
@@ -3793,10 +5134,11 @@ class VideoPlayer(QMainWindow):
 
 <h3 style="color: #F44336;">🆘 Common Issues</h3>
 <ul>
-  <li><b>Empty drop1 data:</b> You extracted before filling data - delete row 2 in CSV</li>
+    <li><b>Extract button disabled:</b> Fill at least one non-metadata field and fix validation errors</li>
+    <li><b>Cannot extract:</b> Read the validation popup details and correct highlighted fields</li>
   <li><b>Copy not working:</b> Need at least 2 drops extracted first</li>
   <li><b>Auto-fill not working:</b> Set up auto-fill rule in Validation Rules first</li>
-  <li><b>Validation blocking save:</b> Fix all highlighted fields - strict mode ON!</li>
+    <li><b>Validation blocking action:</b> Fix highlighted fields - strict mode is ON</li>
 </ul>
 
 <hr>
@@ -3911,10 +5253,16 @@ class VideoPlayer(QMainWindow):
             # Restore state
             self.video_queue = project_data.get('video_queue', [])
             self.current_video_index = project_data.get('current_video_index', 0)
-            self.drop_counter = project_data.get('drop_counter', 1)
+            self.drop_counter = 1
             self.current_entry_index = project_data.get('current_entry_index', -1)
             self.base_data = project_data.get('base_data', {})
-            self.base_data_csv = project_data.get('base_data_csv', [])  # Restore base CSV for map
+            restored_base_rows = project_data.get('base_data_csv', [])  # Restore base CSV for map
+            self.base_data_csv = []
+            for row in restored_base_rows:
+                if isinstance(row, dict):
+                    self.base_data_csv.append(self._normalize_row_keys_uppercase(row))
+                else:
+                    self.base_data_csv.append(row)
             self.base_data_csv_path = project_data.get('base_data_csv_path')  # Restore base CSV path
             
             # Create data entry pane with loaded template
@@ -3947,6 +5295,9 @@ class VideoPlayer(QMainWindow):
                     self.total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
                     self.fps = self.cap.get(cv2.CAP_PROP_FPS)
                     self.current_frame = project_data.get('current_frame', 0)
+
+                    # Always recompute next drop from existing entries for current video
+                    self.drop_counter = self.get_next_drop_number_for_point()
                     
                     self.timeline_slider.setMaximum(self.total_frames - 1)
                     self.timeline_slider.setValue(self.current_frame)
@@ -3959,7 +5310,7 @@ class VideoPlayer(QMainWindow):
                     self.skip_forward_btn.setEnabled(True)
                     self.speed_combo.setEnabled(True)
                     self.zoom_slider.setEnabled(True)
-                    self.extract_btn.setEnabled(True)
+                    self.update_extract_button_state()
                     
                     # Update queue label if in queue mode
                     if self.video_queue:
@@ -3969,15 +5320,33 @@ class VideoPlayer(QMainWindow):
                         # Enable video navigation buttons
                         self.prev_video_btn.setEnabled(True)
                         self.next_video_btn.setEnabled(True)
+                        self.goto_video_btn.setEnabled(True)
                     
                     self.display_frame()
             
             # Populate fields with base data
             if self.base_data:
                 self.populate_fields_from_base_data()
+
+            # After loading a project, resume in NEW entry mode by default
+            # (next unsaved entry after the last saved row)
+            if self.all_data_entries:
+                self.current_entry_index = len(self.all_data_entries)
+            else:
+                self.current_entry_index = -1
+            self.unsaved_changes = False
             
             # Update navigation
             self.update_navigation_buttons()
+
+            # Ensure header shows NEW entry state after project load
+            if self.all_data_entries:
+                self.current_entry_index = len(self.all_data_entries)
+                self.prev_entry_btn.setEnabled(True)
+                self.next_entry_btn.setEnabled(False)
+                self.entry_position_label.setText(
+                    f"New entry (will be #{len(self.all_data_entries) + 1})"
+                )
             
             self.current_project_file = project_path
             
