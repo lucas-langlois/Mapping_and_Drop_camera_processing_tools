@@ -41,7 +41,7 @@ Mapping_and_Drop_camera_processing_tools/
     ├── README.md                       # Detailed Step 2 documentation
     ├── TUTORIAL.md                     # Step-by-step tutorial
     ├── dist/
-    │   └── drop_cam_analysis_app.exe   # ✅ Pre-built Windows executable (Git LFS)
+    │   └── drop_cam_analysis_app.exe   # ✅ Pre-built Windows executable (see Releases)
     ├── drop_videos/                    # Place renamed videos here
     ├── drop_stills/                    # Extracted still frames saved here
     ├── grab_photos/                    # Grab photos for no-video points
@@ -127,10 +127,8 @@ The tool will:
 
 **Option 1: Use the Pre-Built Executable (Recommended)**:
 
-The standalone Windows app is included in the repository via Git LFS:
-```
-Step2_video_processing_still_extract_data_entry/dist/drop_cam_analysis_app.exe
-```
+📥 **[Download drop_cam_analysis_app.exe from the latest release](https://github.com/lucas-langlois/Mapping_and_Drop_camera_processing_tools/releases/latest)**
+
 Just download and double-click — no Python required.
 
 **Option 2: Run from Source**:
