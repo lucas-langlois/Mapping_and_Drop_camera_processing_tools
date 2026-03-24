@@ -290,7 +290,36 @@ Contributions are welcome! If you encounter issues or have suggestions:
 
 ---
 
-## 📄 License
+## � Publishing a New Release (Maintainers)
+
+When a new version of the app is ready:
+
+**1. Rebuild the exe**
+```powershell
+python Step2_video_processing_still_extract_data_entry\build_exe.py
+# Output: Step2_video_processing_still_extract_data_entry\dist\drop_cam_analysis_app.exe
+```
+
+**2. Create a GitHub Release and upload the exe**
+```powershell
+gh release create v1.x.x "Step2_video_processing_still_extract_data_entry/dist/drop_cam_analysis_app.exe" `
+  --repo lucas-langlois/Mapping_and_Drop_camera_processing_tools `
+  --title "v1.x.x - Drop Cam Analysis App" `
+  --notes "Brief description of changes"
+```
+
+**3. Push any code changes as usual**
+```powershell
+git add .
+git commit -m "..."
+git push origin main
+```
+
+> `dist/` and `build/` are gitignored — the exe is never committed to the repo, only uploaded to Releases. The README download link points to `/releases/latest` so it always picks up the newest release automatically.
+
+---
+
+## �📄 License
 
 This project is part of the NESP Marine Biodiversity Hub research program.
 
