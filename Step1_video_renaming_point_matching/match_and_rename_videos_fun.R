@@ -8,7 +8,7 @@
 #and renames them using a standardized format: Location_YYYYMMDD_HHMMSS_ID###.MP4.
 #The time component ensures uniqueness when multiple videos match the same mapping point ID.
 #'
-#@param video_dir Character. Directory containing the DJI video files
+#@param video_dir Character. Directory containing the DJI video files. Subfolders are searched recursively.
 #@param csv_path Character. Path to the CSV file with timestamp and mapping point ID data
 #@param location Character. Location name to use in the new filename (e.g., "ReefSiteA")
 #@param date_time_col Character. Name of the date/time column in the CSV (default: "date_time")
@@ -143,32 +143,39 @@ match_and_rename_videos <- function(video_dir,
   cat("Converting from", csv_timezone, "to", camera_timezone, "...\n")
   df$datetime_parsed <- force_tz(df$datetime_parsed, tzone = csv_timezone)
   df$datetime_camera <- with_tz(df$datetime_parsed, tzone = camera_timezone)
+  df$camera_time_converted <- format(df$datetime_camera, "%Y-%m-%d %H:%M:%S")
   
   cat("Sample conversions:\n")
   cat("  CSV time (", csv_timezone, "): ", as.character(df$datetime_parsed[1]), "\n", sep = "")
   cat("  Camera time (", camera_timezone, "): ", as.character(df$datetime_camera[1]), "\n", sep = "")
   
-  # Get list of DJI video files
-  video_files <- list.files(video_dir, pattern = "^DJI_.*\\.MP4$", 
-                            ignore.case = TRUE, full.names = FALSE)
+  # Get list of DJI video files (recursive)
+  # Match any filename containing DJI_YYYYMMDDHHMMSS and ending in .MP4
+  # (allows prefix e.g. S61_ and suffix e.g. _0033_D)
+  video_files <- list.files(video_dir,
+                            pattern = ".*DJI_\\d{14}.*\\.MP4$",
+                            ignore.case = TRUE,
+                            full.names = FALSE,
+                            recursive = TRUE)
   
   if (length(video_files) == 0) {
     stop("No DJI video files found in directory: ", video_dir)
   }
   
-  cat("Found", length(video_files), "DJI video files\n\n")
+  cat("Found", length(video_files), "DJI video files (including subfolders)\n\n")
   
   # Function to extract timestamp from DJI filename
   extract_timestamp <- function(filename) {
-    # DJI format: DJI_YYYYMMDDHHMMSS_####_D.MP4
-    pattern <- "DJI_(\\d{14})_.*\\.MP4$"
+    # DJI format: [optional prefix] DJI_YYYYMMDDHHMMSS [optional suffix] .MP4
+    # e.g. DJI_20251203144748_0033_D.MP4 or S61_DJI_20251203144748_0033_D.MP4
+    pattern <- ".*DJI_(\\d{14}).*\\.MP4$"
     match <- regexpr(pattern, filename, ignore.case = TRUE)
     
     if (match == -1) {
       return(NA)
     }
     
-    timestamp_str <- sub("DJI_(\\d{14})_.*\\.MP4$", "\\1", filename, ignore.case = TRUE)
+    timestamp_str <- sub(pattern, "\\1", filename, ignore.case = TRUE)
     
     # Parse timestamp: YYYYMMDDHHMMSS
     # DJI camera records in local time (camera_timezone), so parse it as such
@@ -216,6 +223,8 @@ match_and_rename_videos <- function(video_dir,
     
     # Get video duration
     video_path <- file.path(video_dir, video_file)
+    video_basename <- basename(video_file)
+    video_subdir <- dirname(video_file)
     duration_sec <- get_video_duration(video_path)
     duration_warning <- ""
     
@@ -228,7 +237,7 @@ match_and_rename_videos <- function(video_dir,
     }
     
     # Extract timestamp from filename
-    video_timestamp <- extract_timestamp(video_file)
+    video_timestamp <- extract_timestamp(video_basename)
     
     if (is.na(video_timestamp)) {
       cat("  WARNING: Could not parse timestamp from filename\n")
@@ -297,7 +306,7 @@ match_and_rename_videos <- function(video_dir,
     mappingid_formatted <- sprintf(format_string, id_prefix, as.integer(matched_mappingid))
     
     # Get file extension
-    file_ext <- sub(".*\\.", "", video_file)
+    file_ext <- sub(".*\\.", "", video_basename)
     
     # Create new filename: Location_YYYYMMDD_HHMMSS_ID###.MP4
     # Time component ensures uniqueness when multiple videos match the same mapping ID
@@ -329,7 +338,12 @@ match_and_rename_videos <- function(video_dir,
     # Rename file if not dry run
     if (!dry_run) {
       old_path <- file.path(video_dir, video_file)
-      new_path <- file.path(video_dir, new_filename)
+      if (video_subdir == ".") {
+        new_relative_path <- new_filename
+      } else {
+        new_relative_path <- file.path(video_subdir, new_filename)
+      }
+      new_path <- file.path(video_dir, new_relative_path)
       
       # Check if new filename already exists
       if (file.exists(new_path)) {
@@ -358,7 +372,7 @@ match_and_rename_videos <- function(video_dir,
   if (length(unmatched_mappingids) > 0) {
     unmatched_df <- df[df[[mappingid_col]] %in% unmatched_mappingids, ]
     # Select key columns
-    key_cols <- c(mappingid_col, date_time_col)
+    key_cols <- c(mappingid_col, date_time_col, "camera_time_converted")
     if (!is.null(lat_col)) key_cols <- c(key_cols, lat_col)
     if (!is.null(lon_col)) key_cols <- c(key_cols, lon_col)
     unmatched_df <- unmatched_df[, key_cols[key_cols %in% names(unmatched_df)], drop = FALSE]
@@ -400,44 +414,49 @@ match_and_rename_videos <- function(video_dir,
   
   # Create output CSV with full data (when not dry run)
   if (!dry_run) {
-    # Create a merged dataframe with all CSV columns + video info
-    # Only include successfully matched/renamed videos
+    # Build a lookup from mappingid -> matched results row for quick access
     matched_results <- results[results$status %in% c("Matched", "Renamed"), ]
+    matched_lookup <- stats::setNames(
+      seq_len(nrow(matched_results)),
+      as.character(matched_results$matched_mappingid)
+    )
     
-    if (nrow(matched_results) > 0) {
-      # Create output dataframe by matching mapping ID
-      output_df <- data.frame()
-      
-      for (i in 1:nrow(matched_results)) {
-        matched_oid <- matched_results$matched_mappingid[i]
-        
-        # Find the corresponding CSV row
-        csv_row <- df[df[[mappingid_col]] == matched_oid, ]
-        
-        # If multiple CSV rows match, take the first one (should be unique based on closest match)
-        if (nrow(csv_row) > 0) {
-          # Get first matching row and add video info
-          csv_row <- csv_row[1, ]
-          csv_row$original_filename <- matched_results$original_filename[i]
-          csv_row$matched_video_filename <- matched_results$new_filename[i]
-          csv_row$video_datetime <- matched_results$video_timestamp[i]
-          csv_row$time_difference_sec <- matched_results$time_difference_sec[i]
-          
-          # Remove helper columns used for matching
-          csv_row$datetime_parsed <- NULL
-          csv_row$datetime_camera <- NULL
-          
-          output_data <- rbind(output_data, csv_row)
+    # Start from the full CSV so every point (matched or not) appears in output
+    output_df <- df
+    output_df$datetime_parsed <- NULL
+    output_df$datetime_camera <- NULL
+    output_df$camera_time_converted <- NULL
+    
+    # Add video columns, default NA
+    output_df$original_filename    <- NA_character_
+    output_df$matched_video_filename <- NA_character_
+    output_df$video_datetime        <- NA_character_
+    output_df$time_difference_sec   <- NA_real_
+    
+    # Fill in video info for matched rows
+    for (i in seq_len(nrow(df))) {
+      oid <- as.character(df[[mappingid_col]][i])
+      if (oid %in% names(matched_lookup)) {
+        mr_i <- matched_lookup[[oid]]
+        output_df$original_filename[i]    <- matched_results$original_filename[mr_i]
+        matched_video_subdir <- dirname(matched_results$original_filename[mr_i])
+        if (matched_video_subdir == ".") {
+          output_df$matched_video_filename[i] <- matched_results$new_filename[mr_i]
+        } else {
+          output_df$matched_video_filename[i] <- file.path(matched_video_subdir,
+                                                            matched_results$new_filename[mr_i])
         }
+        output_df$video_datetime[i]       <- matched_results$video_timestamp[mr_i]
+        output_df$time_difference_sec[i]  <- matched_results$time_difference_sec[mr_i]
       }
-      
-      # Write output CSV
-      output_csv_path <- file.path(video_dir, paste0("video_matching_output_", 
-                                                      format(Sys.time(), "%Y%m%d_%H%M%S"), 
-                                                      ".csv"))
-      write.csv(output_data, output_csv_path, row.names = FALSE)
-      cat("\n** Output CSV saved to:", output_csv_path, "**\n")
     }
+    
+    # Write output CSV
+    output_csv_path <- file.path(video_dir, paste0("video_matching_output_",
+                                                    format(Sys.time(), "%Y%m%d_%H%M%S"),
+                                                    ".csv"))
+    write.csv(output_df, output_csv_path, row.names = FALSE)
+    cat("\n** Output CSV saved to:", output_csv_path, "**\n")
   }
   
   # Attach unmatched mapping IDs as an attribute

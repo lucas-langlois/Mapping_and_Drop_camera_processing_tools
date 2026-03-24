@@ -155,7 +155,7 @@ ui <- fluidPage(
                  h4("File Browser"),
                  p("Use the 'Browse...' buttons next to the path fields to visually navigate and select:"),
                  tags$ul(
-                   tags$li(tags$strong("Video Directory:"), " Select the folder containing your DJI videos"),
+                   tags$li(tags$strong("Video Directory:"), " Select the parent folder containing your DJI videos (subfolders are scanned recursively)"),
                    tags$li(tags$strong("CSV File:"), " Select your CSV file with timestamps and mapping point IDs")
                  ),
                  hr(),
@@ -198,7 +198,7 @@ ui <- fluidPage(
                  hr(),
                  
                  h4("Unmatched Mapping Point IDs from CSV"),
-                 p("These mapping point IDs from your CSV file were not matched to any video:"),
+                 p("These mapping point IDs from your CSV file were not matched to any video (including camera-converted date/time used for matching):"),
                  DTOutput("unmatched_mappingids_table")
         ),
         
@@ -325,6 +325,8 @@ server <- function(input, output, session) {
   video_files <- reactiveVal(NULL)
   unmatched_mappingids <- reactiveVal(NULL)
   edited_matches <- reactiveVal(NULL)
+  editable_table_data <- reactiveVal(NULL)  # display data for Edit Matches table (avoids re-render on cell edit)
+  proxy_editable_matches <- dataTableProxy("editable_matches_table", session = session)
   available_mappingids <- reactiveVal(NULL)
   revert_data <- reactiveVal(NULL)
   csv_columns <- reactiveVal(NULL)
@@ -734,10 +736,13 @@ server <- function(input, output, session) {
     }
     
     tryCatch({
-      files <- list.files(input$video_dir, 
-                         pattern = "^DJI_.*\\.MP4$", 
-                         ignore.case = TRUE, 
-                         full.names = FALSE)
+      # Match any filename containing DJI_YYYYMMDDHHMMSS and ending in .MP4
+      # (allows prefix e.g. S61_ and suffix e.g. _0033_D)
+      files <- list.files(input$video_dir,
+             pattern = ".*DJI_\\d{14}.*\\.MP4$",
+             ignore.case = TRUE,
+             full.names = FALSE,
+             recursive = TRUE)
       
       if (length(files) == 0) {
         showNotification("No DJI video files found!", type = "warning")
@@ -751,7 +756,7 @@ server <- function(input, output, session) {
         # Switch to video files tab
         updateTabsetPanel(session, "tabs", selected = "Video Files")
         
-        showNotification(paste("Found", length(files), "video files!"), 
+        showNotification(paste("Found", length(files), "video files (including subfolders)!"), 
                         type = "message", duration = 3)
       }
       
@@ -945,6 +950,7 @@ server <- function(input, output, session) {
       # Create editable version
       edit_df <- res
       edited_matches(edit_df)
+      editable_table_data(edit_df)
       
       # Switch to edit tab
       updateTabsetPanel(session, "tabs", selected = "Edit Matches")
@@ -965,6 +971,7 @@ server <- function(input, output, session) {
     }
     
     edited_matches(res)
+    editable_table_data(res)
     showNotification("Matches reset to automatic matches!", type = "message", duration = 3)
   })
   
@@ -1050,13 +1057,16 @@ server <- function(input, output, session) {
         }
         
         edited_matches(em)
+        # Update table in place so current page is preserved (no full re-render)
+        replaceData(proxy_editable_matches, em, resetPaging = FALSE, clearSelection = "none", rownames = FALSE)
       }
     }
   })
   
-  # Display editable matches table
+  # Display editable matches table (renders from editable_table_data to avoid resetting page on cell edit)
   output$editable_matches_table <- renderDT({
-    em <- edited_matches()
+    em <- editable_table_data()
+    if (is.null(em)) em <- edited_matches()
     if (is.null(em)) return(NULL)
     
     # Find which columns to disable (all except matched_mappingid)
@@ -1069,6 +1079,7 @@ server <- function(input, output, session) {
       editable = list(target = 'cell', disable = list(columns = disabled_cols)),
       options = list(
         pageLength = 25,
+        stateSave = TRUE,
         scrollX = TRUE,
         scrollCollapse = FALSE,
         autoWidth = FALSE,
@@ -1278,7 +1289,7 @@ server <- function(input, output, session) {
           mappingid_formatted <- sprintf(format_string, input$id_prefix, as.integer(matched_oid))
           
           # Get file extension
-          file_ext <- sub(".*\\.", "", video_file)
+          file_ext <- sub(".*\\.", "", basename(video_file))
           
           # Create new filename
           new_filename <- paste0(input$location, "_", date_str, "_", time_str, "_", 
@@ -1286,7 +1297,13 @@ server <- function(input, output, session) {
           
           # Rename file
           old_path <- file.path(input$video_dir, video_file)
-          new_path <- file.path(input$video_dir, new_filename)
+          video_subdir <- dirname(video_file)
+          if (video_subdir == ".") {
+            new_relative_path <- new_filename
+          } else {
+            new_relative_path <- file.path(video_subdir, new_filename)
+          }
+          new_path <- file.path(input$video_dir, new_relative_path)
           
           if (!file.exists(old_path)) {
             cat("ERROR: Original file not found:", old_path, "\n")
@@ -1317,35 +1334,47 @@ server <- function(input, output, session) {
         
         # Update edited matches with rename status
         edited_matches(em)
+        editable_table_data(em)
         results(em)
         
-        # Create output CSV
-        output_data <- data.frame()
-        for (i in 1:nrow(em)) {
-          if (em$status[i] == "Renamed" && !is.na(em$matched_mappingid[i])) {
-            matched_oid <- em$matched_mappingid[i]
-            csv_row <- df[df[[input$mappingid_col]] == matched_oid, ][1, ]
-            
-            if (!is.na(csv_row[[input$mappingid_col]])) {
-              csv_row$original_filename <- em$original_filename[i]
-              csv_row$matched_video_filename <- em$new_filename[i]
-              csv_row$video_datetime <- em$video_timestamp[i]
-              csv_row$time_difference_sec <- em$time_difference_sec[i]
-              csv_row$datetime_parsed <- NULL
-              csv_row$datetime_camera <- NULL
-              output_data <- rbind(output_data, csv_row)
+        # Create output CSV — all CSV rows, video columns NA for unmatched
+        # Build lookup: mappingid -> index in em for renamed rows
+        renamed_em <- em[em$status == "Renamed" & !is.na(em$matched_mappingid), ]
+        matched_lookup <- stats::setNames(
+          seq_len(nrow(renamed_em)),
+          as.character(renamed_em$matched_mappingid)
+        )
+        
+        output_data <- df
+        output_data$datetime_parsed  <- NULL
+        output_data$datetime_camera  <- NULL
+        output_data$original_filename     <- NA_character_
+        output_data$matched_video_filename <- NA_character_
+        output_data$video_datetime         <- NA_character_
+        output_data$time_difference_sec    <- NA_real_
+        
+        for (j in seq_len(nrow(df))) {
+          oid <- as.character(df[[input$mappingid_col]][j])
+          if (oid %in% names(matched_lookup)) {
+            mr_j <- matched_lookup[[oid]]
+            output_data$original_filename[j] <- renamed_em$original_filename[mr_j]
+            matched_video_subdir <- dirname(renamed_em$original_filename[mr_j])
+            if (matched_video_subdir == ".") {
+              output_data$matched_video_filename[j] <- renamed_em$new_filename[mr_j]
+            } else {
+              output_data$matched_video_filename[j] <- file.path(matched_video_subdir,
+                                                                  renamed_em$new_filename[mr_j])
             }
+            output_data$video_datetime[j]        <- renamed_em$video_timestamp[mr_j]
+            output_data$time_difference_sec[j]   <- renamed_em$time_difference_sec[mr_j]
           }
         }
         
-        # Write output CSV
-        if (nrow(output_data) > 0) {
-          output_csv_path <- file.path(input$video_dir, paste0("video_matching_output_edited_", 
-                                                               format(Sys.time(), "%Y%m%d_%H%M%S"), 
-                                                               ".csv"))
-          write.csv(output_data, output_csv_path, row.names = FALSE)
-          cat("Output CSV saved to:", output_csv_path, "\n")
-        }
+        output_csv_path <- file.path(input$video_dir, paste0("video_matching_output_edited_",
+                                                             format(Sys.time(), "%Y%m%d_%H%M%S"),
+                                                             ".csv"))
+        write.csv(output_data, output_csv_path, row.names = FALSE)
+        cat("Output CSV saved to:", output_csv_path, "\n")
         
         msg <- paste("Successfully renamed", rename_count, "videos using edited matches!")
         if (error_count > 0) {
@@ -1373,8 +1402,13 @@ server <- function(input, output, session) {
       df <- read.csv(input$revert_csv_path, stringsAsFactors = FALSE)
       
       # Check for required columns
-      if (!("matched_video_filename" %in% names(df))) {
-        showNotification("CSV must contain 'matched_video_filename' column!", type = "error")
+      # Accept 'new_filename' (from the rename log) or 'matched_video_filename' (from output CSV)
+      if ("matched_video_filename" %in% names(df)) {
+        current_filename_col <- "matched_video_filename"
+      } else if ("new_filename" %in% names(df)) {
+        current_filename_col <- "new_filename"
+      } else {
+        showNotification("CSV must contain 'new_filename' or 'matched_video_filename' column!", type = "error")
         return()
       }
       
@@ -1394,10 +1428,15 @@ server <- function(input, output, session) {
         return()
       }
       
+      # Filter to only renamed rows if status column present
+      if ("status" %in% names(df)) {
+        df <- df[!is.na(df$status) & df$status == "Renamed", , drop = FALSE]
+      }
+      
       # Create revert dataframe
       revert_df <- data.frame(
         original_filename = df[[original_col]],
-        current_filename = df$matched_video_filename,
+        current_filename = df[[current_filename_col]],
         file_exists = FALSE,
         status = "",
         stringsAsFactors = FALSE

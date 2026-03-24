@@ -21,18 +21,32 @@ A comprehensive video player application with integrated data entry for marine/e
 ✅ **Customizable Form** - Load any CSV template to define data fields  
 ✅ **Decimal Precision** - Support for decimal values (e.g., 0.7%) in percentage fields  
 ✅ **Auto-Population** - Pre-fill location/metadata from base CSV  
-✅ **Smart Drop Numbering** - Sequential drop IDs based on POINT_ID  
-✅ **Entry Navigation** - Browse and edit previous entries  
-✅ **Auto-Save on Navigation** - Changes saved when moving between entries  
+✅ **Smart Drop Numbering** - Sequential drop IDs keyed on **POINT_ID** (not video name) — carries across multiple videos for the same point  
+✅ **Dropdown Fields** - `allowed_values` fields rendered as labelled dropdowns (e.g., "1 — Yes", "0 — No", "NA — Not applicable")  
+✅ **Entry Navigation** - Browse and edit previous entries with ◀ Previous / Next ▶ buttons  
+✅ **Draft Buffer** - Navigating away from a new unsaved entry saves a temporary draft; returning restores every field exactly  
+✅ **Return-to-New-Entry** - Next ▶ is always enabled from any saved entry, stepping back to the new entry form  
+✅ **Auto-Save on Navigation** - Changes to existing entries auto-saved when moving between them  
 ✅ **Still Image Integration** - Auto-create data entry when extracting frames  
 ✅ **Validation Rules** - Built-in QAQC system with visual rule builder  
 ✅ **Auto-Fill Rules** - Automatically populate fields based on conditions  
-✅ **Conditional Sum Validation** - Validate sums only when conditions are met  
-✅ **Template-Driven Subgroup Normalization** - Species subgroups auto-fill blanks as 0 (when present) and NA (when absent) based on rules  
-✅ **Calculated Fields** - Auto-calculate values from formulas with configurable decimals  
+✅ **Conditional Sum Validation** - Validate sums only when conditions are met; NA and blank fields gracefully skipped  
+✅ **Calculated Fields** - Auto-calculate values from formulas (read-only, green background); cascades correctly (e.g., BARE_COVER → TOTAL_COVER)  
+✅ **Template-Driven Subgroup Normalization** - Species subgroups auto-fill blanks as 0 or NA based on rules  
 ✅ **Copy from Previous** - Quickly reuse values from previous entries  
-✅ **Project Save/Load** - Resume exactly where you left off  
-✅ **Interactive Map View** - Visualize all sampling points on satellite imagery  
+✅ **Grab-Only Mode** - Enter data for points that have a grab photo but no video; DROP_ID uses `grab{N}` prefix  
+✅ **GRAB_ONLY Sync** - Changing the GRAB_ONLY field live toggles between `drop{N}` and `grab{N}` and updates FILENAME automatically  
+✅ **Grab-Only Auto-Advance** - After saving a grab entry, prompted to advance to next point immediately  
+✅ **Grab Photos Folder** - Set a folder for grab photos once via the **📁 Set Folder** button; path is saved in the project and restored on load  
+✅ **Inline Photo Viewer** - Grab photos for no-video points display directly in the video viewport — no popup required; Prev/Next Photo controls appear when multiple photos exist for the point  
+✅ **Multi-Photo GRAB_FILENAME** - `GRAB_FILENAME` supports semicolon-separated lists (`photo1.jpg;photo2.jpg`) and numbered sibling auto-discovery (`photo_1.jpg`, `photo_2.jpg`, …)  
+✅ **Multi-Photo Grab Popup** - The "View Grab Photo" button (used when a point has both video and grab photos) opens a navigable popup with Prev/Next buttons and a photo counter  
+✅ **Smart No-Video Placeholder** - Points with no video show a contextual placeholder: photos display inline if available; a blue prompt appears if photos are referenced but no folder is set; a "NO VIDEO" screen shows if there are no photos — all video controls are disabled in each case  
+✅ **Auto-Fill Reset** - When a trigger field changes away from its trigger value, the previously auto-filled fields are cleared automatically (e.g., switching SG_PRESENT back from 0 → 1 removes the "NA" fills ready for real values)  
+✅ **Field Groups** - Organise complex forms into named groups; each group filters the data entry pane to show only its member fields, reducing visual clutter on large templates  
+✅ **Project Save/Load** - Resume exactly where you left off; base CSV is always re-read fresh from disk on load  
+✅ **Point Navigation Restored on Load** - Project open restores exact point position and re-enables Prev/Next Point buttons  
+✅ **Interactive Map View** - 4-colour status map: amber = current, green = seagrass present, white = entered (no SG), blue = pending  
 ✅ **Batch Aggregation Method Editing** - Apply one aggregation method to selected or all fields in one click  
 
 ### Frame Extraction
@@ -278,73 +292,95 @@ POINT_ID,DROP_ID,YEAR,DATE,TIME,LATITUDE,LONGITUDE,FILENAME,SUBSTRATE,DEPTH,COMM
 ## Advanced Features
 
 ### Smart Drop Numbering
-- Drop IDs sequence across multiple videos with same POINT_ID
-- Example: Video 1 (ID001) creates drop1, drop2; Video 2 (ID001) continues with drop3, drop4
+- Drop IDs are based entirely on **POINT_ID**, not the video filename
+- Carries across multiple videos: if Point 5 already has drop1 and drop2 (from Video A), switching to Video B (same point) will produce drop3
+- Grab-only entries use a separate `grab{N}` counter and never affect the drop number
 - Automatically resets to drop1 when POINT_ID changes
 
-### Auto-Data Population
-- Extracts POINT_ID from video filename (e.g., "ID001")
-- Matches VIDEO_FILENAME in base CSV
-- Parses VIDEO_TIMESTAMP for YEAR, DATE, TIME fields
-- Continues drop numbering from existing entries
+### Dropdown Fields for Constrained Values
+Any field with an `allowed_values` rule is automatically rendered as a dropdown instead of a text box:
+- Values displayed with friendly labels: `1 — Yes`, `0 — No`, `NA — Not applicable`
+- Raw values (0, 1, NA) stored in CSV — display labels never contaminate data
+- Changing GRAB_ONLY live immediately updates DROP_ID and FILENAME fields
 
-### Entry Navigation
-- Browse through all saved entries
-- Edit historical data
-- Changes auto-save when navigating
-- Visual indicator (*) shows unsaved changes
+### Entry Navigation & Draft Buffer
+- **◀ Previous Entry** — from the new entry form, saves a draft snapshot before stepping back into saved entries
+- **Next Entry ▶** — always active from any saved entry; the last step returns to your new entry form exactly as you left it
+- If you navigate away without saving, every field in the form is restored when you come back
+- Draft is automatically discarded when you commit an entry (extract or save)
 
-### Project Save/Load
-Save your entire project state and resume exactly where you left off:
+### Grab-Only Mode
+For sampling points where you have a grab photo but no drop video:
+1. Navigate to the point using **◀ Prev Point / Next Point ▶**
+2. Set `GRAB_ONLY = 1` — the form switches to grab entry mode:
+   - DROP_ID changes to `grab1` (or next sequential grab number)
+   - FILENAME is set from the GRAB_FILENAME column of the base CSV
+   - AL_COVER and FRESH_VEG_COVER auto-fill to NA
+3. Fill in observations and click **Save Entry**
+4. Prompted: **"Advance to next point?"** — Yes skips immediately to the next base CSV row
 
-**Features:**
-- Saves video queue, current video, and frame position
-- Preserves all data entries and validation rules
-- Stores base CSV data and template settings
-- Auto-saves on close (if project exists)
-- Startup prompt to load existing or create new project
+**Inline Photo Viewer (automatic for no-video points):**
 
-**Usage:**
-1. Click **"💾 Save Project"** at any time
-2. Name your project (e.g., `Wuthathi_Nov2025.json`)
-3. Project saved to `projects/` folder
-4. On next launch, choose "Load Existing Project"
-5. Resume exactly where you stopped!
+When navigating to a point that has no video, the video area automatically switches to one of three contextual displays:
 
-**Benefits:**
-- No need to reload videos, templates, or base CSV
-- Preserves your exact frame position
-- Maintains drop counter state
-- Perfect for multi-day field work
+| Situation | Display |
+|-----------|---------|
+| Grab photos found | Photos shown directly in video area; Prev/Next Photo bar appears if >1 photo |
+| Photos referenced but folder not set | Blue screen: "PHOTOS AVAILABLE — click 📁 Set Folder" |
+| No photos referenced | Black "NO VIDEO" screen |
 
-### Interactive Map View
-Visualize all your sampling points on a satellite map:
+All video controls (play, timeline, extract) are disabled while in placeholder mode.
 
-**Features:**
-- 🗺️ Satellite basemap (Esri World Imagery)
-- 📍 All Point IDs displayed with labeled markers
-- 🔴 Current video point highlighted in red
-- 🔵 Other points shown in blue
-- ℹ️ Click markers for detailed popup info (coordinates, depth, date, location)
-- 🏷️ Permanent white labels showing Point IDs
-- 📊 Legend explaining marker colors
+**Setting the Grab Photos Folder:**
 
-**Usage:**
-1. Click **"🗺 Show on Map"** button (next to Save Project)
-2. Interactive map opens in popup window
-3. Pan/zoom to explore your survey area
-4. Click any marker to see details
-5. Red marker shows which point you're currently working on
+Click the **📁 Set Folder** button (near the video area) to tell the app where your grab photos live. The path is saved in the project file and restored automatically on next load. If you load an old project that didn't store a path, you'll be prompted to set it.
 
-**Requirements:**
-- LATITUDE and LONGITUDE in base CSV (WGS84 decimal degrees)
-- PyQtWebEngine installed (`pip install PyQtWebEngine`)
+**GRAB_FILENAME formats supported:**
 
-**Perfect for:**
-- Verifying GPS coordinates are correct
-- Planning which videos to process next
-- Visualizing spatial coverage of your survey
-- Sharing site locations with team members
+| Format | Example |
+|--------|---------|
+| Semicolon-separated list | `photo1.jpg;photo2.jpg;photo3.jpg` |
+| Numbered siblings (auto-discovered) | `photo_01.jpg` → finds `photo_01.jpg`, `photo_02.jpg`, … |
+| Single file | `photo.jpg` |
+
+**View Grab Photo popup (points with both video and grab photos):**
+
+The **"View Grab Photo"** button opens a popup dialog. For points with multiple photos, the dialog includes Prev/Next Photo buttons and a photo counter so you can browse all images without closing and reopening.
+
+### Project Save/Load (Enhanced)
+- **Base CSV is always re-read fresh from disk** on project load — any updates made to the file outside the app are picked up automatically
+- Point navigation position (`current_base_csv_row_index`) is saved and restored — Prev/Next Point buttons enabled immediately on load
+- On load, the nav label shows exactly where you left off (e.g., `"5/152: Point ID005 — resumed"`) instead of the generic "Ready" message
+- **Grab Photos Folder path** is saved and restored — no need to re-set it each session
+- If loading an older project that didn't save the grab photos folder, a prompt asks you to set it
+- Fallback: if loading an old project file that did not store row index, the app locates the correct row by matching the saved POINT_ID
+
+### Auto-Fill Rules (Reset Behaviour)
+When a trigger field is changed **away** from its trigger value, the fields that were previously auto-filled by that rule are automatically cleared (reset to empty). This means:
+- Set SG_PRESENT = 0 → species fields fill with "NA", SG_COVER fills with 0
+- Change SG_PRESENT back to 1 → those fields clear back to "", ready for real values
+- If two rules share target fields, the rule that matches wins; if neither matches, the fields clear
+
+### Field Groups
+Field Groups let you organise large templates into manageable sections:
+- Open the **Field Groups Manager** via button in the data entry pane
+- Create named groups (e.g., "Seagrass", "Hard Coral", "Cover Totals") and assign fields to each
+- Selecting a group in the dropdown filters the data entry form to show only that group's fields
+- "All fields" view is always available
+- Groups are saved as `[template_name]_groups.json` alongside the template and rules files
+
+### Interactive Map View (4-Colour Status)
+The map now reflects your data collection progress in real time:
+
+| Colour | Meaning |
+|--------|---------|
+| 🟠 Amber (larger) | Current active point |
+| 🟢 Dark green | At least one entry with SG_PRESENT = 1 |
+| ⚪ White | Entry exists — all SG_PRESENT = 0 or NA |
+| 🔵 Blue | Not yet entered |
+
+Status is computed from `all_data_entries` every time the map opens. The legend in the bottom-right explains all four states.
+
 
 ## Data Validation Rules (QAQC)
 

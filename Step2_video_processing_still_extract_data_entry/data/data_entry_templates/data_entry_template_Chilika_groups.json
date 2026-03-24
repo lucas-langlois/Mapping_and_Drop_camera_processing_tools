@@ -1,0 +1,77 @@
+{
+  "groups": [
+    {
+      "name": "Metadata",
+      "colour": "#E3F2FD",
+      "fields": [
+        "POINT_ID",
+        "DROP_ID",
+        "YEAR",
+        "DATE",
+        "TIME",
+        "DATE_TIME",
+        "LATITUDE",
+        "LONGITUDE",
+        "LOCATION",
+        "FILENAME",
+        "SUBSTRATE",
+        "DEPTH",
+        "GRAB_ONLY",
+        "GRAB_FILENAME"
+      ],
+      "subgroups": []
+    },
+    {
+      "name": "Seagrass",
+      "colour": "#E8F5E9",
+      "fields": [
+        "SG_PRESENT",
+        "SG_COVER",
+        "HB_COMP",
+        "HO_COMP",
+        "HP_COMP",
+        "RM_COMP",
+        "EPI_COVER"
+      ],
+      "subgroups": [
+        {
+          "name": "Species Composition (% adding to 100)",
+          "parent_field": "SG_COVER",
+          "fields": [
+            "HB_COMP",
+            "HO_COMP",
+            "HP_COMP",
+            "RM_COMP"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Algae",
+      "colour": "#FFFDE7",
+      "fields": [
+        "AL_PRESENT",
+        "AL_COVER"
+      ],
+      "subgroups": []
+    },
+    {
+      "name": "Fresh Vegetation",
+      "colour": "#F1F8E9",
+      "fields": [
+        "FRESH_VEG_PRESENT",
+        "FRESH_VEG_COVER"
+      ],
+      "subgroups": []
+    },
+    {
+      "name": "Other Benthic",
+      "colour": "#FBE9E7",
+      "fields": [
+        "BARE_COVER",
+        "TOTAL_COVER"
+      ],
+      "subgroups": []
+    }
+  ]
+}

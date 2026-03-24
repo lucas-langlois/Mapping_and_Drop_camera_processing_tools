@@ -1,0 +1,268 @@
+{
+  "rules": [
+    {
+      "type": "allowed_values",
+      "field": "GRAB_ONLY",
+      "values": [
+        "0",
+        "1"
+      ],
+      "error": "GRAB_ONLY must be 0 or 1"
+    },
+    {
+      "type": "autofill",
+      "trigger_field": "GRAB_ONLY",
+      "trigger_value": "1",
+      "actions": {
+        "SG_COVER": "NA",
+        "AL_COVER": "NA",
+        "FRESH_VEG_COVER": "NA"
+      }
+    },
+    {
+      "type": "allowed_values",
+      "field": "SG_PRESENT",
+      "values": [
+        "0",
+        "1",
+        "NA"
+      ],
+      "error": "SG_PRESENT must be 0, 1, or NA"
+    },
+    {
+      "type": "required",
+      "field": "SG_PRESENT",
+      "error": "SG_PRESENT is required (enter 0, 1, or NA)"
+    },
+    {
+      "type": "autofill",
+      "trigger_field": "SG_PRESENT",
+      "trigger_value": "0",
+      "actions": {
+        "SG_COVER": "0",
+        "HB_COMP": "NA",
+        "HO_COMP": "NA",
+        "HP_COMP": "NA",
+        "RM_COMP": "NA",
+        "EPI_COVER": "NA"
+      }
+    },
+    {
+      "type": "autofill",
+      "trigger_field": "SG_PRESENT",
+      "trigger_value": "NA",
+      "actions": {
+        "SG_COVER": "NA",
+        "HB_COMP": "NA",
+        "HO_COMP": "NA",
+        "HP_COMP": "NA",
+        "RM_COMP": "NA",
+        "EPI_COVER": "NA",
+        "AL_COVER": "NA",
+        "FRESH_VEG_COVER": "NA",
+        "BARE_COVER": "NA"
+      }
+    },
+    {
+      "type": "conditional_sum",
+      "if_field": "SG_PRESENT",
+      "if_value": "1",
+      "fields": [
+        "HB_COMP",
+        "HO_COMP",
+        "HP_COMP",
+        "RM_COMP"
+      ],
+      "target": 100,
+      "tolerance": 0,
+      "blank_as_zero": true,
+      "error": "When seagrass is present, species composition percentages (HB_COMP, HO_COMP, HP_COMP, RM_COMP) must sum to 100%"
+    },
+    {
+      "type": "conditional",
+      "if_field": "SG_PRESENT",
+      "if_value": "0",
+      "then_field": "SG_COVER",
+      "then_condition": "equals",
+      "then_value": "0",
+      "skip_if_field": "GRAB_ONLY",
+      "skip_if_value": "1",
+      "error": "If no seagrass is present, SG_COVER must be 0"
+    },
+    {
+      "type": "conditional",
+      "if_field": "SG_PRESENT",
+      "if_value": "1",
+      "then_field": "SG_COVER",
+      "then_condition": "greater_than",
+      "then_value": "0",
+      "skip_if_field": "GRAB_ONLY",
+      "skip_if_value": "1",
+      "error": "If seagrass is present, SG_COVER must be greater than 0"
+    },
+    {
+      "type": "conditional",
+      "if_field": "SG_PRESENT",
+      "if_value": "1",
+      "then_field": "SG_COVER",
+      "then_condition": "less_equal",
+      "then_value": "100",
+      "skip_if_field": "GRAB_ONLY",
+      "skip_if_value": "1",
+      "error": "If seagrass is present, SG_COVER must be 100 or less"
+    },
+
+    {
+      "type": "allowed_values",
+      "field": "AL_PRESENT",
+      "values": [
+        "0",
+        "1",
+        "NA"
+      ],
+      "error": "AL_PRESENT must be 0, 1, or NA"
+    },
+    {
+      "type": "required",
+      "field": "AL_PRESENT",
+      "error": "AL_PRESENT is required (enter 0, 1, or NA)"
+    },
+    {
+      "type": "autofill",
+      "trigger_field": "AL_PRESENT",
+      "trigger_value": "0",
+      "actions": {
+        "AL_COVER": "0"
+      }
+    },
+    {
+      "type": "autofill",
+      "trigger_field": "AL_PRESENT",
+      "trigger_value": "NA",
+      "actions": {
+        "AL_COVER": "NA"
+      }
+    },
+    {
+      "type": "conditional",
+      "if_field": "AL_PRESENT",
+      "if_value": "0",
+      "then_field": "AL_COVER",
+      "then_condition": "equals",
+      "then_value": "0",
+      "skip_if_field": "GRAB_ONLY",
+      "skip_if_value": "1",
+      "error": "If no algae is present, AL_COVER must be 0"
+    },
+    {
+      "type": "conditional",
+      "if_field": "AL_PRESENT",
+      "if_value": "1",
+      "then_field": "AL_COVER",
+      "then_condition": "greater_than",
+      "then_value": "0",
+      "skip_if_field": "GRAB_ONLY",
+      "skip_if_value": "1",
+      "error": "If algae is present, AL_COVER must be greater than 0"
+    },
+    {
+      "type": "conditional",
+      "if_field": "AL_PRESENT",
+      "if_value": "1",
+      "then_field": "AL_COVER",
+      "then_condition": "less_equal",
+      "then_value": "100",
+      "skip_if_field": "GRAB_ONLY",
+      "skip_if_value": "1",
+      "error": "If algae is present, AL_COVER must be 100 or less"
+    },
+
+    {
+      "type": "allowed_values",
+      "field": "FRESH_VEG_PRESENT",
+      "values": [
+        "0",
+        "1",
+        "NA"
+      ],
+      "error": "FRESH_VEG_PRESENT must be 0, 1, or NA"
+    },
+    {
+      "type": "required",
+      "field": "FRESH_VEG_PRESENT",
+      "error": "FRESH_VEG_PRESENT is required (enter 0, 1, or NA)"
+    },
+    {
+      "type": "autofill",
+      "trigger_field": "FRESH_VEG_PRESENT",
+      "trigger_value": "0",
+      "actions": {
+        "FRESH_VEG_COVER": "0"
+      }
+    },
+    {
+      "type": "autofill",
+      "trigger_field": "FRESH_VEG_PRESENT",
+      "trigger_value": "NA",
+      "actions": {
+        "FRESH_VEG_COVER": "NA"
+      }
+    },
+    {
+      "type": "conditional",
+      "if_field": "FRESH_VEG_PRESENT",
+      "if_value": "0",
+      "then_field": "FRESH_VEG_COVER",
+      "then_condition": "equals",
+      "then_value": "0",
+      "skip_if_field": "GRAB_ONLY",
+      "skip_if_value": "1",
+      "error": "If no fresh vegetation is present, FRESH_VEG_COVER must be 0"
+    },
+    {
+      "type": "conditional",
+      "if_field": "FRESH_VEG_PRESENT",
+      "if_value": "1",
+      "then_field": "FRESH_VEG_COVER",
+      "then_condition": "greater_than",
+      "then_value": "0",
+      "skip_if_field": "GRAB_ONLY",
+      "skip_if_value": "1",
+      "error": "If fresh vegetation is present, FRESH_VEG_COVER must be greater than 0"
+    },
+    {
+      "type": "conditional",
+      "if_field": "FRESH_VEG_PRESENT",
+      "if_value": "1",
+      "then_field": "FRESH_VEG_COVER",
+      "then_condition": "less_equal",
+      "then_value": "100",
+      "skip_if_field": "GRAB_ONLY",
+      "skip_if_value": "1",
+      "error": "If fresh vegetation is present, FRESH_VEG_COVER must be 100 or less"
+    },
+
+    {
+      "type": "calculated",
+      "target_field": "BARE_COVER",
+      "formula": "100 - SG_COVER - AL_COVER - FRESH_VEG_COVER",
+      "decimals": 0,
+      "error": "BARE_COVER could not be calculated (non-numeric values in SG_COVER, AL_COVER or FRESH_VEG_COVER)"
+    },
+    {
+      "type": "calculated",
+      "target_field": "TOTAL_COVER",
+      "formula": "SG_COVER + AL_COVER + FRESH_VEG_COVER + BARE_COVER",
+      "decimals": 0,
+      "error": "TOTAL_COVER could not be calculated (non-numeric values in cover fields)"
+    },
+    {
+      "type": "sum_equals",
+      "fields": ["SG_COVER", "AL_COVER", "FRESH_VEG_COVER", "BARE_COVER"],
+      "target": 100,
+      "tolerance": 0,
+      "blank_as_zero": true,
+      "error": "Cover percentages (SG_COVER + AL_COVER + FRESH_VEG_COVER + BARE_COVER) must sum to 100"
+    }
+  ]
+}

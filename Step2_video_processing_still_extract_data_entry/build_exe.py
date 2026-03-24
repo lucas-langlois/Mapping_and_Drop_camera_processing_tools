@@ -15,7 +15,7 @@ video_player_path = os.path.join(script_dir, 'video_player.py')
 print("Cleaning up old build files...")
 build_dir = os.path.join(script_dir, 'build')
 dist_dir = os.path.join(script_dir, 'dist')
-spec_file = os.path.join(script_dir, 'VideoPlayer.spec')
+spec_file = os.path.join(script_dir, 'drop_cam_analysis_app.spec')
 
 if os.path.exists(build_dir):
     print(f"  Removing: {build_dir}")
@@ -34,7 +34,7 @@ print("Clean complete!\n")
 # PyInstaller arguments
 PyInstaller.__main__.run([
     video_player_path,
-    '--name=VideoPlayer',
+    '--name=drop_cam_analysis_app',
     '--onefile',
     '--windowed',  # No console window
     '--icon=NONE',  # You can add an icon file here if you have one
@@ -49,6 +49,6 @@ PyInstaller.__main__.run([
 print("\n" + "="*60)
 print("Build complete!")
 print("="*60)
-print(f"\nExecutable created in: {os.path.join(script_dir, 'dist', 'Video_processing_app.exe')}")
+print(f"\nExecutable created in: {os.path.join(script_dir, 'dist', 'drop_cam_analysis_app.exe')}")
 print("\nYou can distribute this .exe file to any Windows computer.")
 print("The drop_videos and drop_stills folders will be created automatically.")

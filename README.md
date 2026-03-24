@@ -6,6 +6,7 @@ A comprehensive toolkit for processing underwater drop camera videos, from initi
 
 This toolkit provides end-to-end processing for drop camera footage:
 
+0. **Step 0**: Match grab-sample photos to survey CSV rows and rename with standardised filenames
 1. **Step 1**: Match GPS waypoints to video timestamps and rename files systematically
 2. **Step 2**: Extract still frames from videos and perform structured data entry for benthic/habitat analysis
 
@@ -15,6 +16,12 @@ This toolkit provides end-to-end processing for drop camera footage:
 
 ```
 Mapping_and_Drop_camera_processing_tools/
+│
+├── Step0_grab_photo_mathing/
+│   ├── START_HERE.R                    # 👈 Quick start for grab photo matching
+│   ├── link_photos_to_csv_app.R        # Interactive Shiny app
+│   ├── README.md                       # Detailed Step 0 documentation
+│   └── Grab_photos/                    # Place your grab photos here
 │
 ├── Step1_video_renaming_point_matching/
 │   ├── START_HERE.R                    # 👈 Quick start for video renaming
@@ -26,13 +33,46 @@ Mapping_and_Drop_camera_processing_tools/
     ├── TUTORIAL.md                     # Detailed Step 2 tutorial
     ├── drop_videos/                    # Renamed videos go here
     ├── drop_stills/                    # Extracted frames saved here
+    ├── grab_photos/                    # Grab photos for no-video points
     ├── data/                           # Data entry templates & output
-    └── Source_code/                    # Video player application code
+    └── video_player.py                 # Video player application
 ```
 
 ---
 
 ## 🚀 Quick Start Guide
+
+### Step 0: Grab Photo Matching
+
+**Purpose**: Link grab-sample photos to survey CSV rows, rename photos with standardised filenames, and optionally correct bad GPS coordinates embedded in the photo files.
+
+**Requirements**:
+- R (version 4.0+)
+- JPEG grab photos
+- CSV file with survey GPS points and timestamps
+
+**Quick Start**:
+```r
+# Navigate to Step0 folder
+setwd("Step0_grab_photo_mathing")
+
+# Run the interactive setup
+source("START_HERE.R")
+```
+
+The tool will:
+- ✅ Install required R packages automatically
+- ✅ Read GPS + timestamp EXIF data directly from JPEGs (no ExifTool needed)
+- ✅ Match photos to CSV rows by GPS distance + timestamp
+- ✅ Fall back to time-only matching for cameras with bad GPS (e.g. reports 0,0)
+- ✅ Display an interactive map to visually verify all matches
+- ✅ Rename photos: `{Location}_{POINT_ID}_{Date}_GRAB_{N}.jpg`
+- ✅ Optionally overwrite bad GPS in renamed photos with correct CSV coordinates
+- ✅ Export matched CSV with `GRAB_FILENAME`, `GRAB_DISTANCE_M`, `GRAB_MATCH_METHOD`, `GRAB_TIME_DIFF_S` columns
+
+📖 **[Full Step 0 Documentation](Step0_grab_photo_mathing/README.md)**
+
+---
 
 ### Step 1: Video Renaming & Point Matching
 
@@ -119,26 +159,41 @@ The tool provides:
 ```
 1. Collect field data
    ├── GPS waypoints with timestamps (CSV)
-   └── DJI camera video files
+   ├── DJI camera video files
+   └── Grab sample photos (JPEG)
             ↓
-2. Run Step 1: Video Renaming
+2. Run Step 0: Grab Photo Matching  [R]
+   ├── Match grab photos to CSV survey points
+   ├── Rename photos with standardised format
+   └── Export updated CSV with GRAB_FILENAME column
+            ↓
+3. Run Step 1: Video Renaming  [R]
    ├── Match videos to GPS points
    ├── Rename with standardized format
    └── Export to drop_videos folder
             ↓
-3. Run Step 2: Video Analysis
-   ├── Load renamed videos
+4. Run Step 2: Video Analysis  [Python]
+   ├── Load renamed videos (and grab photos)
    ├── Extract still frames at key moments
    ├── Enter habitat/benthic data
    └── Export complete dataset (CSV)
             ↓
-4. Analysis Ready!
-   └── Clean dataset with matched stills
+5. Analysis Ready!
+   └── Clean dataset with matched stills & grab photos
 ```
 
 ---
 
 ## 💡 Key Features
+
+### Step 0 Features
+- EXIF GPS + timestamp matching (pure R, no ExifTool)
+- Time-only fallback for cameras with unreliable GPS
+- Filename POINT_ID fallback as last resort
+- Interactive map to verify all photo matches
+- Diagnostic table for unmatched photos
+- GPS coordinate correction written into renamed photos
+- Semicolon-separated multi-photo support per point
 
 ### Step 1 Features
 - Automatic timestamp matching with tolerance settings
@@ -154,12 +209,22 @@ The tool provides:
 - Pre-populated forms from base CSV
 - Quality validation and auto-calculations
 - Frame-by-frame video navigation
+- Grab-only mode for points with photos but no video
+- Inline grab photo viewer with multi-photo navigation
 - Keyboard shortcuts for efficient data entry
 - Auto-save and export functionality
 
 ---
 
 ## 📋 Prerequisites
+
+### For Step 0 (R Tools)
+- **R** (4.0 or higher): [Download R](https://cran.r-project.org/)
+- **RStudio** (optional but recommended): [Download RStudio](https://posit.co/download/rstudio-desktop/)
+
+Required R packages (auto-installed by START_HERE.R):
+- `shiny`, `shinydashboard`, `DT`, `shinyFiles`
+- `leaflet`, `shinyjs`, `lubridate`, `dplyr`, `fs`
 
 ### For Step 1 (R Tools)
 - **R** (4.0 or higher): [Download R](https://cran.r-project.org/)
@@ -188,9 +253,10 @@ pip install pyinstaller
 
 ## 📝 Documentation
 
+- **[Step 0 README](Step0_grab_photo_mathing/README.md)** - Complete guide for grab photo matching
 - **[Step 1 README](Step1_video_renaming_point_matching/README.md)** - Complete guide for video renaming
+- **[Step 2 README](Step2_video_processing_still_extract_data_entry/README.md)** - Complete guide for video analysis and data entry
 - **[Step 2 TUTORIAL](Step2_video_processing_still_extract_data_entry/TUTORIAL.md)** - Detailed walkthrough for video analysis
-- **[Video Player README](Step2_video_processing_still_extract_data_entry/Source_code/README.md)** - Technical details for the player app
 
 ---
 

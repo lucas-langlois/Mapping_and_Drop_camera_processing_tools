@@ -5,6 +5,7 @@ Features: Play/Pause, Frame navigation, Timeline scrubbing, Speed control, Frame
 
 import sys
 import os
+import copy
 from datetime import datetime
 import csv
 import json
@@ -24,10 +25,46 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QLineEdit, QTextEdit, QScrollArea, QGroupBox, QGridLayout,
                              QShortcut, QInputDialog, QDialog, QListWidget, QListWidgetItem,
                              QDialogButtonBox, QFrame, QDoubleSpinBox, QCheckBox, QSizePolicy,
-                             QDesktopWidget)
+                             QDesktopWidget, QProgressBar)
 from PyQt5.QtCore import QTimer, Qt, QUrl, QEvent
-from PyQt5.QtGui import QImage, QPixmap, QKeySequence, QColor
+from PyQt5.QtGui import QImage, QPixmap, QKeySequence, QColor, QPainter, QFont
 from PyQt5.QtWebEngineWidgets import QWebEngineView
+
+
+class _ComboFieldWidget(QComboBox):
+    """QComboBox drop-in for data entry fields.
+
+    Exposes the same .text() / .setText() / .clear() interface as QLineEdit so
+    all existing widget-reading code works without modification.
+
+    Items are stored with raw values as Qt.UserRole data so display labels
+    (e.g. "1 — Yes") can differ from the value saved to CSV ("1").
+    """
+
+    def text(self):
+        # Return raw value stored as item data; fall back to display text
+        data = self.itemData(self.currentIndex())
+        return data if data is not None else self.currentText()
+
+    def setText(self, value):
+        sv = str(value)
+        # Find by raw value stored as item data
+        for i in range(self.count()):
+            if self.itemData(i) == sv:
+                self.setCurrentIndex(i)
+                return
+        # Fallback: match by display text (plain dropdowns where display == raw)
+        idx = self.findText(sv)
+        if idx >= 0:
+            self.setCurrentIndex(idx)
+        else:
+            # Value not in list — fall back to the blank/first option
+            self.setCurrentIndex(0)
+
+    def clear(self):
+        # Reset to the first option rather than wiping all options
+        if self.count() > 0:
+            self.setCurrentIndex(0)
 
 
 class ValidationRulesDialog(QDialog):
@@ -108,7 +145,8 @@ class ValidationRulesDialog(QDialog):
             "Sum Equals",
             "Conditional Sum",
             "Auto-Fill",
-            "Calculated Field"
+            "Calculated Field",
+            "Dropdown"
         ])
         self.rule_type_combo.currentTextChanged.connect(self.rule_type_changed)
         type_layout.addWidget(self.rule_type_combo)
@@ -403,7 +441,33 @@ class ValidationRulesDialog(QDialog):
         
         self.calculated_panel.setLayout(calc_layout)
         self.editor_layout.addWidget(self.calculated_panel)
-    
+
+        # Dropdown panel
+        self.dropdown_panel = QGroupBox("Dropdown Rule")
+        dd_layout = QGridLayout()
+
+        dd_layout.addWidget(QLabel("Field:"), 0, 0)
+        self.dd_field = QComboBox()
+        self.dd_field.addItems(self.template_fieldnames)
+        dd_layout.addWidget(self.dd_field, 0, 1)
+
+        dd_layout.addWidget(QLabel("Options (one per line):"), 1, 0)
+        self.dd_values = QTextEdit()
+        self.dd_values.setMaximumHeight(120)
+        self.dd_values.setPlaceholderText("Enter each option on its own line, e.g.:\nSand\nMud\nRock\nNA")
+        dd_layout.addWidget(self.dd_values, 1, 1)
+
+        dd_note = QLabel(
+            "The field will become a drop-down list in the data entry form.\n"
+            "The first option will be pre-selected as the default."
+        )
+        dd_note.setStyleSheet("color: #666; font-size: 10px;")
+        dd_note.setWordWrap(True)
+        dd_layout.addWidget(dd_note, 2, 0, 1, 2)
+
+        self.dropdown_panel.setLayout(dd_layout)
+        self.editor_layout.addWidget(self.dropdown_panel)
+
     def rule_type_changed(self, rule_type):
         """Show/hide appropriate editor panel"""
         self.allowed_values_panel.hide()
@@ -414,7 +478,8 @@ class ValidationRulesDialog(QDialog):
         self.conditional_sum_panel.hide()
         self.autofill_panel.hide()
         self.calculated_panel.hide()
-        
+        self.dropdown_panel.hide()
+
         if rule_type == "Allowed Values":
             self.allowed_values_panel.show()
         elif rule_type == "Numeric Range":
@@ -431,6 +496,8 @@ class ValidationRulesDialog(QDialog):
             self.autofill_panel.show()
         elif rule_type == "Calculated Field":
             self.calculated_panel.show()
+        elif rule_type == "Dropdown":
+            self.dropdown_panel.show()
     
     def add_new_rule(self):
         """Prepare to add a new rule"""
@@ -537,6 +604,11 @@ class ValidationRulesDialog(QDialog):
             self.calc_target_field.setCurrentText(rule.get('target_field', ''))
             self.calc_formula.setText(rule.get('formula', ''))
             self.calc_decimals.setValue(int(rule.get('decimals', 1)))
+
+        elif rule_type == 'dropdown':
+            self.rule_type_combo.setCurrentText("Dropdown")
+            self.dd_field.setCurrentText(rule.get('field', ''))
+            self.dd_values.setPlainText('\n'.join(rule.get('values', [])))
     
     def delete_selected_rule(self):
         """Delete the selected rule"""
@@ -679,16 +751,29 @@ class ValidationRulesDialog(QDialog):
             
             elif rule_type == "Calculated Field":
                 formula = self.calc_formula.text().strip()
-                
+
                 if not formula:
                     QMessageBox.warning(self, "Invalid Formula", "Please specify a formula")
                     return
-                
+
                 rule = {
                     'type': 'calculated',
                     'target_field': self.calc_target_field.currentText(),
                     'formula': formula,
                     'decimals': self.calc_decimals.value()
+                }
+
+            elif rule_type == "Dropdown":
+                raw = self.dd_values.toPlainText().strip()
+                values = [v.strip() for v in raw.splitlines() if v.strip()]
+                if not values:
+                    QMessageBox.warning(self, "Invalid Dropdown",
+                                        "Please enter at least one option.")
+                    return
+                rule = {
+                    'type': 'dropdown',
+                    'field': self.dd_field.currentText(),
+                    'values': values
                 }
             
             # Add or update rule
@@ -1028,11 +1113,27 @@ class MapDialog(QDialog):
             center_lon = 142.0
         
         # Build markers JavaScript
+        _STATUS_COLORS = {
+            'current':  '#FF6F00',  # amber — currently active point
+            'seagrass': '#2E7D32',  # dark green — at least one SG_PRESENT=1
+            'entered':  '#FFFFFF',  # white — entered but no seagrass observed
+            'pending':  '#1565C0',  # blue — not yet entered
+        }
+        _BORDER_COLORS = {
+            'current':  '#FFCC02',
+            'seagrass': '#A5D6A7',
+            'entered':  '#90A4AE',
+            'pending':  '#90CAF9',
+        }
         markers_js = []
         for point in self.points_data:
-            is_current = point['point_id'] == self.current_point_id
-            color = 'red' if is_current else 'blue'
-            icon_html = f"'<div style=\"background-color: {color}; width: 25px; height: 25px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.5);\"></div>'"
+            status = point.get('status', 'pending')
+            color  = _STATUS_COLORS.get(status, '#1565C0')
+            border = _BORDER_COLORS.get(status, '#90CAF9')
+            size   = 29 if status == 'current' else 22
+            icon_html = (f"'<div style=\"background-color: {color}; width: {size}px; height: {size}px; "
+                         f"border-radius: 50%; border: 3px solid {border}; "
+                         f"box-shadow: 0 0 6px rgba(0,0,0,0.6);\"></div>'")    
             
             # Build popup content with available fields
             popup_content = f"<div style='min-width: 200px;'><h3 style='margin: 0 0 10px 0; color: {color};'>Site/Point ID: {point['point_id']}</h3>"
@@ -1061,8 +1162,8 @@ class MapDialog(QDialog):
                 icon: L.divIcon({{
                     className: 'custom-div-icon',
                     html: {icon_html},
-                    iconSize: [25, 25],
-                    iconAnchor: [12, 12]
+                    iconSize: [{size}, {size}],
+                    iconAnchor: [{size//2}, {size//2}]
                 }})
             }}).addTo(map).bindPopup('{popup_content}');
             
@@ -1147,9 +1248,11 @@ class MapDialog(QDialog):
                 var legend = L.control({{ position: 'bottomright' }});
                 legend.onAdd = function (map) {{
                     var div = L.DomUtil.create('div', 'legend');
-                    div.innerHTML = '<h4 style="margin: 0 0 8px 0;">Point Locations</h4>';
-                    div.innerHTML += '<div class="legend-item"><span class="legend-icon" style="background-color: red;"></span>Current Video Point</div>';
-                    div.innerHTML += '<div class="legend-item"><span class="legend-icon" style="background-color: blue;"></span>Other Points</div>';
+                    div.innerHTML = '<h4 style="margin: 0 0 8px 0;">Point Status</h4>';
+                    div.innerHTML += '<div class="legend-item"><span class="legend-icon" style="background-color: #FF6F00; border-color: #FFCC02;"></span>Current point</div>';
+                    div.innerHTML += '<div class="legend-item"><span class="legend-icon" style="background-color: #2E7D32; border-color: #A5D6A7;"></span>Seagrass present (SG=1)</div>';
+                    div.innerHTML += '<div class="legend-item"><span class="legend-icon" style="background-color: #FFFFFF; border-color: #90A4AE;"></span>Entered — no seagrass</div>';
+                    div.innerHTML += '<div class="legend-item"><span class="legend-icon" style="background-color: #1565C0; border-color: #90CAF9;"></span>Not yet entered</div>';
                     return div;
                 }};
                 legend.addTo(map);
@@ -1178,6 +1281,718 @@ class DetachedDataEntryWindow(QMainWindow):
         event.accept()
 
 
+# ---------------------------------------------------------------------------
+# FieldGroupsDialog — manage field display groups for the data entry form
+# ---------------------------------------------------------------------------
+
+class _SubgroupDialog(QDialog):
+    """Small dialog to add / edit a single subgroup."""
+
+    def __init__(self, parent, all_group_fields, subgroup=None):
+        super().__init__(parent)
+        self.all_group_fields = all_group_fields
+        self.setWindowTitle("Edit Subgroup" if subgroup else "Add Subgroup")
+        self.setMinimumWidth(420)
+        self._result = None
+
+        layout = QGridLayout()
+        layout.addWidget(QLabel("Subgroup name:"), 0, 0)
+        self._name_edit = QLineEdit()
+        layout.addWidget(self._name_edit, 0, 1)
+
+        layout.addWidget(QLabel("Indent under field:"), 1, 0)
+        self._parent_combo = QComboBox()
+        self._parent_combo.addItems(all_group_fields)
+        layout.addWidget(self._parent_combo, 1, 1)
+
+        # Available / selected fields
+        layout.addWidget(QLabel("Available fields:"), 2, 0)
+        layout.addWidget(QLabel("Subgroup fields:"), 2, 1)
+
+        self._avail = QListWidget()
+        self._avail.setSelectionMode(QListWidget.ExtendedSelection)
+        layout.addWidget(self._avail, 3, 0)
+
+        self._selected = QListWidget()
+        self._selected.setSelectionMode(QListWidget.ExtendedSelection)
+        layout.addWidget(self._selected, 3, 1)
+
+        btn_col = QVBoxLayout()
+        btn_col.addStretch()
+        add_b = QPushButton("→")
+        add_b.clicked.connect(self._add_fields)
+        rem_b = QPushButton("←")
+        rem_b.clicked.connect(self._remove_fields)
+        btn_col.addWidget(add_b)
+        btn_col.addWidget(rem_b)
+        btn_col.addStretch()
+        layout.addLayout(btn_col, 3, 2)
+
+        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        btns.accepted.connect(self._on_ok)
+        btns.rejected.connect(self.reject)
+        layout.addWidget(btns, 4, 0, 1, 3)
+
+        self.setLayout(layout)
+
+        # Pre-fill
+        if subgroup:
+            self._name_edit.setText(subgroup.get('name', ''))
+            pf = subgroup.get('parent_field', '')
+            if pf in all_group_fields:
+                self._parent_combo.setCurrentText(pf)
+            existing = subgroup.get('fields', [])
+        else:
+            existing = []
+        self._selected.addItems(existing)
+        self._avail.addItems([f for f in all_group_fields if f not in existing])
+
+    def _add_fields(self):
+        for item in self._avail.selectedItems():
+            self._selected.addItem(item.text())
+            self._avail.takeItem(self._avail.row(item))
+
+    def _remove_fields(self):
+        for item in self._selected.selectedItems():
+            self._avail.addItem(item.text())
+            self._selected.takeItem(self._selected.row(item))
+
+    def _on_ok(self):
+        name = self._name_edit.text().strip()
+        if not name:
+            QMessageBox.warning(self, "Name required", "Please enter a subgroup name.")
+            return
+        fields = [self._selected.item(i).text() for i in range(self._selected.count())]
+        self._result = {
+            'name': name,
+            'parent_field': self._parent_combo.currentText(),
+            'fields': fields,
+        }
+        self.accept()
+
+    def result_subgroup(self):
+        return self._result
+
+
+class FieldGroupsDialog(QDialog):
+    """Dialog for managing field display groups in the data entry form."""
+
+    _COLOURS = {
+        "None": "",
+        "Blue — Metadata": "#E3F2FD",
+        "Green — Seagrass / Vegetation": "#E8F5E9",
+        "Lime — Fresh vegetation": "#F1F8E9",
+        "Yellow — Algae": "#FFFDE7",
+        "Orange — Benthic": "#FBE9E7",
+        "Purple — Other": "#F3E5F5",
+        "Red — Flags": "#FFEBEE",
+        "Grey — Admin": "#F5F5F5",
+    }
+
+    def __init__(self, parent, template_fieldnames, current_groups=None):
+        super().__init__(parent)
+        self.template_fieldnames = list(template_fieldnames or [])
+        self.groups = copy.deepcopy(current_groups) if current_groups else []
+        self._cur = -1
+        self._loading = False
+        self.setWindowTitle("Manage Field Groups")
+        self.setGeometry(200, 140, 940, 660)
+        self._init_ui()
+        self._refresh_groups_list()
+
+    # ------------------------------------------------------------------ UI --
+
+    def _init_ui(self):
+        outer = QVBoxLayout()
+
+        title = QLabel("Field Groups Manager")
+        title.setStyleSheet("font-size: 15px; font-weight: bold; padding: 4px;")
+        outer.addWidget(title)
+
+        note = QLabel(
+            "Groups create separate labelled boxes in the data entry form. "
+            "Subgroups appear indented under a parent field."
+        )
+        note.setWordWrap(True)
+        note.setStyleSheet("color: #555; font-size: 11px; padding-bottom: 6px;")
+        outer.addWidget(note)
+
+        # ---- main two-column split ----
+        body = QHBoxLayout()
+
+        # Left: group list + CRUD + reorder
+        left = QVBoxLayout()
+        left.addWidget(QLabel("Groups (top = first in form):"))
+        self._groups_list = QListWidget()
+        self._groups_list.setMaximumWidth(210)
+        self._groups_list.currentRowChanged.connect(self._on_group_selected)
+        left.addWidget(self._groups_list)
+
+        gr_btns = QHBoxLayout()
+        a = QPushButton("+ Add")
+        a.clicked.connect(self._add_group)
+        a.setStyleSheet("background: #4CAF50; color: white;")
+        gr_btns.addWidget(a)
+        d = QPushButton("Delete")
+        d.clicked.connect(self._delete_group)
+        d.setStyleSheet("background: #F44336; color: white;")
+        gr_btns.addWidget(d)
+        left.addLayout(gr_btns)
+
+        up_dn = QHBoxLayout()
+        u = QPushButton("▲ Up")
+        u.clicked.connect(self._move_group_up)
+        up_dn.addWidget(u)
+        dn = QPushButton("▼ Down")
+        dn.clicked.connect(self._move_group_down)
+        up_dn.addWidget(dn)
+        left.addLayout(up_dn)
+
+        lw = QWidget()
+        lw.setLayout(left)
+        lw.setMaximumWidth(220)
+        body.addWidget(lw)
+
+        # Right: editor
+        self._editor = QWidget()
+        self._editor.setEnabled(False)
+        ed = QVBoxLayout()
+
+        # Name + colour row
+        meta = QGridLayout()
+        meta.addWidget(QLabel("Group name:"), 0, 0)
+        self._name_edit = QLineEdit()
+        self._name_edit.textChanged.connect(self._on_meta_changed)
+        meta.addWidget(self._name_edit, 0, 1)
+
+        meta.addWidget(QLabel("Background colour:"), 1, 0)
+        self._colour_combo = QComboBox()
+        self._colour_combo.addItems(list(self._COLOURS.keys()))
+        self._colour_combo.currentTextChanged.connect(self._on_meta_changed)
+        meta.addWidget(self._colour_combo, 1, 1)
+        ed.addLayout(meta)
+
+        # Fields two-list
+        fields_lbl = QLabel("Fields in this group:")
+        fields_lbl.setStyleSheet("font-weight: bold; margin-top: 6px;")
+        ed.addWidget(fields_lbl)
+
+        fl_row = QHBoxLayout()
+        al = QVBoxLayout()
+        al.addWidget(QLabel("Available (not in any group):"))
+        self._avail_list = QListWidget()
+        self._avail_list.setSelectionMode(QListWidget.ExtendedSelection)
+        al.addWidget(self._avail_list)
+        fl_row.addLayout(al)
+
+        mv = QVBoxLayout()
+        mv.addStretch()
+        add_f = QPushButton("→ Add")
+        add_f.clicked.connect(self._add_fields)
+        rem_f = QPushButton("← Remove")
+        rem_f.clicked.connect(self._remove_fields)
+        fup = QPushButton("▲")
+        fup.clicked.connect(self._field_up)
+        fdn = QPushButton("▼")
+        fdn.clicked.connect(self._field_down)
+        mv.addWidget(add_f)
+        mv.addWidget(rem_f)
+        mv.addWidget(fup)
+        mv.addWidget(fdn)
+        mv.addStretch()
+        fl_row.addLayout(mv)
+
+        gl = QVBoxLayout()
+        gl.addWidget(QLabel("Group fields (ordered):"))
+        self._group_fields_list = QListWidget()
+        self._group_fields_list.setSelectionMode(QListWidget.ExtendedSelection)
+        gl.addWidget(self._group_fields_list)
+        fl_row.addLayout(gl)
+        ed.addLayout(fl_row)
+
+        # Subgroups
+        sg_lbl = QLabel("Subgroups (indent fields under a parent):")
+        sg_lbl.setStyleSheet("font-weight: bold; margin-top: 6px;")
+        ed.addWidget(sg_lbl)
+
+        sg_row = QHBoxLayout()
+        self._sg_list = QListWidget()
+        self._sg_list.setMaximumHeight(110)
+        sg_row.addWidget(self._sg_list)
+
+        sg_btns = QVBoxLayout()
+        sg_add = QPushButton("+ Add")
+        sg_add.clicked.connect(self._add_subgroup)
+        sg_edit = QPushButton("Edit")
+        sg_edit.clicked.connect(self._edit_subgroup)
+        sg_del = QPushButton("Delete")
+        sg_del.clicked.connect(self._delete_subgroup)
+        sg_btns.addWidget(sg_add)
+        sg_btns.addWidget(sg_edit)
+        sg_btns.addWidget(sg_del)
+        sg_btns.addStretch()
+        sg_row.addLayout(sg_btns)
+        ed.addLayout(sg_row)
+
+        self._editor.setLayout(ed)
+        body.addWidget(self._editor)
+        outer.addLayout(body)
+
+        # Bottom OK/Cancel
+        btns = QHBoxLayout()
+        btns.addStretch()
+        ok_b = QPushButton("💾 Save Groups")
+        ok_b.setStyleSheet("background: #4CAF50; color: white; padding: 5px 14px;")
+        ok_b.clicked.connect(self.accept)
+        cancel_b = QPushButton("Cancel")
+        cancel_b.clicked.connect(self.reject)
+        btns.addWidget(ok_b)
+        btns.addWidget(cancel_b)
+        outer.addLayout(btns)
+
+        self.setLayout(outer)
+
+    # --------------------------------------------------------- helpers ------
+
+    def _all_placed_fields(self, exclude_group_index=None):
+        """Return set of all fields already assigned to any group."""
+        placed = set()
+        for i, g in enumerate(self.groups):
+            if i == exclude_group_index:
+                continue
+            for f in g.get('fields', []):
+                placed.add(f)
+            for sg in g.get('subgroups', []):
+                for f in sg.get('fields', []):
+                    placed.add(f)
+        return placed
+
+    def _refresh_groups_list(self):
+        self._groups_list.blockSignals(True)
+        self._groups_list.clear()
+        for g in self.groups:
+            self._groups_list.addItem(g.get('name', '(unnamed)'))
+        if self._cur >= len(self.groups):
+            self._cur = len(self.groups) - 1
+        self._groups_list.setCurrentRow(self._cur)
+        self._groups_list.blockSignals(False)
+
+    def _refresh_editor(self):
+        if self._cur < 0 or self._cur >= len(self.groups):
+            self._editor.setEnabled(False)
+            return
+        self._editor.setEnabled(True)
+        self._loading = True
+        g = self.groups[self._cur]
+
+        self._name_edit.setText(g.get('name', ''))
+
+        # Colour combo
+        colour_val = g.get('colour', '')
+        matched = 'None'
+        for label, val in self._COLOURS.items():
+            if val == colour_val:
+                matched = label
+                break
+        self._colour_combo.setCurrentText(matched)
+
+        # Fields lists
+        placed_elsewhere = self._all_placed_fields(exclude_group_index=self._cur)
+        group_fields = g.get('fields', [])
+        # Also exclude subgroup-only fields from available
+        sg_fields = set()
+        for sg in g.get('subgroups', []):
+            for f in sg.get('fields', []):
+                sg_fields.add(f)
+
+        self._group_fields_list.clear()
+        self._group_fields_list.addItems(group_fields)
+
+        self._avail_list.clear()
+        for f in self.template_fieldnames:
+            if f not in set(group_fields) and f not in placed_elsewhere:
+                self._avail_list.addItem(f)
+
+        # Subgroups
+        self._refresh_sg_list()
+        self._loading = False
+
+    def _refresh_sg_list(self):
+        self._sg_list.clear()
+        if self._cur < 0:
+            return
+        for sg in self.groups[self._cur].get('subgroups', []):
+            fields_str = ', '.join(sg.get('fields', []))
+            self._sg_list.addItem(
+                f"↳ {sg.get('name','')}  [under {sg.get('parent_field','')}]  — {fields_str}"
+            )
+
+    def _current_group_fields(self):
+        """Fields currently in the group list widget."""
+        return [self._group_fields_list.item(i).text()
+                for i in range(self._group_fields_list.count())]
+
+    # -------------------------------------------------------- group CRUD ----
+
+    def _on_group_selected(self, row):
+        if self._loading:
+            return
+        # Save current group name/colour before switching
+        self._flush_meta()
+        self._cur = row
+        self._refresh_editor()
+
+    def _flush_meta(self):
+        """Write name + colour back to groups list from editor widgets."""
+        if self._loading or self._cur < 0 or self._cur >= len(self.groups):
+            return
+        self.groups[self._cur]['name'] = self._name_edit.text().strip() or '(unnamed)'
+        self.groups[self._cur]['colour'] = self._COLOURS.get(
+            self._colour_combo.currentText(), '')
+        # Sync field order
+        self.groups[self._cur]['fields'] = self._current_group_fields()
+        # Update list label
+        self._groups_list.blockSignals(True)
+        item = self._groups_list.item(self._cur)
+        if item:
+            item.setText(self.groups[self._cur]['name'])
+        self._groups_list.blockSignals(False)
+
+    def _on_meta_changed(self):
+        if not self._loading:
+            self._flush_meta()
+
+    def _add_group(self):
+        self._flush_meta()
+        self.groups.append({'name': 'New Group', 'colour': '', 'fields': [], 'subgroups': []})
+        self._cur = len(self.groups) - 1
+        self._refresh_groups_list()
+        self._refresh_editor()
+        self._name_edit.setFocus()
+        self._name_edit.selectAll()
+
+    def _delete_group(self):
+        if self._cur < 0 or self._cur >= len(self.groups):
+            return
+        name = self.groups[self._cur].get('name', '')
+        if QMessageBox.question(self, 'Delete Group',
+                                f'Delete group "{name}"?',
+                                QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+            return
+        del self.groups[self._cur]
+        self._cur = min(self._cur, len(self.groups) - 1)
+        self._refresh_groups_list()
+        self._refresh_editor()
+
+    def _move_group_up(self):
+        if self._cur <= 0:
+            return
+        self._flush_meta()
+        self.groups[self._cur - 1], self.groups[self._cur] = \
+            self.groups[self._cur], self.groups[self._cur - 1]
+        self._cur -= 1
+        self._refresh_groups_list()
+        self._refresh_editor()
+
+    def _move_group_down(self):
+        if self._cur < 0 or self._cur >= len(self.groups) - 1:
+            return
+        self._flush_meta()
+        self.groups[self._cur], self.groups[self._cur + 1] = \
+            self.groups[self._cur + 1], self.groups[self._cur]
+        self._cur += 1
+        self._refresh_groups_list()
+        self._refresh_editor()
+
+    # --------------------------------------------------------- field CRUD ---
+
+    def _add_fields(self):
+        for item in self._avail_list.selectedItems():
+            self._group_fields_list.addItem(item.text())
+            self._avail_list.takeItem(self._avail_list.row(item))
+        self._flush_meta()
+
+    def _remove_fields(self):
+        for item in self._group_fields_list.selectedItems():
+            self._avail_list.addItem(item.text())
+            self._group_fields_list.takeItem(self._group_fields_list.row(item))
+        self._flush_meta()
+
+    def _field_up(self):
+        row = self._group_fields_list.currentRow()
+        if row <= 0:
+            return
+        item = self._group_fields_list.takeItem(row)
+        self._group_fields_list.insertItem(row - 1, item)
+        self._group_fields_list.setCurrentRow(row - 1)
+        self._flush_meta()
+
+    def _field_down(self):
+        row = self._group_fields_list.currentRow()
+        if row < 0 or row >= self._group_fields_list.count() - 1:
+            return
+        item = self._group_fields_list.takeItem(row)
+        self._group_fields_list.insertItem(row + 1, item)
+        self._group_fields_list.setCurrentRow(row + 1)
+        self._flush_meta()
+
+    # ------------------------------------------------------ subgroup CRUD ---
+
+    def _add_subgroup(self):
+        self._flush_meta()
+        gfields = self._current_group_fields()
+        if not gfields:
+            QMessageBox.information(self, 'No fields',
+                                    'Add some fields to the group first.')
+            return
+        dlg = _SubgroupDialog(self, gfields)
+        if dlg.exec_() == QDialog.Accepted:
+            sg = dlg.result_subgroup()
+            if sg:
+                self.groups[self._cur].setdefault('subgroups', []).append(sg)
+                self._refresh_sg_list()
+
+    def _edit_subgroup(self):
+        row = self._sg_list.currentRow()
+        if row < 0:
+            return
+        self._flush_meta()
+        gfields = self._current_group_fields()
+        sg = self.groups[self._cur]['subgroups'][row]
+        dlg = _SubgroupDialog(self, gfields, subgroup=sg)
+        if dlg.exec_() == QDialog.Accepted:
+            result = dlg.result_subgroup()
+            if result:
+                self.groups[self._cur]['subgroups'][row] = result
+                self._refresh_sg_list()
+
+    def _delete_subgroup(self):
+        row = self._sg_list.currentRow()
+        if row < 0:
+            return
+        del self.groups[self._cur]['subgroups'][row]
+        self._refresh_sg_list()
+
+    # --------------------------------------------------------- accept -------
+
+    def accept(self):
+        self._flush_meta()
+        super().accept()
+
+    def get_groups(self):
+        return copy.deepcopy(self.groups)
+
+
+# ---------------------------------------------------------------------------
+# Template builder dialog — lets users create a new template CSV from scratch
+# ---------------------------------------------------------------------------
+class TemplateBuilderDialog(QDialog):
+    """Wizard to define field names and save a new data-entry template CSV."""
+
+    COMMON_FIELDS = [
+        "POINT_ID", "DROP_ID", "DATE", "TIME",
+        "LATITUDE", "LONGITUDE", "DEPTH_M",
+        "FILENAME", "GRAB_FILENAME", "COMMENTS",
+    ]
+
+    def __init__(self, parent=None, save_dir=""):
+        super().__init__(parent)
+        self.setWindowTitle("Build New Data Entry Template")
+        self.setMinimumSize(520, 540)
+        self.save_dir = save_dir or ""
+        self.template_path = None
+        self.template_fieldnames = []
+        self._build_ui()
+
+    # ------------------------------------------------------------------ UI --
+
+    def _build_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setSpacing(8)
+
+        info = QLabel(
+            "<b>Build your data entry template.</b><br>"
+            "Add the column names you want to appear in the data entry form.<br>"
+            "Double-click a field name in the list to rename it.  "
+            "Drag rows to reorder them."
+        )
+        info.setWordWrap(True)
+        layout.addWidget(info)
+
+        # ---- middle: list + side buttons ----
+        mid = QHBoxLayout()
+        layout.addLayout(mid)
+
+        self.field_list = QListWidget()
+        self.field_list.setDragDropMode(QListWidget.InternalMove)
+        self.field_list.setAlternatingRowColors(True)
+        mid.addWidget(self.field_list, 1)
+
+        btn_col = QVBoxLayout()
+        btn_col.setSpacing(4)
+        mid.addLayout(btn_col)
+
+        add_btn = QPushButton("+ Add Field")
+        add_btn.setToolTip("Append a new blank field to the list")
+        add_btn.clicked.connect(self._add_field)
+        btn_col.addWidget(add_btn)
+
+        del_btn = QPushButton("✕ Delete")
+        del_btn.setToolTip("Remove the selected field(s)")
+        del_btn.clicked.connect(self._delete_selected)
+        btn_col.addWidget(del_btn)
+
+        btn_col.addSpacing(8)
+
+        up_btn = QPushButton("▲ Up")
+        up_btn.clicked.connect(self._move_up)
+        btn_col.addWidget(up_btn)
+
+        down_btn = QPushButton("▼ Down")
+        down_btn.clicked.connect(self._move_down)
+        btn_col.addWidget(down_btn)
+
+        btn_col.addStretch(1)
+
+        # ---- preset row ----
+        preset_row = QHBoxLayout()
+        layout.addLayout(preset_row)
+
+        common_btn = QPushButton("Add Common Fields")
+        common_btn.setToolTip(
+            "Adds a standard starter set of fields:\n  " +
+            ", ".join(self.COMMON_FIELDS)
+        )
+        common_btn.clicked.connect(self._add_common_fields)
+        preset_row.addWidget(common_btn)
+
+        clear_btn = QPushButton("Clear All")
+        clear_btn.setToolTip("Remove all fields from the list")
+        clear_btn.clicked.connect(self.field_list.clear)
+        preset_row.addWidget(clear_btn)
+        preset_row.addStretch(1)
+
+        tip = QLabel("<i>Field names will be stored exactly as typed (case-sensitive). "
+                     "Names are trimmed of leading/trailing spaces on save.</i>")
+        tip.setWordWrap(True)
+        layout.addWidget(tip)
+
+        # ---- bottom buttons ----
+        layout.addSpacing(4)
+        btn_row = QHBoxLayout()
+        layout.addLayout(btn_row)
+        btn_row.addStretch(1)
+
+        save_btn = QPushButton("Save Template…")
+        save_btn.setDefault(True)
+        save_btn.setToolTip("Choose a location to save the template CSV, then close this dialog")
+        save_btn.clicked.connect(self._save_template)
+        btn_row.addWidget(save_btn)
+
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(self.reject)
+        btn_row.addWidget(cancel_btn)
+
+    # --------------------------------------------------------------- actions -
+
+    def _make_item(self, text):
+        item = QListWidgetItem(text)
+        item.setFlags(item.flags() | Qt.ItemIsEditable)
+        return item
+
+    def _add_field(self):
+        item = self._make_item("NEW_FIELD")
+        self.field_list.addItem(item)
+        self.field_list.setCurrentItem(item)
+        self.field_list.editItem(item)
+
+    def _delete_selected(self):
+        for item in self.field_list.selectedItems():
+            self.field_list.takeItem(self.field_list.row(item))
+
+    def _move_up(self):
+        row = self.field_list.currentRow()
+        if row > 0:
+            item = self.field_list.takeItem(row)
+            self.field_list.insertItem(row - 1, item)
+            self.field_list.setCurrentRow(row - 1)
+
+    def _move_down(self):
+        row = self.field_list.currentRow()
+        if row < self.field_list.count() - 1:
+            item = self.field_list.takeItem(row)
+            self.field_list.insertItem(row + 1, item)
+            self.field_list.setCurrentRow(row + 1)
+
+    def _add_common_fields(self):
+        existing = {self.field_list.item(i).text().strip().upper()
+                    for i in range(self.field_list.count())}
+        added = 0
+        for name in self.COMMON_FIELDS:
+            if name.upper() not in existing:
+                self.field_list.addItem(self._make_item(name))
+                added += 1
+        if added == 0:
+            QMessageBox.information(
+                self, "Add Common Fields",
+                "All common fields are already present in your list."
+            )
+
+    def _save_template(self):
+        # Collect non-empty names
+        fields = [
+            self.field_list.item(i).text().strip()
+            for i in range(self.field_list.count())
+            if self.field_list.item(i).text().strip()
+        ]
+
+        if not fields:
+            QMessageBox.warning(
+                self, "No Fields",
+                "Please add at least one field before saving."
+            )
+            return
+
+        # Duplicate check (case-insensitive)
+        seen, duplicates = set(), []
+        for f in fields:
+            key = f.upper()
+            if key in seen:
+                duplicates.append(f)
+            seen.add(key)
+        if duplicates:
+            QMessageBox.warning(
+                self, "Duplicate Field Names",
+                "Please remove or rename these duplicate fields:\n\n" +
+                "\n".join(duplicates)
+            )
+            return
+
+        # Choose save path
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save Template CSV", self.save_dir,
+            "CSV Files (*.csv);;All Files (*.*)"
+        )
+        if not path:
+            return
+        if not path.lower().endswith(".csv"):
+            path += ".csv"
+
+        try:
+            with open(path, 'w', newline='', encoding='utf-8') as f:
+                csv.writer(f).writerow(fields)
+        except Exception as e:
+            QMessageBox.critical(
+                self, "Save Error",
+                f"Could not save template:\n{e}"
+            )
+            return
+
+        self.template_path = path
+        self.template_fieldnames = fields
+        self.accept()
+
+
 class VideoPlayer(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -1202,6 +2017,13 @@ class VideoPlayer(QMainWindow):
         self.video_queue = []
         self.current_video_index = 0
         self.drop_counter = 1  # Counter for saved stills
+
+        # Unified CSV row navigation
+        self.current_base_csv_row_index = -1   # position in base_data_csv
+        self.grab_only_mode = False             # True when no video for current row
+        self.grab_photos_dir = ""               # folder containing grab sample photos
+        self._photo_list = []    # image paths for the current point (photo viewer mode)
+        self._photo_index = 0   # currently displayed photo index
         
         # Get the correct application path (works for both .py and .exe)
         if getattr(sys, 'frozen', False):
@@ -1222,6 +2044,8 @@ class VideoPlayer(QMainWindow):
         
         # Data entry variables
         self.data_fields = {}
+        self.dropdown_fields = {}  # field_name -> [option, ...] built from dropdown rules
+        self.calculated_field_names = set()  # target fields of calculated rules (read-only in form)
         self.template_fieldnames = []  # Store fieldnames from template CSV
         self.base_data = {}  # Store preloaded base data from CSV
         self.base_data_csv = []  # Store all rows from loaded base CSV
@@ -1229,6 +2053,7 @@ class VideoPlayer(QMainWindow):
         self.all_data_entries = []  # List of all data entries (only created on frame extraction)
         self.current_entry_index = -1  # Current position in data entries (-1 means no entries yet)
         self.unsaved_changes = False  # Track if current entry has unsaved changes
+        self._new_entry_draft = None  # Snapshot of the new-entry form while browsing saved entries
         
         print("Initialized: all_data_entries=[], current_entry_index=-1")
         
@@ -1301,42 +2126,85 @@ class VideoPlayer(QMainWindow):
                     return False
                 # Continue to new project setup below
         
-        # Step 1: Load template CSV (required)
+        # Step 1: Load or build a template CSV (required)
         template_msg = QMessageBox()
-        template_msg.setIcon(QMessageBox.Information)
-        template_msg.setWindowTitle("Load Data Entry Template")
-        template_msg.setText("Please select a data entry template CSV file.\n\nThis defines the column names for your data entries.")
-        template_msg.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
-        
-        if template_msg.exec_() == QMessageBox.Cancel:
-            return False
-        
-        template_path, _ = QFileDialog.getOpenFileName(
-            self, "Select Data Entry Template CSV", self.data_dir,
-            "CSV Files (*.csv);;All Files (*.*)"
+        template_msg.setIcon(QMessageBox.Question)
+        template_msg.setWindowTitle("Data Entry Template")
+        template_msg.setText(
+            "A <b>data entry template</b> defines the column names for your data.<br><br>"
+            "Would you like to load an existing template CSV, "
+            "or build a brand-new one from scratch?"
         )
-        
-        if not template_path:
-            QMessageBox.warning(self, "No Template", "A template CSV is required to continue.")
+        load_tmpl_btn  = template_msg.addButton("Load Existing Template…", QMessageBox.AcceptRole)
+        build_tmpl_btn = template_msg.addButton("Build New Template…",     QMessageBox.ActionRole)
+        cancel_tmpl    = template_msg.addButton(QMessageBox.Cancel)
+        template_msg.exec_()
+        clicked_tmpl = template_msg.clickedButton()
+
+        if clicked_tmpl == cancel_tmpl:
             return False
-        
-        # Store template path for later use
-        self.template_path = template_path
-        
-        # Load template fieldnames
-        try:
-            with open(template_path, 'r', encoding='utf-8') as f:
-                reader = csv.DictReader(f)
-                self.template_fieldnames = reader.fieldnames
-                if not self.template_fieldnames:
-                    QMessageBox.critical(self, "Invalid Template", "The template CSV has no column headers.")
-                    return False
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to load template CSV:\n{str(e)}")
-            return False
-        
-        # Auto-load validation rules if they exist
-        self.load_validation_rules()
+
+        if clicked_tmpl == build_tmpl_btn:
+            # ---- Build new template wizard ----
+            builder = TemplateBuilderDialog(self, self.data_dir)
+            if builder.exec_() != QDialog.Accepted:
+                return False
+
+            self.template_path = builder.template_path
+            self.template_fieldnames = list(builder.template_fieldnames)
+            self.load_validation_rules()   # no rules file yet → returns []
+
+            # Offer immediate configuration of groups / rules
+            setup_msg = QMessageBox(self)
+            setup_msg.setWindowTitle("Template Saved")
+            setup_msg.setText(
+                f"Template saved with {len(self.template_fieldnames)} field(s).\n\n"
+                "Would you like to configure field groups and / or validation rules now?\n"
+                "(You can always adjust these later from the menu.)"
+            )
+            grp_btn  = setup_msg.addButton("Field Groups…",     QMessageBox.ActionRole)
+            rul_btn  = setup_msg.addButton("Validation Rules…", QMessageBox.ActionRole)
+            both_btn = setup_msg.addButton("Both",              QMessageBox.ActionRole)
+            skip_btn = setup_msg.addButton("Skip for now",      QMessageBox.AcceptRole)
+            setup_msg.exec_()
+            sc = setup_msg.clickedButton()
+
+            if sc in (grp_btn, both_btn):
+                # Open the groups dialog directly — no widget rebuild needed yet
+                current_groups = self._load_field_groups()
+                gdlg = FieldGroupsDialog(self, self.template_fieldnames, current_groups)
+                if gdlg.exec_() == QDialog.Accepted:
+                    self._save_field_groups(gdlg.get_groups())
+
+            if sc in (rul_btn, both_btn):
+                self.manage_validation_rules()
+
+        else:
+            # ---- Load existing template ----
+            template_path, _ = QFileDialog.getOpenFileName(
+                self, "Select Data Entry Template CSV", self.data_dir,
+                "CSV Files (*.csv);;All Files (*.*)"
+            )
+
+            if not template_path:
+                QMessageBox.warning(self, "No Template", "A template CSV is required to continue.")
+                return False
+
+            self.template_path = template_path
+
+            try:
+                with open(template_path, 'r', encoding='utf-8') as f:
+                    reader = csv.DictReader(f)
+                    self.template_fieldnames = reader.fieldnames
+                    if not self.template_fieldnames:
+                        QMessageBox.critical(self, "Invalid Template", "The template CSV has no column headers.")
+                        return False
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to load template CSV:\n{str(e)}")
+                return False
+
+            # Auto-load validation rules if they exist
+            self.load_validation_rules()
         
         # Step 2: Ask if user wants to load base CSV (optional)
         base_msg = QMessageBox()
@@ -1356,15 +2224,54 @@ class VideoPlayer(QMainWindow):
                 try:
                     self.base_data_csv = self._load_base_csv_rows_uppercase_headers(base_path)
                     self.base_data_csv_path = base_path  # Store the path
-                    
-                    QMessageBox.information(
-                        self, "Base CSV Loaded",
-                        f"Loaded {len(self.base_data_csv)} rows from base CSV.\n\n"
-                        f"Data will auto-populate when extracting stills."
-                    )
+                    self._enable_point_navigation()
                 except Exception as e:
                     QMessageBox.warning(self, "Error", f"Failed to load base CSV:\n{str(e)}\n\nContinuing without base data.")
-        
+
+        # Step 3: Load video folder (optional, shown when base CSV loaded)
+        if self.base_data_csv:
+            vid_msg = QMessageBox()
+            vid_msg.setIcon(QMessageBox.Question)
+            vid_msg.setWindowTitle("Load Video Folder (Optional)")
+            vid_msg.setText(
+                "Do you want to load the drop videos folder now?\n\n"
+                "You can skip this if you only have grab-sample (no-video) points, "
+                "or load it later using 'Load drop_videos/' or 'Choose Folder…'."
+            )
+            vid_msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+            if vid_msg.exec_() == QMessageBox.Yes:
+                folder_path = QFileDialog.getExistingDirectory(
+                    self, "Select Videos Folder",
+                    self.drop_videos_dir,
+                    QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks
+                )
+                if folder_path:
+                    self.drop_videos_dir = folder_path
+                    self.load_video_queue(silent=True)  # just populate queue; nav will pick correct video
+
+        # Step 4: Set grab photos folder (optional, shown when base CSV loaded)
+        if self.base_data_csv:
+            grab_msg = QMessageBox()
+            grab_msg.setIcon(QMessageBox.Question)
+            grab_msg.setWindowTitle("Set Grab Photos Folder (Optional)")
+            grab_msg.setText(
+                "Do you want to set the grab photos folder now?\n\n"
+                "This lets the app show the grab sample photo when reviewing a point "
+                "that has no video.  You can also set it later."
+            )
+            grab_msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+            if grab_msg.exec_() == QMessageBox.Yes:
+                grab_folder = QFileDialog.getExistingDirectory(
+                    self, "Select Grab Photos Folder",
+                    self.grab_photos_dir or self.data_dir
+                )
+                if grab_folder:
+                    self.grab_photos_dir = grab_folder
+                    display = os.path.basename(grab_folder) or grab_folder
+                    self.grab_photos_dir_label.setText(display)
+                    self.grab_photos_dir_label.setStyleSheet("font-size: 10px; color: #333;")
+                    self.grab_photos_dir_label.setToolTip(grab_folder)
+
         # Now create the data entry pane with the loaded template
         self.create_data_entry_pane()
         
@@ -1372,8 +2279,10 @@ class VideoPlayer(QMainWindow):
         self.main_layout.removeWidget(self.data_entry_placeholder)
         self.data_entry_placeholder.deleteLater()
         self.main_layout.addWidget(self.data_entry_widget, 1)
-        
-        # Auto-fill connections are set up during field creation (no need for separate setup)
+
+        # Auto-navigate to the first CSV row so the UI starts populated
+        if self.base_data_csv:
+            self.navigate_to_base_csv_row(0)
         
         return True
 
@@ -1412,6 +2321,93 @@ class VideoPlayer(QMainWindow):
     def _get_point_identifier_from_row(self, row):
         """Get point/site identifier value from a row using flexible field aliases."""
         return self._get_row_value(row, ['POINT_ID', 'SITE', 'SITE_ID', 'POINT', 'STATION', 'STATION_ID'])
+
+    def _get_datetime_source_from_row(self, row):
+        """Get best available datetime-like value from a row using flexible aliases."""
+        return self._get_row_value(row, [
+            'DATE_TIME', 'SURVEY_DATETIME', 'SURVEY_DATE_TIME',
+            'VIDEO_TIMESTAMP', 'VIDEO_DATETIME', 'GPS_DATETIME',
+            'SURVEY_DAT', 'DATE'
+        ])
+
+    def _parse_month_from_date_text(self, date_text):
+        """Extract 2-digit month from a date-like string when possible."""
+        text = str(date_text or '').strip()
+        if not text:
+            return ''
+
+        for fmt in ["%d/%m/%Y", "%Y/%m/%d", "%d-%m-%Y", "%Y-%m-%d"]:
+            try:
+                parsed_date = datetime.strptime(text, fmt)
+                return parsed_date.strftime("%m")
+            except Exception:
+                pass
+
+        tokens = re.split(r'[/\-]', text)
+        if len(tokens) == 3:
+            # YYYY-MM-DD
+            if len(tokens[0]) == 4 and tokens[1].isdigit() and 1 <= int(tokens[1]) <= 12:
+                return f"{int(tokens[1]):02d}"
+            # DD-MM-YYYY
+            if len(tokens[2]) == 4 and tokens[1].isdigit() and 1 <= int(tokens[1]) <= 12:
+                return f"{int(tokens[1]):02d}"
+
+        return ''
+
+    def _get_prefill_value_for_field(self, field_name):
+        """Return best-effort prefill value for a template field from current base row."""
+        if not self.base_data:
+            return ''
+
+        # Direct lookup (exact case match)
+        value = self.base_data.get(field_name, '')
+        if value not in (None, ''):
+            return str(value)
+
+        # Case-insensitive fallback — base_data keys are uppercased on load; template
+        # headers may differ in case (e.g. 'Sg_Present' vs 'SG_PRESENT').
+        field_upper = str(field_name or '').strip().upper()
+        value = self.base_data.get(field_upper, '')
+        if value not in (None, ''):
+            return str(value)
+        datetime_source = self._get_datetime_source_from_row(self.base_data)
+        parsed_year, parsed_date, parsed_time = self._split_datetime_parts(datetime_source) if datetime_source else ('', '', '')
+
+        if field_upper in ['SITE', 'POINT_ID', 'SITE_ID', 'POINT', 'STATION', 'STATION_ID']:
+            return self._get_point_identifier_from_row(self.base_data)
+
+        if field_upper in ['VIDEO_FILENAME', 'VIDEO_FILE', 'VIDEO_NAME', 'MATCHED_VIDEO_FILENAME']:
+            return self._get_video_filename_from_row(self.base_data)
+
+        if field_upper in ['SURVEY_DAT', 'DATE']:
+            return parsed_date or self._get_row_value(self.base_data, ['SURVEY_DAT', 'DATE'])
+
+        if field_upper == 'TIME':
+            return parsed_time or self._get_row_value(self.base_data, ['TIME'])
+
+        if field_upper == 'YEAR':
+            return parsed_year or self._get_row_value(self.base_data, ['YEAR'])
+
+        if field_upper == 'MONTH':
+            month_value = self._get_row_value(self.base_data, ['MONTH'])
+            if month_value:
+                return month_value
+            return self._parse_month_from_date_text(parsed_date)
+
+        if field_upper in ['DATE_TIME', 'SURVEY_DATETIME', 'SURVEY_DATE_TIME']:
+            return datetime_source
+
+        if field_upper == 'LATITUDE':
+            return self._get_row_value(self.base_data, ['LATITUDE', 'LAT'])
+
+        if field_upper == 'LONGITUDE':
+            return self._get_row_value(self.base_data, ['LONGITUDE', 'LON', 'LONG'])
+
+        # Seagrass presence — base CSV may use SG_PA (presence/absence) column
+        if field_upper == 'SG_PRESENT':
+            return self._get_row_value(self.base_data, ['SG_PRESENT', 'SG_PA'])
+
+        return ''
         
     def init_ui(self):
         """Initialize the user interface"""
@@ -1442,7 +2438,29 @@ class VideoPlayer(QMainWindow):
         self.info_label = QLabel("Frame: 0 / 0 | Time: 00:00:00")
         self.info_label.setAlignment(Qt.AlignCenter)
         video_layout.addWidget(self.info_label)
-        
+
+        # Photo navigation row (hidden by default; shown when displaying multiple photos inline)
+        self.photo_nav_widget = QWidget()
+        photo_nav_row = QHBoxLayout(self.photo_nav_widget)
+        photo_nav_row.setContentsMargins(0, 2, 0, 2)
+        photo_nav_row.setSpacing(6)
+        self.photo_prev_btn = QPushButton("\u25c4 Prev Photo")
+        self.photo_prev_btn.setMaximumWidth(100)
+        self.photo_prev_btn.setEnabled(False)
+        self.photo_prev_btn.clicked.connect(self._photo_prev)
+        photo_nav_row.addWidget(self.photo_prev_btn)
+        self.photo_nav_label = QLabel("Photo 1 / 1")
+        self.photo_nav_label.setAlignment(Qt.AlignCenter)
+        self.photo_nav_label.setStyleSheet("font-size: 11px; font-weight: bold; color: #9C27B0;")
+        photo_nav_row.addWidget(self.photo_nav_label, 1)
+        self.photo_next_btn = QPushButton("Next Photo \u25ba")
+        self.photo_next_btn.setMaximumWidth(100)
+        self.photo_next_btn.setEnabled(False)
+        self.photo_next_btn.clicked.connect(self._photo_next)
+        photo_nav_row.addWidget(self.photo_next_btn)
+        self.photo_nav_widget.setVisible(False)
+        video_layout.addWidget(self.photo_nav_widget)
+
         # Timeline slider
         self.timeline_slider = QSlider(Qt.Horizontal)
         self.timeline_slider.setMinimum(0)
@@ -1496,44 +2514,81 @@ class VideoPlayer(QMainWindow):
         self.open_btn.setMaximumWidth(60)
         controls_layout.addWidget(self.open_btn)
         
-        # Play/Pause button
-        self.play_btn = QPushButton("▶")
-        self.play_btn.setToolTip("Play/Pause")
+        # Play/Pause button — large, green, clearly the primary transport control
+        self.play_btn = QPushButton("▶  Play")
+        self.play_btn.setToolTip("Play / Pause  (Space)")
         self.play_btn.clicked.connect(self.toggle_play)
         self.play_btn.setEnabled(False)
-        self.play_btn.setMaximumWidth(40)
+        self.play_btn.setMinimumWidth(85)
+        self.play_btn.setStyleSheet(
+            "QPushButton { background-color: #2e7d32; color: white; font-weight: bold; "
+            "font-size: 13px; padding: 4px 8px; border-radius: 4px; } "
+            "QPushButton:hover { background-color: #388e3c; } "
+            "QPushButton:disabled { background-color: #aaa; color: #eee; }"
+        )
         controls_layout.addWidget(self.play_btn)
-        
-        # Previous frame button
-        self.prev_frame_btn = QPushButton("◀")
-        self.prev_frame_btn.setToolTip("Previous Frame")
+
+        # Visual separator between transport and frame-step controls
+        sep = QFrame()
+        sep.setFrameShape(QFrame.VLine)
+        sep.setFrameShadow(QFrame.Sunken)
+        sep.setMaximumWidth(6)
+        controls_layout.addWidget(sep)
+
+        # Previous frame button — grey, smaller, clearly a step control
+        self.prev_frame_btn = QPushButton("◀ Frame")
+        self.prev_frame_btn.setToolTip("Previous Frame  (Left arrow)")
         self.prev_frame_btn.clicked.connect(self.previous_frame)
         self.prev_frame_btn.setEnabled(False)
-        self.prev_frame_btn.setMaximumWidth(40)
+        self.prev_frame_btn.setMinimumWidth(75)
+        self.prev_frame_btn.setStyleSheet(
+            "QPushButton { background-color: #546e7a; color: white; font-size: 11px; "
+            "padding: 3px 6px; border-radius: 4px; } "
+            "QPushButton:hover { background-color: #607d8b; } "
+            "QPushButton:disabled { background-color: #aaa; color: #eee; }"
+        )
         controls_layout.addWidget(self.prev_frame_btn)
-        
+
         # Next frame button
-        self.next_frame_btn = QPushButton("▶")
-        self.next_frame_btn.setToolTip("Next Frame")
+        self.next_frame_btn = QPushButton("Frame ▶")
+        self.next_frame_btn.setToolTip("Next Frame  (Right arrow)")
         self.next_frame_btn.clicked.connect(self.next_frame)
         self.next_frame_btn.setEnabled(False)
-        self.next_frame_btn.setMaximumWidth(40)
+        self.next_frame_btn.setMinimumWidth(75)
+        self.next_frame_btn.setStyleSheet(
+            "QPushButton { background-color: #546e7a; color: white; font-size: 11px; "
+            "padding: 3px 6px; border-radius: 4px; } "
+            "QPushButton:hover { background-color: #607d8b; } "
+            "QPushButton:disabled { background-color: #aaa; color: #eee; }"
+        )
         controls_layout.addWidget(self.next_frame_btn)
-        
+
         # Skip backward button (10 frames)
-        self.skip_back_btn = QPushButton("◀◀")
+        self.skip_back_btn = QPushButton("◀◀ -10")
         self.skip_back_btn.setToolTip("Skip -10 frames")
         self.skip_back_btn.clicked.connect(lambda: self.skip_frames(-10))
         self.skip_back_btn.setEnabled(False)
-        self.skip_back_btn.setMaximumWidth(45)
+        self.skip_back_btn.setMinimumWidth(65)
+        self.skip_back_btn.setStyleSheet(
+            "QPushButton { background-color: #546e7a; color: white; font-size: 11px; "
+            "padding: 3px 6px; border-radius: 4px; } "
+            "QPushButton:hover { background-color: #607d8b; } "
+            "QPushButton:disabled { background-color: #aaa; color: #eee; }"
+        )
         controls_layout.addWidget(self.skip_back_btn)
-        
+
         # Skip forward button (10 frames)
-        self.skip_forward_btn = QPushButton("▶▶")
+        self.skip_forward_btn = QPushButton("+10 ▶▶")
         self.skip_forward_btn.setToolTip("Skip +10 frames")
         self.skip_forward_btn.clicked.connect(lambda: self.skip_frames(10))
         self.skip_forward_btn.setEnabled(False)
-        self.skip_forward_btn.setMaximumWidth(45)
+        self.skip_forward_btn.setMinimumWidth(65)
+        self.skip_forward_btn.setStyleSheet(
+            "QPushButton { background-color: #546e7a; color: white; font-size: 11px; "
+            "padding: 3px 6px; border-radius: 4px; } "
+            "QPushButton:hover { background-color: #607d8b; } "
+            "QPushButton:disabled { background-color: #aaa; color: #eee; }"
+        )
         controls_layout.addWidget(self.skip_forward_btn)
         
         # Speed control
@@ -1629,7 +2684,86 @@ class VideoPlayer(QMainWindow):
         autoload_layout.addStretch()
         
         video_layout.addLayout(autoload_layout)
-        
+
+        # ── Point navigation row ─────────────────────────────────────────────
+        grab_layout = QHBoxLayout()
+        grab_layout.setSpacing(4)
+
+        self.prev_point_btn = QPushButton("◀ Prev Point")
+        self.prev_point_btn.setToolTip("Go to previous point in base CSV")
+        self.prev_point_btn.clicked.connect(self.prev_point)
+        self.prev_point_btn.setEnabled(False)
+        self.prev_point_btn.setMaximumWidth(90)
+        grab_layout.addWidget(self.prev_point_btn)
+
+        self.next_point_btn = QPushButton("Next Point ▶")
+        self.next_point_btn.setToolTip("Go to next point in base CSV")
+        self.next_point_btn.clicked.connect(self.next_point)
+        self.next_point_btn.setEnabled(False)
+        self.next_point_btn.setMaximumWidth(90)
+        grab_layout.addWidget(self.next_point_btn)
+
+        self.goto_point_btn = QPushButton("Go To...")
+        self.goto_point_btn.setToolTip("Jump to a specific point in the base CSV")
+        self.goto_point_btn.clicked.connect(self.goto_point)
+        self.goto_point_btn.setEnabled(False)
+        self.goto_point_btn.setMaximumWidth(70)
+        grab_layout.addWidget(self.goto_point_btn)
+
+        self.point_nav_label = QLabel("Load a base CSV to navigate points")
+        self.point_nav_label.setStyleSheet("font-size: 11px; color: #888;")
+        grab_layout.addWidget(self.point_nav_label)
+
+        grab_layout.addStretch()
+
+        # Grab photos folder
+        grab_layout.addWidget(QLabel("Grab photos:"))
+        self.grab_photos_dir_label = QLabel("(not set)")
+        self.grab_photos_dir_label.setStyleSheet("font-size: 10px; color: #888;")
+        self.grab_photos_dir_label.setMaximumWidth(160)
+        grab_layout.addWidget(self.grab_photos_dir_label)
+
+        self.set_grab_photos_dir_btn = QPushButton("📁 Set Folder")
+        self.set_grab_photos_dir_btn.clicked.connect(self.set_grab_photos_dir)
+        self.set_grab_photos_dir_btn.setMaximumWidth(90)
+        grab_layout.addWidget(self.set_grab_photos_dir_btn)
+
+        self.view_grab_photo_btn = QPushButton("🖼 View Grab Photo")
+        self.view_grab_photo_btn.clicked.connect(self.view_grab_photo)
+        self.view_grab_photo_btn.setEnabled(False)
+        self.view_grab_photo_btn.setMaximumWidth(130)
+        self.view_grab_photo_btn.setToolTip("View the grab sample photo for this point")
+        grab_layout.addWidget(self.view_grab_photo_btn)
+
+        video_layout.addLayout(grab_layout)
+
+        # ── Progress summary row ─────────────────────────────────────────────
+        progress_row_layout = QHBoxLayout()
+        progress_row_layout.setContentsMargins(0, 0, 0, 0)
+        progress_row_layout.setSpacing(6)
+
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setMaximumWidth(180)
+        self.progress_bar.setMinimumWidth(120)
+        self.progress_bar.setFixedHeight(14)
+        self.progress_bar.setTextVisible(True)
+        self.progress_bar.setFormat("%p%")
+        self.progress_bar.setStyleSheet(
+            "QProgressBar { border: 1px solid #bbb; border-radius: 6px;"
+            " background: #e0e0e0; text-align: center; font-size: 10px; }"
+            " QProgressBar::chunk { background: #1565C0; border-radius: 6px; }"
+        )
+        progress_row_layout.addWidget(self.progress_bar)
+
+        self.progress_label = QLabel("")
+        self.progress_label.setStyleSheet("font-size: 11px; padding: 1px 0px;")
+        progress_row_layout.addWidget(self.progress_label)
+        progress_row_layout.addStretch()
+        video_layout.addLayout(progress_row_layout)
+        # ────────────────────────────────────────────────────────────────────
+
         # Add video layout to main layout
         main_layout.addLayout(video_layout, 2)
         
@@ -1723,55 +2857,184 @@ class VideoPlayer(QMainWindow):
         layout.addWidget(load_entries_btn)
         
         # Copy all from previous button
-        copy_all_btn = QPushButton("◄ Copy All from Previous Entry")
-        copy_all_btn.clicked.connect(self.copy_all_from_previous_entry)
-        copy_all_btn.setStyleSheet("background-color: #673AB7; color: white; padding: 5px;")
-        copy_all_btn.setToolTip("Copy all field values from the previous entry")
-        layout.addWidget(copy_all_btn)
+        self.copy_prev_field_buttons = []
+        self.copy_all_btn = QPushButton("◄ Copy All from Previous Entry")
+        self.copy_all_btn.clicked.connect(self.copy_all_from_previous_entry)
+        self.copy_all_btn.setStyleSheet("background-color: #673AB7; color: white; padding: 5px;")
+        self.copy_all_btn.setToolTip("Copy all field values from the previous entry")
+        self.copy_all_btn.setEnabled(False)
+        layout.addWidget(self.copy_all_btn)
         
         # Create fields dynamically from template
         if self.template_fieldnames:
-            # Create a single group with all fields from template
-            group_box = QGroupBox("Data Fields")
-            group_layout = QGridLayout()
-            row = 0
-            
-            for field_name in self.template_fieldnames:
-                label = QLabel(field_name + ":")
-                group_layout.addWidget(label, row, 0)
-                
-                # Use multiline for COMMENTS field, single line for others
-                if field_name.upper() == "COMMENTS":
+            groups = self._load_field_groups()
+
+            # ---- helper: build one field row into a QGridLayout ----
+            def _add_field_row(field_name, grid, grid_row, indent=False):
+                """Render a single field into grid at grid_row. Returns the widget."""
+                prefix = "    " if indent else ""
+                label = QLabel(prefix + field_name + ":")
+                if indent:
+                    label.setStyleSheet("padding-left: 14px; color: #444;")
+                grid.addWidget(label, grid_row, 0)
+
+                dropdown_opts = self.dropdown_fields.get(field_name)
+                if dropdown_opts:
+                    field_widget = _ComboFieldWidget()
+                    for display, raw in dropdown_opts:
+                        field_widget.addItem(display, raw)
+                    field_widget.currentTextChanged.connect(
+                        self.create_field_changed_handler(field_name))
+                elif field_name.upper() == "COMMENTS":
                     field_widget = QTextEdit()
                     field_widget.setMaximumHeight(80)
-                    # Connect to combined handler
-                    field_widget.textChanged.connect(self.create_field_changed_handler(field_name))
+                    field_widget.textChanged.connect(
+                        self.create_field_changed_handler(field_name))
                 else:
                     field_widget = QLineEdit()
-                    # Connect to combined handler
-                    field_widget.textChanged.connect(self.create_field_changed_handler(field_name))
-                
-                group_layout.addWidget(field_widget, row, 1)
-                
-                # Add "Copy from Previous" button only for copyable fields (not metadata/unique fields)
+                    field_widget.textChanged.connect(
+                        self.create_field_changed_handler(field_name))
+
+                if field_name in self.calculated_field_names:
+                    field_widget.setReadOnly(True)
+                    field_widget.setStyleSheet(
+                        "QLineEdit { background-color: #f0f4f0; color: #444; "
+                        "border: 1px solid #aaa; border-radius: 3px; } "
+                        "QLineEdit:read-only { background-color: #e8f5e9; }"
+                    )
+                    label.setToolTip(f"{field_name} is auto-calculated")
+
+                if indent:
+                    field_widget.setStyleSheet(
+                        getattr(field_widget, 'styleSheet', lambda: '')() +
+                        "; margin-left: 14px;"
+                    )
+
+                grid.addWidget(field_widget, grid_row, 1)
+
                 if field_name not in self.non_copyable_fields:
                     copy_btn = QPushButton("◄")
                     copy_btn.setMaximumWidth(30)
                     copy_btn.setToolTip(f"Copy {field_name} from previous entry")
                     copy_btn.setStyleSheet("font-size: 12px; padding: 2px;")
-                    copy_btn.clicked.connect(lambda checked, fn=field_name: self.copy_from_previous_entry(fn))
-                    group_layout.addWidget(copy_btn, row, 2)
+                    copy_btn.clicked.connect(
+                        lambda checked, fn=field_name: self.copy_from_previous_entry(fn))
+                    copy_btn.setEnabled(False)
+                    grid.addWidget(copy_btn, grid_row, 2)
+                    self.copy_prev_field_buttons.append(copy_btn)
                 else:
-                    # Add empty space for alignment
                     spacer = QLabel("")
                     spacer.setMaximumWidth(30)
-                    group_layout.addWidget(spacer, row, 2)
-                
+                    grid.addWidget(spacer, grid_row, 2)
+
                 self.data_fields[field_name] = field_widget
-                row += 1
-            
-            group_box.setLayout(group_layout)
-            layout.addWidget(group_box)
+                return field_widget
+
+            if groups:
+                # ---- Grouped rendering ----
+                placed = set()
+
+                for group in groups:
+                    g_name   = group.get('name', 'Fields')
+                    g_colour = group.get('colour', '')
+                    g_fields = group.get('fields', [])
+                    g_subs   = {sg['parent_field']: sg
+                                for sg in group.get('subgroups', [])
+                                if sg.get('parent_field')}
+
+                    # Only include fields that exist in this template
+                    g_fields = [f for f in g_fields if f in self.template_fieldnames]
+                    if not g_fields:
+                        continue
+
+                    box = QGroupBox(g_name)
+                    if g_colour:
+                        box.setStyleSheet(
+                            f"QGroupBox {{ background-color: {g_colour}; "
+                            f"border: 1px solid #bbb; border-radius: 5px; "
+                            f"margin-top: 8px; padding-top: 4px; }} "
+                            f"QGroupBox::title {{ subcontrol-origin: margin; "
+                            f"left: 8px; font-weight: bold; }}"
+                        )
+                    else:
+                        box.setStyleSheet(
+                            "QGroupBox { border: 1px solid #ccc; border-radius: 5px; "
+                            "margin-top: 8px; padding-top: 4px; } "
+                            "QGroupBox::title { subcontrol-origin: margin; "
+                            "left: 8px; font-weight: bold; }"
+                        )
+                    grid = QGridLayout()
+                    grid.setSpacing(2)
+                    grid.setColumnStretch(1, 1)
+                    grow = 0
+
+                    # Track which subgroup fields appear inline (skip them in main loop)
+                    sg_inline = set()
+                    for sg in group.get('subgroups', []):
+                        for f in sg.get('fields', []):
+                            sg_inline.add(f)
+
+                    for field_name in g_fields:
+                        if field_name in sg_inline:
+                            continue  # rendered below its parent
+                        placed.add(field_name)
+                        _add_field_row(field_name, grid, grow, indent=False)
+                        grow += 1
+
+                        # If this field is a parent of a subgroup, render subgroup now
+                        if field_name in g_subs:
+                            sg = g_subs[field_name]
+                            sg_header = QLabel(f"  ↳ {sg.get('name', '')}")
+                            sg_header.setStyleSheet(
+                                "font-size: 10px; font-style: italic; color: #555; "
+                                "padding-left: 16px; margin-top: 2px;"
+                            )
+                            grid.addWidget(sg_header, grow, 0, 1, 3)
+                            grow += 1
+                            for sg_field in sg.get('fields', []):
+                                if sg_field not in self.template_fieldnames:
+                                    continue
+                                placed.add(sg_field)
+                                _add_field_row(sg_field, grid, grow, indent=True)
+                                grow += 1
+
+                    box.setLayout(grid)
+                    layout.addWidget(box)
+
+                # Any fields not covered by any group go in an "Other" box
+                ungrouped = [f for f in self.template_fieldnames if f not in placed]
+                if ungrouped:
+                    other_box = QGroupBox("Other Fields")
+                    other_box.setStyleSheet(
+                        "QGroupBox { border: 1px solid #ccc; border-radius: 5px; "
+                        "margin-top: 8px; } "
+                        "QGroupBox::title { subcontrol-origin: margin; "
+                        "left: 8px; font-weight: bold; }"
+                    )
+                    other_grid = QGridLayout()
+                    other_grid.setSpacing(2)
+                    other_grid.setColumnStretch(1, 1)
+                    for grow, field_name in enumerate(ungrouped):
+                        _add_field_row(field_name, other_grid, grow, indent=False)
+                    other_box.setLayout(other_grid)
+                    layout.addWidget(other_box)
+
+            else:
+                # ---- Flat fallback (no groups file) ----
+                group_box = QGroupBox("Data Fields")
+                group_box.setStyleSheet(
+                    "QGroupBox { border: 1px solid #ccc; border-radius: 5px; "
+                    "margin-top: 8px; } "
+                    "QGroupBox::title { subcontrol-origin: margin; "
+                    "left: 8px; font-weight: bold; }"
+                )
+                group_layout = QGridLayout()
+                group_layout.setSpacing(2)
+                group_layout.setColumnStretch(1, 1)
+                for row, field_name in enumerate(self.template_fieldnames):
+                    _add_field_row(field_name, group_layout, row, indent=False)
+                group_box.setLayout(group_layout)
+                layout.addWidget(group_box)
         
         # Action buttons
         button_layout = QHBoxLayout()
@@ -1789,21 +3052,29 @@ class VideoPlayer(QMainWindow):
         button_layout.addWidget(save_btn)
         
         clear_btn = QPushButton("Clear Form")
-        clear_btn.setToolTip("Clear all data entry fields")
+        clear_btn.setToolTip("Clear observation fields and keep prefilled metadata")
         clear_btn.clicked.connect(self.clear_data_entry)
         button_layout.addWidget(clear_btn)
         
         layout.addLayout(button_layout)
         
-        # Validation rules button
+        # Validation rules + field groups buttons
         rules_layout = QHBoxLayout()
-        
+
         manage_rules_btn = QPushButton("⚙ Manage Validation Rules")
         manage_rules_btn.setToolTip("Create and edit validation rules for data entry fields")
         manage_rules_btn.clicked.connect(self.manage_validation_rules)
         manage_rules_btn.setStyleSheet("background-color: #9C27B0; color: white; font-weight: bold; padding: 8px;")
         rules_layout.addWidget(manage_rules_btn)
-        
+
+        manage_groups_btn = QPushButton("📊 Manage Field Groups")
+        manage_groups_btn.setToolTip(
+            "Create and edit field display groups and subgroups for the data entry form")
+        manage_groups_btn.clicked.connect(self.manage_field_groups)
+        manage_groups_btn.setStyleSheet(
+            "background-color: #0288D1; color: white; font-weight: bold; padding: 8px;")
+        rules_layout.addWidget(manage_groups_btn)
+
         layout.addLayout(rules_layout)
         
         # Additional action buttons (second row)
@@ -1879,11 +3150,23 @@ class VideoPlayer(QMainWindow):
         self.is_playing = not self.is_playing
         
         if self.is_playing:
-            self.play_btn.setText("⏸")
+            self.play_btn.setText("⏸  Pause")
+            self.play_btn.setStyleSheet(
+                "QPushButton { background-color: #e65100; color: white; font-weight: bold; "
+                "font-size: 13px; padding: 4px 8px; border-radius: 4px; } "
+                "QPushButton:hover { background-color: #ef6c00; } "
+                "QPushButton:disabled { background-color: #aaa; color: #eee; }"
+            )
             interval = self._get_playback_interval_ms()
             self.timer.start(interval)
         else:
-            self.play_btn.setText("▶")
+            self.play_btn.setText("▶  Play")
+            self.play_btn.setStyleSheet(
+                "QPushButton { background-color: #2e7d32; color: white; font-weight: bold; "
+                "font-size: 13px; padding: 4px 8px; border-radius: 4px; } "
+                "QPushButton:hover { background-color: #388e3c; } "
+                "QPushButton:disabled { background-color: #aaa; color: #eee; }"
+            )
             self.timer.stop()
 
     def _get_playback_interval_ms(self):
@@ -2459,14 +3742,21 @@ class VideoPlayer(QMainWindow):
             self.drop_videos_dir = folder_path
             self.load_video_queue()
     
-    def load_video_queue(self):
-        """Load all videos from drop_videos directory"""
+    def load_video_queue(self, silent=False):
+        """Load all videos from drop_videos directory.
+
+        Args:
+            silent: When True, skip auto-loading the first video and skip the
+                    confirmation dialog.  Used during startup so that
+                    navigate_to_base_csv_row(0) takes control immediately after.
+        """
         if not os.path.exists(self.drop_videos_dir):
             os.makedirs(self.drop_videos_dir)
-            QMessageBox.information(
-                self, "Directory Created",
-                f"Created drop_videos directory:\n{self.drop_videos_dir}\n\nPlease add video files to this directory."
-            )
+            if not silent:
+                QMessageBox.information(
+                    self, "Directory Created",
+                    f"Created drop_videos directory:\n{self.drop_videos_dir}\n\nPlease add video files to this directory."
+                )
             return
         
         # Find all video files
@@ -2478,10 +3768,11 @@ class VideoPlayer(QMainWindow):
         ]
         
         if not self.video_queue:
-            QMessageBox.warning(
-                self, "No Videos Found",
-                f"No video files found in:\n{self.drop_videos_dir}"
-            )
+            if not silent:
+                QMessageBox.warning(
+                    self, "No Videos Found",
+                    f"No video files found in:\n{self.drop_videos_dir}"
+                )
             return
         
         # Sort videos alphabetically
@@ -2491,13 +3782,17 @@ class VideoPlayer(QMainWindow):
         # Create drop_stills directory
         os.makedirs(self.drop_stills_dir, exist_ok=True)
         
-        # Load first video
-        self.load_video_from_queue(0)
-        
         # Enable navigation buttons
         self.prev_video_btn.setEnabled(True)
         self.next_video_btn.setEnabled(True)
         self.goto_video_btn.setEnabled(True)
+
+        if silent:
+            # Caller (startup) will navigate to the correct first point
+            return
+
+        # Load first video (normal non-startup path)
+        self.load_video_from_queue(0)
         
         QMessageBox.information(
             self, "Videos Loaded",
@@ -2510,6 +3805,21 @@ class VideoPlayer(QMainWindow):
         """Load a specific video from the queue"""
         if not self.video_queue or index < 0 or index >= len(self.video_queue):
             return
+
+        # Leave photo viewer mode before loading a real video
+        self._exit_photo_viewer_mode()
+
+        # Exit grab-only mode when a real video is loaded
+        if self.grab_only_mode:
+            self.grab_only_mode = False
+            # Update nav label to reflect video mode
+            if self.current_base_csv_row_index >= 0 and self.base_data_csv:
+                total = len(self.base_data_csv)
+                point_id = self._get_point_identifier_from_row(
+                    self.base_data_csv[self.current_base_csv_row_index]) or '?'
+                self.point_nav_label.setText(
+                    f"{self.current_base_csv_row_index + 1}/{total}: Point {point_id} | 🎬 Video")
+                self.point_nav_label.setStyleSheet("font-size: 11px; color: #2196F3;")
         
         self.current_video_index = index
         video_path = self.video_queue[index]
@@ -2521,12 +3831,14 @@ class VideoPlayer(QMainWindow):
         # Load base data FIRST - this sets the correct Site/Point ID
         # Do NOT call populate_fields_from_base_data() yet
         if self.base_data_csv:
+            self.base_data = {}
             # Find matching base data without populating fields yet
             for row in self.base_data_csv:
                 video_fn = self._get_video_filename_from_row(row)
                 if video_fn:
-                    csv_video_name = os.path.splitext(video_fn)[0]
-                    if csv_video_name == video_name or video_fn == os.path.basename(video_path):
+                    video_fn_base = os.path.basename(str(video_fn).strip())
+                    csv_video_name = os.path.splitext(video_fn_base)[0]
+                    if csv_video_name.lower() == video_name.lower() or video_fn_base.lower() == os.path.basename(video_path).lower():
                         self.base_data = row
                         print(f"  Loaded base data for ID: {self._get_point_identifier_from_row(row) or 'N/A'}")
                         break
@@ -2570,6 +3882,7 @@ class VideoPlayer(QMainWindow):
         self.skip_forward_btn.setEnabled(True)
         self.speed_combo.setEnabled(True)
         self.zoom_slider.setEnabled(True)
+        self.timeline_slider.setEnabled(True)
         self.update_extract_button_state()
         
         # Update queue label
@@ -2695,6 +4008,13 @@ class VideoPlayer(QMainWindow):
     
     def save_data_entry(self):
         """Save current data entry to CSV file"""
+        # If user is viewing an existing saved entry, update it in-place (do not append duplicate)
+        if 0 <= self.current_entry_index < len(self.all_data_entries):
+            save_ok = self.save_current_entry_changes(show_success_message=True)
+            if save_ok:
+                self.update_extract_button_state()
+            return
+
         # Collect data from all fields
         data_row = {}
         for field_name, widget in self.data_fields.items():
@@ -2703,11 +4023,25 @@ class VideoPlayer(QMainWindow):
             else:
                 data_row[field_name] = widget.text().strip()
         
-        # Auto-fill FILENAME if empty/placeholder and video is loaded
+        # Auto-fill FILENAME if empty/placeholder
         filename_value = data_row.get('FILENAME', '').strip()
         filename_is_placeholder = filename_value.lower() == '[will be set on next extraction]'
 
-        if (not filename_value or filename_is_placeholder) and self.video_path:
+        if self.grab_only_mode:
+            # In grab-only mode: use GRAB_FILENAME as the filename if FILENAME is blank
+            if not filename_value or filename_is_placeholder:
+                grab_fn = self._get_row_value(self.base_data, ['GRAB_FILENAME'])
+                if grab_fn and str(grab_fn).strip() not in ('', 'NA', 'N/A', 'NONE'):
+                    data_row['FILENAME'] = str(grab_fn).strip()
+                    if 'FILENAME' in self.data_fields:
+                        w = self.data_fields['FILENAME']
+                        w.blockSignals(True)
+                        if isinstance(w, QTextEdit):
+                            w.setPlainText(data_row['FILENAME'])
+                        else:
+                            w.setText(data_row['FILENAME'])
+                        w.blockSignals(False)
+        elif (not filename_value or filename_is_placeholder) and self.video_path:
             if self.video_queue and self.video_path in self.video_queue:
                 current_drop_id = data_row.get('DROP_ID', '').strip()
                 queue_filename, _ = self._generate_queue_still_filename(current_drop_id)
@@ -2784,15 +4118,37 @@ class VideoPlayer(QMainWindow):
                 self.current_entry_index = len(self.all_data_entries) - 1
                 self.unsaved_changes = False
                 self.update_navigation_buttons()
-            
+                self._update_progress_label()
+
             QMessageBox.information(
                 self, "Success", 
                 f"Data entry saved to:\n{output_file}"
             )
 
-            # Prompt to also extract a frame after saving entry
+            # Grab-only mode: offer to advance to the next point immediately
+            if self.grab_only_mode:
+                advance_reply = QMessageBox.question(
+                    self,
+                    "Advance to Next Point?",
+                    "Entry saved.\n\nAdvance to the next point now?",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.Yes
+                )
+                if advance_reply == QMessageBox.Yes:
+                    self._new_entry_draft = None
+                    self.next_point()
+                else:
+                    # Stay on same point — just reset the form for a fresh entry
+                    self.current_entry_index = len(self.all_data_entries)
+                    self.unsaved_changes = False
+                    self.populate_fields_from_base_data()
+                    self.update_drop_fields_for_next()
+                    self.update_navigation_buttons()
+                return
+
+            # Prompt to also extract a frame after saving entry (not in grab-only mode)
             extracted_after_save = False
-            if self.cap:
+            if self.cap and not self.grab_only_mode:
                 extract_reply = QMessageBox.question(
                     self,
                     "Extract Frame Too?",
@@ -2835,15 +4191,33 @@ class VideoPlayer(QMainWindow):
             )
     
     def clear_data_entry(self):
-        """Clear all data entry fields"""
+        """Clear non-prefilled fields while preserving base-data prefilled values."""
         # Clear validation highlights
         self.highlight_invalid_fields([])
-        
+
+        # Avoid marking changes while programmatically clearing/resetting form
         for widget in self.data_fields.values():
-            if isinstance(widget, QTextEdit):
-                widget.clear()
+            widget.blockSignals(True)
+
+        for field_name, widget in self.data_fields.items():
+            prefill_value = self._get_prefill_value_for_field(field_name) if self.base_data else ''
+
+            if prefill_value:
+                if isinstance(widget, QTextEdit):
+                    widget.setPlainText(prefill_value)
+                else:
+                    widget.setText(prefill_value)
             else:
-                widget.clear()
+                if isinstance(widget, QTextEdit):
+                    widget.clear()
+                else:
+                    widget.clear()
+
+        # Keep generated drop metadata consistent after clear
+        self.update_drop_fields_for_next()
+
+        for widget in self.data_fields.values():
+            widget.blockSignals(False)
 
         self.update_extract_button_state()
     
@@ -2951,12 +4325,12 @@ class VideoPlayer(QMainWindow):
             # Store all rows for matching later
             self.base_data_csv = rows
             self.base_data_csv_path = file_path  # Store the path
-                
+            self._enable_point_navigation()
             QMessageBox.information(
                 self, "Success",
                 f"Loaded {len(rows)} rows from:\n{file_path}\n\n"
-                f"When you extract stills, the form will auto-populate\n"
-                f"with data matching the video filename."
+                f"Use '◀ Prev Point / Next Point ▶' to work through all points.\n"
+                f"The app will auto-load each video if found, or enter no-video mode."
             )
         except Exception as e:
             QMessageBox.critical(
@@ -2985,9 +4359,9 @@ class VideoPlayer(QMainWindow):
             else:
                 widget.clear()
         
-        # Then populate with base data
+        # Then populate with base data (with alias-aware fallbacks)
         for field_name, widget in self.data_fields.items():
-            value = self.base_data.get(field_name, '')
+            value = self._get_prefill_value_for_field(field_name)
             if value:
                 if isinstance(widget, QTextEdit):
                     widget.setPlainText(value)
@@ -2998,7 +4372,31 @@ class VideoPlayer(QMainWindow):
         for widget in self.data_fields.values():
             widget.blockSignals(False)
 
+        # Fire autofill cascade for any trigger fields that were just populated from base data.
+        # This applies rules like "SG_PRESENT=0 → SG_COVER=0, comp fields=NA" automatically.
+        if self.validation_rules:
+            seen_triggers = set()
+            for rule in self.validation_rules:
+                if rule.get('type') == 'autofill':
+                    trigger_field = rule.get('trigger_field')
+                    if trigger_field and trigger_field not in seen_triggers:
+                        seen_triggers.add(trigger_field)
+                        if trigger_field in self.data_fields:
+                            self.check_autofill_rules(trigger_field)
+
+            # Fire calculated rules so derived fields (e.g. BARE_COVER) are computed
+            # from the newly populated source fields.
+            for rule in self.validation_rules:
+                if rule.get('type') == 'calculated':
+                    formula = rule.get('formula', '')
+                    referenced_fields = re.findall(r'\b[A-Z][A-Z0-9_]*\b', formula)
+                    for ref_field in referenced_fields:
+                        if ref_field in self.data_fields:
+                            self.check_calculated_rules(ref_field)
+                            break  # one trigger per rule is enough
+
         self.update_extract_button_state()
+        self.update_grab_photo_button_state()
         
         # Set DROP_ID and FILENAME for next extraction
         self.update_drop_fields_for_next()
@@ -3013,13 +4411,15 @@ class VideoPlayer(QMainWindow):
         video_name_no_ext = os.path.splitext(video_filename)[0]
         
         # Search through preloaded CSV rows
+        self.base_data = {}
         for row in self.base_data_csv:
             # Check if VIDEO_FILENAME matches (with or without extension)
             video_fn = self._get_video_filename_from_row(row)
             if video_fn:
                 # Remove extension for comparison
-                csv_video_name = os.path.splitext(video_fn)[0]
-                if csv_video_name == video_name_no_ext or video_fn == video_filename:
+                video_fn_base = os.path.basename(str(video_fn).strip())
+                csv_video_name = os.path.splitext(video_fn_base)[0]
+                if csv_video_name.lower() == video_name_no_ext.lower() or video_fn_base.lower() == video_filename.lower():
                     # Found matching row - use it as base data
                     self.base_data = row
                     self.populate_fields_from_base_data()
@@ -3027,17 +4427,18 @@ class VideoPlayer(QMainWindow):
     
     def get_next_drop_number_for_point(self):
         """
-        Get next drop number for the CURRENT video based on existing saved entries.
-        - No prior entries for this video -> drop1
-        - Prior entries found (e.g., drop1) -> next drop increments (drop2)
+        Get next drop number for the CURRENT POINT_ID based on existing saved entries.
+        - No prior entries for this POINT_ID -> drop1
+        - 1 existing entry -> drop2, and so on.
         """
         print(f"  get_next_drop_number_for_point called")
-        if not self.video_path:
-            print("    No current video path → drop1")
-            return 1
 
-        current_video_name = os.path.splitext(os.path.basename(self.video_path))[0].lower()
-        print(f"    Current video: '{current_video_name}'")
+        current_point_id = str(self._get_point_identifier_from_row(self.base_data) or '').strip()
+        print(f"    Current POINT_ID: '{current_point_id}'")
+
+        if not current_point_id:
+            print("    No POINT_ID available → drop1")
+            return 1
 
         # Prefer currently loaded in-memory entries (reflects live edits/deletes).
         # Only fall back to CSV when no entries are loaded in memory.
@@ -3056,48 +4457,22 @@ class VideoPlayer(QMainWindow):
                 except Exception as e:
                     print(f"    Warning: failed reading data_entries.csv for drop lookup: {str(e)}")
 
-        max_drop_for_video = 0
-
+        # Count how many drop entries already exist for this POINT_ID.
+        # Grab-only entries (grab1, grab2 …) are excluded from the drop counter.
+        count = 0
         for entry in entries_to_scan:
             if not isinstance(entry, dict):
                 continue
-
-            belongs_to_current_video = False
-
-            # Prefer explicit video filename fields if present
-            entry_video = self._get_video_filename_from_row(entry)
-            if entry_video:
-                entry_video_name = os.path.splitext(os.path.basename(str(entry_video).strip()))[0].lower()
-                belongs_to_current_video = (entry_video_name == current_video_name)
-
-            # Fallback: derive video name from still FILENAME pattern <video>_dropN.jpg
-            if not belongs_to_current_video:
-                still_name = str(entry.get('FILENAME', '') or '').strip()
-                still_base = os.path.splitext(os.path.basename(still_name))[0]
-                match_video = re.match(r'(.+)_drop\d+$', still_base, re.IGNORECASE)
-                if match_video:
-                    belongs_to_current_video = (match_video.group(1).lower() == current_video_name)
-
-            if not belongs_to_current_video:
+            entry_point_id = str(self._get_point_identifier_from_row(entry) or '').strip()
+            if entry_point_id != current_point_id:
                 continue
-
-            # Read drop number from DROP_ID or filename suffix
-            drop_number = None
             drop_id = str(entry.get('DROP_ID', '') or '').strip()
-            match_drop_id = re.search(r'drop\s*(\d+)', drop_id, re.IGNORECASE)
-            if match_drop_id:
-                drop_number = int(match_drop_id.group(1))
-            else:
-                still_name = str(entry.get('FILENAME', '') or '').strip()
-                match_filename = re.search(r'_drop(\d+)(?:\.[A-Za-z0-9]+)?$', os.path.basename(still_name), re.IGNORECASE)
-                if match_filename:
-                    drop_number = int(match_filename.group(1))
+            # Only count entries with a drop* DROP_ID (not grab*)
+            if re.match(r'drop\d+', drop_id, re.IGNORECASE):
+                count += 1
 
-            if drop_number is not None and drop_number > max_drop_for_video:
-                max_drop_for_video = drop_number
-
-        next_drop = max_drop_for_video + 1 if max_drop_for_video > 0 else 1
-        print(f"    Found max drop for current video: {max_drop_for_video} → next drop{next_drop}")
+        next_drop = count + 1
+        print(f"    Existing drop entries for POINT_ID '{current_point_id}': {count} → next drop{next_drop}")
         return next_drop
 
     def _get_current_drop_id_text(self):
@@ -3111,7 +4486,7 @@ class VideoPlayer(QMainWindow):
         return widget.text().strip()
 
     def _generate_queue_still_filename(self, drop_id=''):
-        """Generate consistent queue still filename: <video_name>_dropN.jpg."""
+        """Generate consistent queue still filename: <video_name>_dropN_frameM.jpg."""
         video_name = os.path.splitext(os.path.basename(self.video_path))[0]
         drop_text = (drop_id or '').strip()
         match = re.search(r'drop\s*(\d+)', drop_text, re.IGNORECASE)
@@ -3121,7 +4496,8 @@ class VideoPlayer(QMainWindow):
         else:
             drop_number = max(1, int(self.drop_counter))
 
-        return f"{video_name}_drop{drop_number}.jpg", f"drop{drop_number}"
+        frame_number = int(self.current_frame) if hasattr(self, 'current_frame') else 0
+        return f"{video_name}_drop{drop_number}_frame{frame_number:06d}.jpg", f"drop{drop_number}"
 
     def _count_current_video_entries_and_stills(self):
         """Return (entry_count, still_count) for current video based on drop filename pattern."""
@@ -3129,7 +4505,8 @@ class VideoPlayer(QMainWindow):
             return 0, 0
 
         video_name = os.path.splitext(os.path.basename(self.video_path))[0]
-        still_pattern = re.compile(r'^' + re.escape(video_name) + r'_drop\d+\.(jpg|jpeg|png)$', re.IGNORECASE)
+        # Pattern matches both old (<video>_dropN.jpg) and new (<video>_dropN_frameM.jpg) names
+        still_pattern = re.compile(r'^' + re.escape(video_name) + r'_drop\d+(_frame\d+)?\.(jpg|jpeg|png)$', re.IGNORECASE)
 
         still_count = 0
         if os.path.exists(self.drop_stills_dir):
@@ -3249,47 +4626,74 @@ class VideoPlayer(QMainWindow):
         return year, normalized_date, normalized_time
     
     def update_drop_fields_for_next(self):
-        """Update DROP_ID and FILENAME fields for the next drop"""
+        """Update DROP_ID and FILENAME fields for the next drop/grab entry."""
         # Block signals to avoid marking as changed
         for widget in self.data_fields.values():
             widget.blockSignals(True)
-        
-        # Update DROP_ID to show the next drop number
-        next_drop_id = f"drop{self.drop_counter}"
+
+        # Grab-only entries use 'grab{N}', video entries use 'drop{N}'
+        if self.grab_only_mode:
+            next_drop_id = f"grab{self.drop_counter}"
+        else:
+            next_drop_id = f"drop{self.drop_counter}"
         if 'DROP_ID' in self.data_fields:
             self.data_fields['DROP_ID'].setText(next_drop_id)
-        
-        # Clear FILENAME since it will be set on next extraction
-        if 'FILENAME' in self.data_fields:
-            self.data_fields['FILENAME'].setText("[Will be set on next extraction]")
+
+        # Set FILENAME: grab-only → use the grab photo file; video → placeholder
+        if self.grab_only_mode:
+            grab_fn = self._get_row_value(self.base_data, ['GRAB_FILENAME']) if self.base_data else ''
+            if grab_fn and str(grab_fn).strip().upper() not in ('', 'NA', 'N/A', 'NONE'):
+                filename_val = str(grab_fn).strip()
+            else:
+                filename_val = ''
+            if 'FILENAME' in self.data_fields:
+                self.data_fields['FILENAME'].setText(filename_val)
+        else:
+            if 'FILENAME' in self.data_fields:
+                self.data_fields['FILENAME'].setText("[Will be set on next extraction]")
         
         # Auto-fill YEAR, DATE, TIME from base data if available
         if self.base_data:
-            base_datetime = self.base_data.get('DATE_TIME', '')
-            video_timestamp = self.base_data.get('VIDEO_TIMESTAMP', '')
-            datetime_source = base_datetime or video_timestamp
+            base_datetime = self._get_row_value(self.base_data, ['DATE_TIME', 'SURVEY_DATETIME', 'SURVEY_DATE_TIME'])
+            video_timestamp = self._get_row_value(self.base_data, ['VIDEO_TIMESTAMP', 'VIDEO_DATETIME', 'GPS_DATETIME'])
+            datetime_source = base_datetime or video_timestamp or self._get_row_value(self.base_data, ['SURVEY_DAT', 'DATE'])
 
             parsed_year = ''
             parsed_date = ''
             parsed_time = ''
             if datetime_source:
                 parsed_year, parsed_date, parsed_time = self._split_datetime_parts(datetime_source)
+            parsed_month = self._parse_month_from_date_text(parsed_date)
 
             # Use parsed values first
             if parsed_year and 'YEAR' in self.data_fields:
                 self.data_fields['YEAR'].setText(parsed_year)
-            if parsed_date and 'DATE' in self.data_fields:
-                self.data_fields['DATE'].setText(parsed_date)
+            if parsed_date:
+                if 'DATE' in self.data_fields:
+                    self.data_fields['DATE'].setText(parsed_date)
+                if 'SURVEY_DAT' in self.data_fields:
+                    self.data_fields['SURVEY_DAT'].setText(parsed_date)
             if parsed_time and 'TIME' in self.data_fields:
                 self.data_fields['TIME'].setText(parsed_time)
+            if parsed_month and 'MONTH' in self.data_fields:
+                self.data_fields['MONTH'].setText(parsed_month)
 
             # Fallback to direct YEAR/DATE/TIME columns for any missing parsed pieces
             if not parsed_year and self.base_data.get('YEAR') and 'YEAR' in self.data_fields:
                 self.data_fields['YEAR'].setText(self.base_data['YEAR'])
-            if not parsed_date and self.base_data.get('DATE') and 'DATE' in self.data_fields:
-                self.data_fields['DATE'].setText(self.base_data['DATE'])
+            if not parsed_date:
+                direct_date_value = self._get_row_value(self.base_data, ['SURVEY_DAT', 'DATE'])
+                if direct_date_value:
+                    if 'DATE' in self.data_fields:
+                        self.data_fields['DATE'].setText(direct_date_value)
+                    if 'SURVEY_DAT' in self.data_fields:
+                        self.data_fields['SURVEY_DAT'].setText(direct_date_value)
             if not parsed_time and self.base_data.get('TIME') and 'TIME' in self.data_fields:
                 self.data_fields['TIME'].setText(self.base_data['TIME'])
+            if not parsed_month and 'MONTH' in self.data_fields:
+                month_value = self._get_row_value(self.base_data, ['MONTH'])
+                if month_value:
+                    self.data_fields['MONTH'].setText(month_value)
 
             # Set DATE_TIME field when available
             if base_datetime and 'DATE_TIME' in self.data_fields:
@@ -3307,12 +4711,51 @@ class VideoPlayer(QMainWindow):
             self.mark_entry_changed()
             self.check_autofill_rules(field_name)
             self.check_calculated_rules(field_name)
+            if field_name == 'GRAB_ONLY':
+                self._sync_drop_id_with_grab_only()
             self.update_extract_button_state()
         return handler
     
     def mark_entry_changed(self):
         """Mark that the current entry has been modified"""
         self.unsaved_changes = True
+
+    def _sync_drop_id_with_grab_only(self):
+        """Whenever GRAB_ONLY is changed manually, rewrite DROP_ID prefix and FILENAME.
+
+        GRAB_ONLY = 1  →  grab{N}   +  FILENAME = grab photo (if available)
+        GRAB_ONLY = 0  →  drop{N}   +  FILENAME = placeholder
+        The numeric suffix is preserved from whatever is currently in DROP_ID.
+        """
+        grab_widget = self.data_fields.get('GRAB_ONLY')
+        if not grab_widget:
+            return
+        is_grab = grab_widget.text().strip() == '1'
+
+        # Extract the current number from DROP_ID so we keep it intact
+        drop_id_widget = self.data_fields.get('DROP_ID')
+        if drop_id_widget:
+            m = re.search(r'(\d+)', drop_id_widget.text().strip())
+            n = int(m.group(1)) if m else self.drop_counter
+            new_drop_id = f"grab{n}" if is_grab else f"drop{n}"
+            drop_id_widget.blockSignals(True)
+            drop_id_widget.setText(new_drop_id)
+            drop_id_widget.blockSignals(False)
+
+        # Update FILENAME to match the mode
+        filename_widget = self.data_fields.get('FILENAME')
+        if filename_widget:
+            if is_grab:
+                grab_fn = self._get_row_value(self.base_data, ['GRAB_FILENAME']) if self.base_data else ''
+                fn_val = str(grab_fn).strip() if grab_fn and str(grab_fn).strip().upper() not in ('', 'NA', 'N/A', 'NONE') else ''
+            else:
+                fn_val = '[Will be set on next extraction]'
+            filename_widget.blockSignals(True)
+            filename_widget.setText(fn_val)
+            filename_widget.blockSignals(False)
+
+        # Keep grab_only_mode flag in sync
+        self.grab_only_mode = is_grab
 
     def get_current_data_row(self):
         """Collect current form data into a dictionary."""
@@ -3333,6 +4776,10 @@ class VideoPlayer(QMainWindow):
 
     def can_extract_current_entry(self):
         """Return (can_extract, validation_errors, is_blank) for current form state."""
+        # Grab-only mode never has a video to extract from
+        if self.grab_only_mode:
+            return False, [], True
+
         if not self.cap:
             return False, [], True
 
@@ -3351,6 +4798,564 @@ class VideoPlayer(QMainWindow):
         """Enable Extract only when a video is loaded and entry is non-blank + validation-clean."""
         can_extract, _, _ = self.can_extract_current_entry()
         self.extract_btn.setEnabled(can_extract)
+
+    def _show_no_video_placeholder(self):
+        """Stop any playback and switch the video area to either photo-viewer mode
+        (when grab photos are available) or a black 'NO VIDEO' screen.  All
+        video-playback controls are disabled in both cases.
+        """
+        # Stop playback timer
+        if self.is_playing:
+            self.is_playing = False
+            self.timer.stop()
+            self.play_btn.setText("\u25b6  Play")
+
+        # Release the OpenCV capture
+        if self.cap:
+            self.cap.release()
+            self.cap = None
+
+        # Disable all video-playback controls
+        for widget in (
+            self.play_btn, self.prev_frame_btn, self.next_frame_btn,
+            self.skip_back_btn, self.skip_forward_btn,
+            self.speed_combo, self.zoom_slider, self.timeline_slider,
+            self.extract_btn,
+        ):
+            widget.setEnabled(False)
+
+        self.timeline_slider.setValue(0)
+        self.timeline_slider.setMaximum(0)
+
+        # ── Try to show grab photos inline ────────────────────────────────
+        grab_fn = None
+        if self.base_data:
+            grab_fn = self._get_row_value(self.base_data, ['GRAB_FILENAME'])
+
+        has_grab_ref = (grab_fn and
+                        str(grab_fn).strip().upper() not in ('', 'NA', 'N/A', 'NONE'))
+
+        if has_grab_ref:
+            photos = self._find_point_photos(str(grab_fn).strip())
+            if photos:
+                self._enter_photo_viewer_mode(photos)
+                return  # photos shown — done
+
+            # Photos referenced but folder not set (or files missing) — prompt user
+            self._exit_photo_viewer_mode()
+            w = self.video_label.width() or 640
+            h = self.video_label.height() or 360
+            pixmap = QPixmap(w, h)
+            pixmap.fill(QColor(30, 30, 60))
+            painter = QPainter(pixmap)
+            font = QFont()
+            font.setPointSize(16)
+            font.setBold(True)
+            painter.setFont(font)
+            painter.setPen(QColor(130, 180, 255))
+            painter.drawText(pixmap.rect().adjusted(0, -60, 0, -60),
+                             Qt.AlignCenter, "\U0001f4f7  PHOTOS AVAILABLE")
+            font.setPointSize(11)
+            font.setBold(False)
+            painter.setFont(font)
+            painter.setPen(QColor(200, 200, 200))
+            painter.drawText(pixmap.rect().adjusted(0, 40, 0, 40),
+                             Qt.AlignCenter,
+                             "Click  \u2039\U0001f4c1 Set Folder\u203a  next to 'Grab photos:' below\n"
+                             "to point the app at your photos folder.")
+            painter.end()
+            self.video_label.setPixmap(pixmap)
+            self.info_label.setText("\U0001f4f7 Photos available — set grab photos folder to display")
+            self.queue_label.setText("Photos available — folder not set")
+            return
+
+        # ── No photos at all — plain black "NO VIDEO" screen ─────────────
+        self._exit_photo_viewer_mode()
+        w = self.video_label.width() or 640
+        h = self.video_label.height() or 360
+        pixmap = QPixmap(w, h)
+        pixmap.fill(Qt.black)
+        painter = QPainter(pixmap)
+        painter.setPen(QColor(180, 180, 180))
+        font = QFont()
+        font.setPointSize(22)
+        font.setBold(True)
+        painter.setFont(font)
+        painter.drawText(pixmap.rect(), Qt.AlignCenter, "NO VIDEO")
+        painter.end()
+        self.video_label.setPixmap(pixmap)
+        self.info_label.setText("No video loaded")
+        self.queue_label.setText("No video for this point")
+
+    # ── Unified point navigation ──────────────────────────────────────────
+
+    def _enable_point_navigation(self):
+        """Enable navigation buttons and reset index after a base CSV is loaded."""
+        self.current_base_csv_row_index = -1
+        self.prev_point_btn.setEnabled(True)
+        self.next_point_btn.setEnabled(True)
+        self.goto_point_btn.setEnabled(True)
+        n = len(self.base_data_csv)
+        self.point_nav_label.setText(f"Ready: {n} point{'s' if n != 1 else ''} loaded. Click Next Point \u25b6 to start.")
+        self.point_nav_label.setStyleSheet("font-size: 11px; color: #4CAF50;")
+        self._update_progress_label()
+
+    def _update_progress_label(self):
+        """Refresh the progress bar, overall progress + current-point sub-entry summary label."""
+        if not hasattr(self, 'progress_label'):
+            return
+        if not self.base_data_csv:
+            self.progress_label.setText("")
+            if hasattr(self, 'progress_bar'):
+                self.progress_bar.setValue(0)
+                self.progress_bar.setFormat("%p%")
+            return
+
+        total = len(self.base_data_csv)
+
+        # Count unique entered point IDs
+        entered_pids = set()
+        for e in (self.all_data_entries or []):
+            pid = str(self._get_point_identifier_from_row(e) or '').strip()
+            if pid:
+                entered_pids.add(pid)
+
+        n_entered = len(entered_pids)
+        remaining = total - n_entered
+        pct = int(round(100 * n_entered / total)) if total else 0
+
+        # Update progress bar
+        if hasattr(self, 'progress_bar'):
+            self.progress_bar.setValue(pct)
+            if pct == 100:
+                self.progress_bar.setStyleSheet(
+                    "QProgressBar { border: 1px solid #bbb; border-radius: 6px;"
+                    " background: #e0e0e0; text-align: center; font-size: 10px; }"
+                    " QProgressBar::chunk { background: #2E7D32; border-radius: 6px; }"
+                )
+            else:
+                self.progress_bar.setStyleSheet(
+                    "QProgressBar { border: 1px solid #bbb; border-radius: 6px;"
+                    " background: #e0e0e0; text-align: center; font-size: 10px; }"
+                    " QProgressBar::chunk { background: #1565C0; border-radius: 6px; }"
+                )
+
+        # Sub-entries for the current point
+        current_text = ""
+        if 0 <= self.current_base_csv_row_index < total:
+            current_row = self.base_data_csv[self.current_base_csv_row_index]
+            current_pid = str(self._get_point_identifier_from_row(current_row) or '').strip()
+            if current_pid:
+                point_entries = [
+                    e for e in (self.all_data_entries or [])
+                    if str(self._get_point_identifier_from_row(e) or '').strip() == current_pid
+                ]
+                if point_entries:
+                    drop_ids = [str(e.get('DROP_ID', '') or '').strip() for e in point_entries]
+                    n_drop = sum(1 for d in drop_ids if re.match(r'drop\d+', d, re.IGNORECASE))
+                    n_grab = sum(1 for d in drop_ids if re.match(r'grab\d+', d, re.IGNORECASE))
+                    parts = []
+                    if n_drop:
+                        parts.append(f"{n_drop} drop{'s' if n_drop != 1 else ''}")
+                    if n_grab:
+                        parts.append(f"{n_grab} grab{'s' if n_grab != 1 else ''}")
+                    id_list = ", ".join(drop_ids[:8])
+                    if len(drop_ids) > 8:
+                        id_list += "\u2026"
+                    current_text = (
+                        f"&nbsp;&nbsp;|&nbsp;&nbsp;<b>This point:</b> "
+                        f"{', '.join(parts)} "
+                        f"<span style='color:#777;'>({id_list})</span>"
+                    )
+                else:
+                    current_text = "&nbsp;&nbsp;|&nbsp;&nbsp;<i style='color:#999;'>This point: no entries yet</i>"
+
+        color = "#2E7D32" if n_entered == total else "#1565C0"
+        self.progress_label.setText(
+            f"<span style='color:{color}; font-weight:bold;'>{n_entered}/{total}</span>"
+            f"<span style='color:#555;'> points entered ({remaining} remaining){current_text}</span>"
+        )
+
+    def navigate_to_base_csv_row(self, index):
+        """Navigate to a specific base CSV row; handle video / grab-photo / no-source cases."""
+        if not self.base_data_csv or index < 0 or index >= len(self.base_data_csv):
+            return
+
+        self._new_entry_draft = None  # Switching point — old draft is no longer applicable
+        self.current_base_csv_row_index = index
+        row = self.base_data_csv[index]
+        self.base_data = row
+        total = len(self.base_data_csv)
+        point_id = self._get_point_identifier_from_row(row) or str(index + 1)
+
+        video_fn = self._get_video_filename_from_row(row)
+        has_video = bool(video_fn and str(video_fn).strip().upper() not in ('', 'NA', 'N/A', 'NONE'))
+        grab_fn = self._get_row_value(row, ['GRAB_FILENAME'])
+        has_grab_photo = bool(grab_fn and str(grab_fn).strip().upper() not in ('', 'NA', 'N/A', 'NONE'))
+
+        if has_video:
+            # Try to find and load the video from the queue
+            video_fn_base = os.path.basename(str(video_fn).strip())
+            csv_video_name = os.path.splitext(video_fn_base)[0]
+            found_idx = None
+            for q_idx, vp in enumerate(self.video_queue):
+                if os.path.splitext(os.path.basename(vp))[0].lower() == csv_video_name.lower():
+                    found_idx = q_idx
+                    break
+
+            if found_idx is not None:
+                # load_video_from_queue will set grab_only_mode=False and populate fields
+                self.load_video_from_queue(found_idx)
+                status = "\U0001f3ac Video"
+                if has_grab_photo:
+                    status += " | \U0001f4f7 Grab photo available"
+                self.point_nav_label.setText(f"{index + 1}/{total}: Point {point_id} | {status}")
+                self.point_nav_label.setStyleSheet("font-size: 11px; color: #2196F3;")
+            else:
+                # Video referenced but not in queue — fall through to populate from base CSV
+                self.grab_only_mode = False
+                self.drop_counter = self.get_next_drop_number_for_point()
+                self.populate_fields_from_base_data()
+                self.point_nav_label.setText(
+                    f"{index + 1}/{total}: Point {point_id} | \U0001f3ac Video ({video_fn_base}) \u2014 not found in queue")
+                self.point_nav_label.setStyleSheet("font-size: 11px; color: orange;")
+                if self.video_queue:
+                    QMessageBox.warning(
+                        self, "Video Not Found in Queue",
+                        f"This point has a matched video ({video_fn_base}) but it was not found "
+                        f"in the loaded video queue.\n\nMake sure you have loaded the correct "
+                        f"drop_videos folder.")
+        else:
+            # No video — enter grab_only_mode; always exactly 1 grab entry per point
+            self.grab_only_mode = True
+            self.drop_counter = 1
+            self._show_no_video_placeholder()
+            self.populate_fields_from_base_data()
+
+            # Auto-set GRAB_ONLY = 1
+            if 'GRAB_ONLY' in self.data_fields:
+                w = self.data_fields['GRAB_ONLY']
+                w.blockSignals(True)
+                (w.setPlainText if isinstance(w, QTextEdit) else w.setText)('1')
+                w.blockSignals(False)
+
+            # Pre-populate FILENAME from GRAB_FILENAME when available
+            if has_grab_photo and 'FILENAME' in self.data_fields:
+                w = self.data_fields['FILENAME']
+                w.blockSignals(True)
+                (w.setPlainText if isinstance(w, QTextEdit) else w.setText)(str(grab_fn).strip())
+                w.blockSignals(False)
+
+            # Fill any remaining blank observation fields with NA
+            self._autofill_blank_obs_fields_na()
+
+            if has_grab_photo:
+                status = "\U0001f4f7 No video | Grab photo available \u2014 fill from photo"
+                style = "font-size: 11px; color: #9C27B0; font-weight: bold;"
+            else:
+                status = "\u26a0\ufe0f No video, no grab photo \u2014 NA entry pre-filled, edit if needed"
+                style = "font-size: 11px; color: #F44336;"
+
+            self.point_nav_label.setText(f"{index + 1}/{total}: Point {point_id} | {status}")
+            self.point_nav_label.setStyleSheet(style)
+
+        self.update_grab_photo_button_state()
+        self.update_extract_button_state()
+        self._update_progress_label()
+
+    def goto_point(self):
+        """Jump directly to a specific point in the base CSV."""
+        if not self.base_data_csv:
+            return
+
+        n = len(self.base_data_csv)
+        items = [
+            f"{idx + 1}/{n}: {self._get_point_identifier_from_row(row) or str(idx + 1)}"
+            for idx, row in enumerate(self.base_data_csv)
+        ]
+
+        current = max(0, self.current_base_csv_row_index)
+        selected_item, ok = QInputDialog.getItem(
+            self,
+            "Go To Point",
+            "Select a point:",
+            items,
+            current,
+            False
+        )
+
+        if not ok or not selected_item:
+            return
+
+        target_index = items.index(selected_item)
+        if target_index == self.current_base_csv_row_index:
+            return
+
+        self.navigate_to_base_csv_row(target_index)
+
+    def prev_point(self):
+        """Navigate to the previous base CSV row."""
+        if not self.base_data_csv:
+            return
+        new_index = max(0, self.current_base_csv_row_index - 1)
+        self.navigate_to_base_csv_row(new_index)
+
+    def next_point(self):
+        """Navigate to the next base CSV row."""
+        if not self.base_data_csv:
+            return
+        new_index = self.current_base_csv_row_index + 1
+        if new_index >= len(self.base_data_csv):
+            QMessageBox.information(self, "End of Points",
+                f"You have reached the last point ({len(self.base_data_csv)}/{len(self.base_data_csv)}).")
+            return
+        self.navigate_to_base_csv_row(new_index)
+
+    def _autofill_blank_obs_fields_na(self):
+        """Fill blank non-metadata data-entry fields with NA."""
+        for field_name, widget in self.data_fields.items():
+            if field_name in self.non_copyable_fields:
+                continue
+            if isinstance(widget, QTextEdit):
+                val = widget.toPlainText().strip()
+            else:
+                val = widget.text().strip()
+            if not val:
+                widget.blockSignals(True)
+                (widget.setPlainText if isinstance(widget, QTextEdit) else widget.setText)('NA')
+                widget.blockSignals(False)
+
+    # ── Grab photo viewer ─────────────────────────────────────────────────
+
+    def set_grab_photos_dir(self):
+        """Let user choose the folder containing grab sample photos."""
+        folder = QFileDialog.getExistingDirectory(
+            self, "Select Grab Photos Folder", self.grab_photos_dir or self.data_dir)
+        if folder:
+            self.grab_photos_dir = folder
+            display = os.path.basename(folder) or folder
+            self.grab_photos_dir_label.setText(display)
+            self.grab_photos_dir_label.setStyleSheet("font-size: 10px; color: #333;")
+            self.grab_photos_dir_label.setToolTip(folder)
+            self.update_grab_photo_button_state()
+            # If currently on a grab-only point, refresh the video area now
+            if self.grab_only_mode:
+                self._show_no_video_placeholder()
+
+    def _find_point_photos(self, grab_fn):
+        """Return an ordered list of image paths for the current point.
+
+        Handles three formats:
+        1. Semicolon-separated list in a single field value
+           e.g. "img1.jpg;img2.jpg;img3.jpg"
+        2. Single filename with a trailing numeric suffix → auto-discover siblings
+           e.g. "PT01_1.jpg"  finds PT01_1.jpg, PT01_2.jpg …
+        3. Plain single filename with no siblings → just that file
+        """
+        if not self.grab_photos_dir or not grab_fn:
+            return []
+        grab_fn = str(grab_fn).strip()
+
+        # ── Case 1: semicolon-separated list ──────────────────────────────
+        if ';' in grab_fn:
+            paths = []
+            for part in grab_fn.split(';'):
+                part = part.strip()
+                if part:
+                    p = os.path.join(self.grab_photos_dir, part)
+                    if os.path.exists(p):
+                        paths.append(p)
+            return paths  # preserve the stored order
+
+        # ── Case 2 / 3: single filename ───────────────────────────────────
+        primary = os.path.join(self.grab_photos_dir, grab_fn)
+        if not os.path.exists(primary):
+            return []
+
+        stem = os.path.splitext(grab_fn)[0]
+        base_prefix = re.sub(r'[_\-]\d+$', '', stem)
+
+        if base_prefix == stem:
+            # No numeric suffix — return just this file
+            return [primary]
+
+        # Has numeric suffix — scan folder for siblings sharing the same prefix
+        IMAGE_EXTS = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif', '.webp'}
+        try:
+            all_files = sorted(os.listdir(self.grab_photos_dir))
+        except Exception:
+            return [primary]
+
+        siblings = [
+            os.path.join(self.grab_photos_dir, fn)
+            for fn in all_files
+            if os.path.splitext(fn)[1].lower() in IMAGE_EXTS
+            and re.sub(r'[_\-]\d+$', '', os.path.splitext(fn)[0]) == base_prefix
+        ]
+        return siblings if siblings else [primary]
+
+    def _enter_photo_viewer_mode(self, photo_list):
+        """Switch the video area to inline photo-viewer mode."""
+        self._photo_list = photo_list
+        self._photo_index = 0
+        self.photo_nav_widget.setVisible(len(photo_list) > 1)
+        self._show_photo_at_index(0)
+        self.queue_label.setText(
+            f"\U0001f4f7 {len(photo_list)} photo(s) — photo viewer mode"
+        )
+
+    def _exit_photo_viewer_mode(self):
+        """Hide photo navigation and clear photo list (call before loading a real video)."""
+        self._photo_list = []
+        self._photo_index = 0
+        self.photo_nav_widget.setVisible(False)
+
+    def _show_photo_at_index(self, index):
+        """Render the photo at *index* into video_label and update nav state."""
+        if not self._photo_list:
+            return
+        index = max(0, min(index, len(self._photo_list) - 1))
+        self._photo_index = index
+
+        photo_path = self._photo_list[index]
+        pixmap = QPixmap(photo_path)
+        if pixmap.isNull():
+            # Draw an error tile
+            pixmap = QPixmap(640, 360)
+            pixmap.fill(QColor(50, 50, 50))
+            p = QPainter(pixmap)
+            p.setPen(QColor(220, 80, 80))
+            f = QFont()
+            f.setPointSize(13)
+            p.setFont(f)
+            p.drawText(pixmap.rect(), Qt.AlignCenter,
+                       f"Cannot load:\n{os.path.basename(photo_path)}")
+            p.end()
+        else:
+            vw = self.video_scroll.viewport().width() or 640
+            vh = self.video_scroll.viewport().height() or 480
+            pixmap = pixmap.scaled(vw, vh, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+
+        self.video_label.setPixmap(pixmap)
+        self.video_label.resize(pixmap.size())
+
+        n = len(self._photo_list)
+        filename = os.path.basename(photo_path)
+        self.info_label.setText(f"\U0001f4f7 Photo {index + 1} / {n}  |  {filename}")
+        self.photo_nav_label.setText(f"Photo {index + 1} / {n}")
+        self.photo_prev_btn.setEnabled(index > 0)
+        self.photo_next_btn.setEnabled(index < n - 1)
+
+    def _photo_prev(self):
+        """Navigate to the previous photo."""
+        self._show_photo_at_index(self._photo_index - 1)
+
+    def _photo_next(self):
+        """Navigate to the next photo."""
+        self._show_photo_at_index(self._photo_index + 1)
+
+    def update_grab_photo_button_state(self):
+        """Enable the 'View Grab Photo' button when at least one photo file can be found."""
+        enabled = False
+        if self.base_data:
+            grab_fn = self._get_row_value(self.base_data, ['GRAB_FILENAME'])
+            if grab_fn and str(grab_fn).strip().upper() not in ('', 'NA', 'N/A', 'NONE'):
+                if self.grab_photos_dir:
+                    enabled = bool(self._find_point_photos(str(grab_fn).strip()))
+                else:
+                    # Folder not set yet but photos referenced — enable so user
+                    # can click and get directed to set the folder
+                    enabled = True
+        self.view_grab_photo_btn.setEnabled(enabled)
+
+    def view_grab_photo(self):
+        """Show grab photo(s) for the current point in a navigable popup dialog."""
+        if not self.base_data:
+            return
+        grab_fn = self._get_row_value(self.base_data, ['GRAB_FILENAME'])
+        if not grab_fn or str(grab_fn).strip().upper() in ('', 'NA', 'N/A', 'NONE'):
+            return
+
+        if not self.grab_photos_dir:
+            QMessageBox.information(
+                self, "Grab Photos Folder Not Set",
+                "Please set the grab photos folder first using the '\U0001f4c1 Set Folder' button."
+            )
+            return
+
+        photos = self._find_point_photos(str(grab_fn).strip())
+        if not photos:
+            QMessageBox.warning(self, "Photos Not Found",
+                f"Could not find any photos for:\n{str(grab_fn).strip()}\n"
+                f"in folder:\n{self.grab_photos_dir}")
+            return
+
+        point_id = self._get_point_identifier_from_row(self.base_data) or str(grab_fn)
+        dlg = QDialog(self)
+        dlg.setWindowTitle(f"Grab Photo(s) \u2014 Point {point_id}")
+        dlg.resize(900, 700)
+
+        layout = QVBoxLayout(dlg)
+
+        # Image display
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("QScrollArea { background: #111; }")
+        img_label = QLabel()
+        img_label.setAlignment(Qt.AlignCenter)
+        scroll.setWidget(img_label)
+        layout.addWidget(scroll, 1)
+
+        # Caption / filename
+        caption = QLabel()
+        caption.setAlignment(Qt.AlignCenter)
+        caption.setStyleSheet("color: #555; font-size: 10px; padding: 2px;")
+        layout.addWidget(caption)
+
+        # Navigation row (only shown for multiple photos)
+        nav_widget = QWidget()
+        nav_row = QHBoxLayout(nav_widget)
+        nav_row.setContentsMargins(0, 0, 0, 0)
+        prev_btn = QPushButton("\u25c4 Prev Photo")
+        nav_lbl = QLabel()
+        nav_lbl.setAlignment(Qt.AlignCenter)
+        nav_lbl.setStyleSheet("font-weight: bold;")
+        next_btn = QPushButton("Next Photo \u25ba")
+        nav_row.addWidget(prev_btn)
+        nav_row.addWidget(nav_lbl, 1)
+        nav_row.addWidget(next_btn)
+        nav_widget.setVisible(len(photos) > 1)
+        layout.addWidget(nav_widget)
+
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(dlg.accept)
+        layout.addWidget(close_btn)
+
+        # Internal state
+        state = {'index': 0}
+
+        def _show(idx):
+            idx = max(0, min(idx, len(photos) - 1))
+            state['index'] = idx
+            path = photos[idx]
+            pix = QPixmap(path)
+            if not pix.isNull():
+                scaled = pix.scaled(860, 600, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                img_label.setPixmap(scaled)
+            else:
+                img_label.setText(f"Cannot load:\n{os.path.basename(path)}")
+            caption.setText(os.path.basename(path))
+            nav_lbl.setText(f"Photo {idx + 1} / {len(photos)}")
+            prev_btn.setEnabled(idx > 0)
+            next_btn.setEnabled(idx < len(photos) - 1)
+
+        prev_btn.clicked.connect(lambda: _show(state['index'] - 1))
+        next_btn.clicked.connect(lambda: _show(state['index'] + 1))
+
+        _show(0)
+        dlg.exec_()
+
+    # ─────────────────────────────────────────────────────────────────────
     
     def load_all_entries(self):
         """Load all data entries from CSV file"""
@@ -3408,9 +5413,10 @@ class VideoPlayer(QMainWindow):
             # Set current_entry_index to point to a new entry (beyond saved entries)
             # This allows "copy from previous" to work correctly
             self.current_entry_index = len(self.all_data_entries)
-            
+
             # Enable navigation buttons
             self.update_navigation_buttons()
+            self._update_progress_label()
             
             # Show appropriate message
             if video_loaded:
@@ -3476,10 +5482,18 @@ class VideoPlayer(QMainWindow):
     def update_navigation_buttons(self):
         """Update navigation button states and position label"""
         print(f"Update navigation: entries={len(self.all_data_entries)}, index={self.current_entry_index}")
+
+        def set_copy_buttons_enabled(enabled):
+            if hasattr(self, 'copy_all_btn') and self.copy_all_btn is not None:
+                self.copy_all_btn.setEnabled(enabled)
+            if hasattr(self, 'copy_prev_field_buttons') and self.copy_prev_field_buttons:
+                for button in self.copy_prev_field_buttons:
+                    button.setEnabled(enabled)
         
         if not self.all_data_entries or self.current_entry_index < 0:
             self.prev_entry_btn.setEnabled(False)
             self.next_entry_btn.setEnabled(False)
+            set_copy_buttons_enabled(False)
             self.entry_position_label.setText("No entries - extract a frame to start")
             return
         
@@ -3488,6 +5502,7 @@ class VideoPlayer(QMainWindow):
             # Working on a new entry
             self.prev_entry_btn.setEnabled(True)  # Can go back to last saved entry
             self.next_entry_btn.setEnabled(False)  # No next entry yet
+            set_copy_buttons_enabled(True)
             status = f"New entry (will be #{len(self.all_data_entries) + 1})"
             if self.unsaved_changes:
                 status += " *"
@@ -3495,17 +5510,22 @@ class VideoPlayer(QMainWindow):
         else:
             # Viewing/editing an existing entry
             self.prev_entry_btn.setEnabled(self.current_entry_index > 0)
-            self.next_entry_btn.setEnabled(self.current_entry_index < len(self.all_data_entries) - 1)
+            # Next is always enabled for saved entries: advances to next saved, or back to new entry form
+            self.next_entry_btn.setEnabled(True)
+            set_copy_buttons_enabled(self.current_entry_index > 0)
             
             status = f"Entry {self.current_entry_index + 1} of {len(self.all_data_entries)}"
             if self.unsaved_changes:
                 status += " *"
             self.entry_position_label.setText(status)
     
-    def save_current_entry_changes(self):
-        """Save changes to the current entry in memory and CSV"""
+    def save_current_entry_changes(self, show_success_message=False):
+        """Save changes to the current entry in memory and CSV.
+
+        Returns True when saved successfully, otherwise False.
+        """
         if self.current_entry_index < 0 or self.current_entry_index >= len(self.all_data_entries):
-            return
+            return False
         
         # Collect current data
         data_row = {}
@@ -3538,7 +5558,7 @@ class VideoPlayer(QMainWindow):
                     self, "Validation Failed",
                     error_msg
                 )
-                return  # Block saving completely
+                return False  # Block saving completely
             else:
                 self.highlight_invalid_fields([])
         
@@ -3549,7 +5569,7 @@ class VideoPlayer(QMainWindow):
         output_file = os.path.join(self.data_dir, "data_entries.csv")
         
         # Use fieldnames from template
-        fieldnames = self.template_fieldnames if self.template_fieldnames else []
+        fieldnames = self.template_fieldnames if self.template_fieldnames else list(data_row.keys())
         
         try:
             with open(output_file, 'w', newline='', encoding='utf-8') as f:
@@ -3559,35 +5579,93 @@ class VideoPlayer(QMainWindow):
             
             self.unsaved_changes = False
             self.update_navigation_buttons()
+            if show_success_message:
+                QMessageBox.information(self, "Success", "Entry updated successfully.")
+            return True
         except Exception as e:
             QMessageBox.critical(
                 self, "Error",
                 f"Failed to save changes:\n{str(e)}"
             )
-    
+            return False
+
+    def _capture_new_entry_draft(self):
+        """Snapshot the current form into the draft buffer before navigating away from a new entry."""
+        draft = {}
+        for field_name, widget in self.data_fields.items():
+            if isinstance(widget, QTextEdit):
+                draft[field_name] = widget.toPlainText().strip()
+            else:
+                draft[field_name] = widget.text().strip()
+        self._new_entry_draft = draft
+        print("  Captured new-entry draft")
+
+    def _restore_new_entry_draft(self):
+        """Restore the form from the draft buffer, or re-initialise a fresh entry if no draft exists."""
+        if self._new_entry_draft:
+            for widget in self.data_fields.values():
+                widget.blockSignals(True)
+            for field_name, widget in self.data_fields.items():
+                value = self._new_entry_draft.get(field_name, '')
+                if isinstance(widget, QTextEdit):
+                    widget.setPlainText(value)
+                else:
+                    widget.setText(value)
+            for widget in self.data_fields.values():
+                widget.blockSignals(False)
+            self.highlight_invalid_fields([])
+            print("  Restored new-entry draft")
+        else:
+            # No draft — re-initialise a fresh new entry
+            if self.base_data:
+                self.populate_fields_from_base_data()
+            self.update_drop_fields_for_next()
+            print("  No draft found — re-initialised new entry")
+        self.unsaved_changes = False
+
     def previous_entry(self):
         """Navigate to previous entry"""
-        if self.current_entry_index <= 0:
+        is_new_entry = self.current_entry_index >= len(self.all_data_entries)
+        # Nothing to go back to from first saved entry
+        if not is_new_entry and self.current_entry_index <= 0:
             return
-        
-        # Auto-save current changes before navigating
-        if self.unsaved_changes:
-            self.save_current_entry_changes()
-        
-        self.current_entry_index -= 1
-        self.load_entry_at_index(self.current_entry_index)
-    
+        # Nothing to go back to if there are no saved entries at all
+        if is_new_entry and not self.all_data_entries:
+            return
+
+        if is_new_entry:
+            # Snapshot the form so it can be restored when the user comes back
+            self._capture_new_entry_draft()
+            self.unsaved_changes = False
+            self.current_entry_index = len(self.all_data_entries) - 1
+            self.load_entry_at_index(self.current_entry_index)
+        else:
+            # Auto-save edits to the existing entry before leaving
+            if self.unsaved_changes:
+                if not self.save_current_entry_changes():
+                    return
+            self.current_entry_index -= 1
+            self.load_entry_at_index(self.current_entry_index)
+
     def next_entry(self):
         """Navigate to next entry"""
-        if self.current_entry_index >= len(self.all_data_entries) - 1:
-            return
-        
-        # Auto-save current changes before navigating
+        is_new_entry = self.current_entry_index >= len(self.all_data_entries)
+        if is_new_entry:
+            return  # Already at the new entry form, nothing further
+
+        # Auto-save edits to the existing entry before leaving
         if self.unsaved_changes:
-            self.save_current_entry_changes()
-        
-        self.current_entry_index += 1
-        self.load_entry_at_index(self.current_entry_index)
+            if not self.save_current_entry_changes():
+                return
+
+        if self.current_entry_index == len(self.all_data_entries) - 1:
+            # Step forward from last saved entry back to the new entry form
+            self.current_entry_index = len(self.all_data_entries)
+            self._restore_new_entry_draft()
+            self.update_navigation_buttons()
+        else:
+            self.current_entry_index += 1
+            self.load_entry_at_index(self.current_entry_index)
     
     def copy_from_previous_entry(self, field_name):
         """Copy value from previous entry for a specific field"""
@@ -3662,6 +5740,9 @@ class VideoPlayer(QMainWindow):
             
             # Mark as changed
             self.mark_entry_changed()
+            self.check_autofill_rules(field_name)
+            self.check_calculated_rules(field_name)
+            self.update_extract_button_state()
             
             print(f"  ✓ Copy completed successfully")
             
@@ -3750,6 +5831,15 @@ class VideoPlayer(QMainWindow):
         
         # Mark as changed
         self.mark_entry_changed()
+
+        # Apply dependent rules and refresh extract availability after bulk copy
+        for field_name in self.data_fields.keys():
+            if field_name in self.non_copyable_fields:
+                continue
+            self.check_autofill_rules(field_name)
+            self.check_calculated_rules(field_name)
+
+        self.update_extract_button_state()
         
         # Show confirmation
         msg = f"Successfully copied {fields_copied} observation field values from the previous entry.\n\n"
@@ -3833,7 +5923,9 @@ class VideoPlayer(QMainWindow):
             
             # Add to in-memory list
             self.all_data_entries.append(data_row)
-            
+            self._new_entry_draft = None  # Committed — draft is now stale
+            self._update_progress_label()
+
             print(f"✓ Auto-save: Added entry #{len(self.all_data_entries)}, total entries={len(self.all_data_entries)}")
             
             # Prepare form for NEXT entry by repopulating base data and clearing observation fields
@@ -4566,8 +6658,28 @@ class VideoPlayer(QMainWindow):
             return
         
         # Get current point ID
-        current_point_id = self._get_point_identifier_from_row(self.base_data) if self.base_data else ''
-        
+        current_point_id = str(self._get_point_identifier_from_row(self.base_data) if self.base_data else '')
+
+        # Build per-point entry lookup so we can colour by data-entry status
+        entries_by_point = {}
+        for entry in (self.all_data_entries or []):
+            pid = str(self._get_point_identifier_from_row(entry) or '').strip()
+            if pid:
+                entries_by_point.setdefault(pid, []).append(entry)
+
+        for point in points_data:
+            pid = str(point['point_id'])
+            if pid == current_point_id:
+                point['status'] = 'current'
+            elif pid in entries_by_point:
+                has_sg = any(
+                    str(e.get('SG_PRESENT', '') or '').strip() == '1'
+                    for e in entries_by_point[pid]
+                )
+                point['status'] = 'seagrass' if has_sg else 'entered'
+            else:
+                point['status'] = 'pending'
+
         # Show map dialog
         dialog = MapDialog(points_data, current_point_id, self)
         dialog.exec_()
@@ -4596,7 +6708,6 @@ class VideoPlayer(QMainWindow):
                 
                 if self.validation_rules:
                     print(f"✓ Loaded {len(self.validation_rules)} validation rules")
-                    # Show rule types for debugging
                     for i, rule in enumerate(self.validation_rules):
                         print(f"  Rule {i+1}: {rule.get('type')} - {self.format_rule_summary(rule)}")
             except Exception as e:
@@ -4604,13 +6715,134 @@ class VideoPlayer(QMainWindow):
         else:
             print(f"No rules file found at: {rules_path}")
 
+        # Build dropdown field map so create_data_entry_pane can use it.
+        # Each entry is a list of (display_text, raw_value) pairs.
+        # Explicit 'dropdown' rules take priority; display == raw.
+        # 'allowed_values' rules render as dropdowns with human-readable labels:
+        #   "0" → "0 — No", "1" → "1 — Yes", "NA" → "NA — Not applicable"
+        def _av_label(v):
+            sv = str(v)
+            if sv == '1':          return '1 — Yes'
+            if sv == '0':          return '0 — No'
+            if sv.upper() == 'NA': return 'NA — Not applicable'
+            return sv
+
+        self.dropdown_fields = {}
+        for rule in self.validation_rules:
+            field = rule.get('field')
+            if not field:
+                continue
+            if rule.get('type') == 'dropdown' and rule.get('values'):
+                # Plain dropdown: display text equals raw value
+                self.dropdown_fields[field] = [(str(v), str(v)) for v in rule['values']]
+            elif rule.get('type') == 'allowed_values' and rule.get('values') \
+                    and field not in self.dropdown_fields:
+                # Allowed-values: no blank — user must explicitly choose an option
+                items = [(_av_label(v), str(v)) for v in rule['values']]
+                self.dropdown_fields[field] = items
+
+        # Build set of calculated target fields (displayed read-only in the form)
+        self.calculated_field_names = {
+            rule['target_field']
+            for rule in self.validation_rules
+            if rule.get('type') == 'calculated' and rule.get('target_field')
+        }
         self.update_extract_button_state()
     
+    # ----------------------------------------------------------------
+    # Field groups — load / save / manage
+    # ----------------------------------------------------------------
+
+    def _groups_path(self):
+        """Return the groups JSON path for the current template, or None."""
+        if not self.template_path:
+            return None
+        template_dir = os.path.dirname(self.template_path)
+        template_name = os.path.splitext(os.path.basename(self.template_path))[0]
+        return os.path.join(template_dir, f"{template_name}_groups.json")
+
+    def _load_field_groups(self):
+        """Load field groups from the companion _groups.json file.
+        Returns a list of group dicts, or [] if file not found / on error."""
+        path = self._groups_path()
+        if not path or not os.path.exists(path):
+            return []
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            return data.get('groups', [])
+        except Exception as e:
+            print(f"Warning: could not load field groups: {e}")
+            return []
+
+    def _save_field_groups(self, groups):
+        """Persist groups list to the companion _groups.json file."""
+        path = self._groups_path()
+        if not path:
+            QMessageBox.warning(self, "No Template",
+                                "Load a template before saving field groups.")
+            return False
+        try:
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump({'groups': groups}, f, indent=2)
+            print(f"Saved {len(groups)} field groups to {path}")
+            return True
+        except Exception as e:
+            QMessageBox.warning(self, "Save Error",
+                                f"Failed to save field groups:\n{e}")
+            return False
+
+    def manage_field_groups(self):
+        """Open the FieldGroupsDialog; rebuild the form if groups were changed."""
+        if not self.template_fieldnames:
+            QMessageBox.information(
+                self, "No Template",
+                "Load a data entry template first before managing field groups.")
+            return
+        current_groups = self._load_field_groups()
+        dlg = FieldGroupsDialog(self, self.template_fieldnames, current_groups)
+        if dlg.exec_() == QDialog.Accepted:
+            new_groups = dlg.get_groups()
+            if self._save_field_groups(new_groups):
+                # Rebuild the data entry pane to reflect the new layout
+                self._rebuild_data_entry_pane()
+
+    def _rebuild_data_entry_pane(self):
+        """Tear down and recreate the data entry pane with updated groups."""
+        if not hasattr(self, 'data_entry_widget') or self.data_entry_widget is None:
+            return
+        # Snapshot current field values so we can restore them
+        snapshot = {}
+        for fn, widget in self.data_fields.items():
+            if isinstance(widget, QTextEdit):
+                snapshot[fn] = widget.toPlainText()
+            elif isinstance(widget, _ComboFieldWidget):
+                snapshot[fn] = widget.currentData()
+            else:
+                snapshot[fn] = widget.text()
+
+        # Remove old widget
+        self.main_layout.removeWidget(self.data_entry_widget)
+        self.data_entry_widget.deleteLater()
+        self.data_entry_widget = None
+        self.data_fields = {}
+        self.copy_prev_field_buttons = []
+
+        # Rebuild
+        self.create_data_entry_pane()
+        self.main_layout.addWidget(self.data_entry_widget, 1)
+
+        # Restore values
+        self._update_widgets_from_data_row(snapshot)
+        self.update_navigation_buttons()
+
+    # ----------------------------------------------------------------
+
     def save_validation_rules(self):
         """Save validation rules to JSON file"""
         if not self.template_path:
             return
-        
+
         # Generate rules filename based on template
         template_dir = os.path.dirname(self.template_path)
         template_name = os.path.splitext(os.path.basename(self.template_path))[0]
@@ -4701,6 +6933,13 @@ class VideoPlayer(QMainWindow):
         for rule in self.validation_rules:
             rule_type = rule.get('type')
             
+            # Skip this rule if a skip_if condition is met
+            skip_if_field = rule.get('skip_if_field')
+            if skip_if_field:
+                skip_if_value = str(rule.get('skip_if_value', '')).strip()
+                if data_row.get(skip_if_field, '').strip() == skip_if_value:
+                    continue
+            
             try:
                 if rule_type == 'allowed_values':
                     field = rule.get('field')
@@ -4778,22 +7017,26 @@ class VideoPlayer(QMainWindow):
                 elif rule_type == 'sum_equals':
                     fields = rule.get('fields', [])
                     target = float(rule.get('target', 0))
-                    tolerance = float(rule.get('tolerance', 0))
-                    
+                    # Use at least 0.5 tolerance to absorb integer-rounding artefacts
+                    # (e.g. BARE_COVER = round(0.1) = 0 instead of 0.1).
+                    tolerance = max(float(rule.get('tolerance', 0)), 0.5)
+
                     total = 0
                     missing_fields = []
-                    
+
                     for field in fields:
                         value_str = data_row.get(field, '').strip()
-                        if value_str:
+                        # Treat blank OR "NA" (not applicable) exactly the same:
+                        # skip the check entirely when any field is inapplicable.
+                        if not value_str or value_str.upper() == 'NA':
+                            missing_fields.append(field)
+                        else:
                             try:
                                 total += float(value_str)
                             except ValueError:
                                 errors.append(f"{field} must be a number for sum calculation")
-                        else:
-                            missing_fields.append(field)
-                    
-                    # Only validate if all fields have values
+
+                    # Only validate if ALL fields have numeric values
                     if not missing_fields:
                         if abs(total - target) > tolerance:
                             errors.append(rule.get('error', f"Sum validation failed"))
@@ -4874,13 +7117,18 @@ class VideoPlayer(QMainWindow):
     
     def highlight_invalid_fields(self, errors):
         """Highlight fields mentioned in errors"""
-        # Reset all fields to normal
+        # Reset all fields to normal, but preserve the read-only style on calculated fields
+        calc_style = (
+            "QLineEdit { background-color: #f0f4f0; color: #444; "
+            "border: 1px solid #aaa; border-radius: 3px; } "
+            "QLineEdit:read-only { background-color: #e8f5e9; }"
+        )
         for field_name, widget in self.data_fields.items():
-            if isinstance(widget, QTextEdit):
-                widget.setStyleSheet("")
+            if field_name in self.calculated_field_names:
+                widget.setStyleSheet(calc_style)
             else:
                 widget.setStyleSheet("")
-        
+
         # Highlight fields with errors
         for error in errors:
             for field_name, widget in self.data_fields.items():
@@ -4891,67 +7139,92 @@ class VideoPlayer(QMainWindow):
                         widget.setStyleSheet("border: 2px solid red;")
     
     def check_autofill_rules(self, changed_field):
-        """Check if any auto-fill rules should be triggered"""
+        """Check if any auto-fill rules should be triggered.
+
+        When a trigger field changes:
+        - Rules whose trigger value NOW matches → apply their actions.
+        - Rules whose trigger value NO LONGER matches → clear those target
+          fields (reset to ""), unless another matching rule is already
+          writing to that same field.
+        """
         if not self.validation_rules:
             return
-        
+
         # Get current value of the changed field
         widget = self.data_fields.get(changed_field)
         if not widget:
             return
-        
+
         if isinstance(widget, QTextEdit):
             current_value = widget.toPlainText().strip()
         else:
             current_value = widget.text().strip()
-        
-        # Debug output (can be removed later)
-        print(f"Auto-fill check: {changed_field} = '{current_value}'")
-        
-        # Check all auto-fill rules
+
+        # Bucket rules for this trigger field into matching / non-matching
+        matching_rules = []
+        non_matching_rules = []
         for rule in self.validation_rules:
-            if rule.get('type') == 'autofill':
-                trigger_field = rule.get('trigger_field')
+            if rule.get('type') == 'autofill' and rule.get('trigger_field') == changed_field:
                 trigger_value = str(rule.get('trigger_value', '')).strip()
-                
-                print(f"  Rule: If {trigger_field}='{trigger_value}' (current field: {changed_field})")
-                
-                # Check if this rule applies to the changed field
-                if trigger_field == changed_field and current_value == trigger_value:
-                    print(f"  ✓ Auto-fill triggered!")
-                    # Apply the auto-fill actions
-                    actions = rule.get('actions', {})
-                    
-                    # Block signals temporarily to avoid triggering other rules
-                    for field_name, w in self.data_fields.items():
-                        w.blockSignals(True)
-                    
-                    # Apply each action
-                    fields_filled = 0
-                    for field_name, value in actions.items():
-                        if field_name in self.data_fields:
-                            target_widget = self.data_fields[field_name]
-                            if isinstance(target_widget, QTextEdit):
-                                target_widget.setPlainText(str(value))
-                            else:
-                                target_widget.setText(str(value))
-                            fields_filled += 1
-                            print(f"    Set {field_name} = {value}")
-                    
-                    print(f"  Auto-filled {fields_filled} fields")
-                    
-                    # Unblock signals
-                    for field_name, w in self.data_fields.items():
-                        w.blockSignals(False)
-                    
-                    # Mark as changed
-                    self.mark_entry_changed()
-                    
-                    # Break after first matching rule
-                    break
+                if current_value == trigger_value:
+                    matching_rules.append(rule)
+                else:
+                    non_matching_rules.append(rule)
+
+        if not matching_rules and not non_matching_rules:
+            return
+
+        # Collect what matching rules will set (to avoid clearing them)
+        fields_to_set = {}
+        for rule in matching_rules:
+            fields_to_set.update(rule.get('actions', {}))
+
+        # Collect fields to clear from non-matching rules (not overridden by a match)
+        fields_to_clear = set()
+        for rule in non_matching_rules:
+            for field in rule.get('actions', {}):
+                if field not in fields_to_set:
+                    fields_to_clear.add(field)
+
+        if not fields_to_set and not fields_to_clear:
+            return
+
+        # Block signals to avoid cascading triggers
+        for w in self.data_fields.values():
+            w.blockSignals(True)
+
+        # Apply matching-rule actions
+        for field_name, value in fields_to_set.items():
+            if field_name in self.data_fields:
+                target_widget = self.data_fields[field_name]
+                if isinstance(target_widget, QTextEdit):
+                    target_widget.setPlainText(str(value))
+                else:
+                    target_widget.setText(str(value))
+
+        # Reset fields whose condition is no longer met
+        for field_name in fields_to_clear:
+            if field_name in self.data_fields:
+                target_widget = self.data_fields[field_name]
+                if isinstance(target_widget, QTextEdit):
+                    target_widget.setPlainText('')
+                else:
+                    target_widget.setText('')
+
+        # Unblock signals
+        for w in self.data_fields.values():
+            w.blockSignals(False)
+
+        self.mark_entry_changed()
     
-    def check_calculated_rules(self, changed_field):
-        """Check if any calculated field rules should be triggered"""
+    def check_calculated_rules(self, changed_field, _visited=None):
+        """Check if any calculated field rules should be triggered.
+        _visited prevents infinite recursion when cascading (e.g. BARE_COVER -> TOTAL_COVER)."""
+        if _visited is None:
+            _visited = set()
+        if changed_field in _visited:
+            return
+        _visited.add(changed_field)
         if not self.validation_rules:
             return
         
@@ -5018,9 +7291,12 @@ class VideoPlayer(QMainWindow):
                                     target_widget.setText(result_formatted)
                                 
                                 target_widget.blockSignals(False)
-                                
+
                                 print(f"  Set {target_field} = {result_formatted}")
-                        
+
+                                # Cascade: recalculate rules that depend on this freshly set field
+                                self.check_calculated_rules(target_field, _visited)
+
                         except Exception as e:
                             print(f"  ❌ Error evaluating formula: {str(e)}")
     
@@ -5132,6 +7408,38 @@ class VideoPlayer(QMainWindow):
 
 <hr>
 
+<h3 style="color: #9C27B0;">🪣 Grab-Only Data Entry (GRAB_ONLY = 1)</h3>
+<p>Use <b>GRAB_ONLY = 1</b> in either of these situations:</p>
+<ul>
+  <li><b>No video available:</b> The point has a GRAB_FILENAME (grab sample photo) but no drop camera video was recorded at that location.</li>
+  <li><b>Video too turbid:</b> A video exists but the water is too turbid to make any observations. If a grab sample photo is available for that point, you can use it to fill in a grab-only entry instead.</li>
+</ul>
+<p>In both cases, observations are made from the grab photo rather than the video frame, so cover estimates are not possible.</p>
+
+<h4>What changes when GRAB_ONLY = 1:</h4>
+<ul>
+  <li><b>SG_COVER, AL_COVER, FRESH_VEG_COVER</b> are always set to <b>NA</b> — cover estimates from a video transect are not possible from a grab photo alone.</li>
+  <li>The cover validation rules (must be > 0, must be ≤ 100, etc.) are <b>skipped</b> for all three cover fields, so NA is always accepted.</li>
+  <li><b>SG_PRESENT, AL_PRESENT, FRESH_VEG_PRESENT</b> can still be entered as normal (0, 1, or NA) based on what is visible in the grab photo.</li>
+  <li><b>Species composition</b> (HB_COMP, HO_COMP, HP_COMP, RM_COMP) can still be filled if seagrass is present and identifiable — the 100% sum rule still applies when SG_PRESENT = 1.</li>
+</ul>
+
+<h4>Typical grab-only workflow:</h4>
+<ol>
+  <li>Set <b>GRAB_ONLY = 1</b> — SG_COVER will auto-fill to NA immediately.</li>
+  <li>Enter <b>SG_PRESENT</b>:
+    <ul>
+      <li>If <b>0</b>: species comps auto-fill to NA. Done.</li>
+      <li>If <b>1</b>: enter HB_COMP / HO_COMP / HP_COMP / RM_COMP (must sum to 100%).</li>
+      <li>If <b>NA</b>: all cover and comp fields auto-fill to NA. Done.</li>
+    </ul>
+  </li>
+  <li>Enter <b>AL_PRESENT</b> and <b>FRESH_VEG_PRESENT</b> if visible in the grab photo.</li>
+  <li>Add any COMMENTS, then click <b>Save Entry</b>.</li>
+</ol>
+
+<hr>
+
 <h3 style="color: #F44336;">🆘 Common Issues</h3>
 <ul>
     <li><b>Extract button disabled:</b> Fill at least one non-metadata field and fix validation errors</li>
@@ -5193,7 +7501,8 @@ class VideoPlayer(QMainWindow):
             # Collect project state
             project_data = {
                 'template_path': self.template_path,
-                'base_data_csv_path': self.base_data_csv_path,  # Store path to base CSV file
+                'base_data_csv_path': self.base_data_csv_path,
+                'current_base_csv_row_index': self.current_base_csv_row_index,
                 'video_queue': self.video_queue,
                 'current_video_index': self.current_video_index,
                 'current_video_path': self.video_path,
@@ -5201,7 +7510,7 @@ class VideoPlayer(QMainWindow):
                 'drop_counter': self.drop_counter,
                 'current_entry_index': self.current_entry_index,
                 'base_data': self.base_data,
-                'base_data_csv': self.base_data_csv,  # Save the full CSV data for map
+                'grab_photos_dir': self.grab_photos_dir,
                 'saved_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
             
@@ -5256,14 +7565,35 @@ class VideoPlayer(QMainWindow):
             self.drop_counter = 1
             self.current_entry_index = project_data.get('current_entry_index', -1)
             self.base_data = project_data.get('base_data', {})
-            restored_base_rows = project_data.get('base_data_csv', [])  # Restore base CSV for map
+            self.base_data_csv_path = project_data.get('base_data_csv_path')
+            self.current_base_csv_row_index = project_data.get('current_base_csv_row_index', -1)
+
+            # Restore grab photos folder
+            saved_gpd = project_data.get('grab_photos_dir', '')
+            if saved_gpd and os.path.isdir(saved_gpd):
+                self.grab_photos_dir = saved_gpd
+                display = os.path.basename(saved_gpd) or saved_gpd
+                self.grab_photos_dir_label.setText(display)
+                self.grab_photos_dir_label.setStyleSheet("font-size: 10px; color: #333;")
+                self.grab_photos_dir_label.setToolTip(saved_gpd)
+
+            # Always re-read the base CSV from disk so changes made outside the app are picked up
             self.base_data_csv = []
-            for row in restored_base_rows:
-                if isinstance(row, dict):
-                    self.base_data_csv.append(self._normalize_row_keys_uppercase(row))
-                else:
-                    self.base_data_csv.append(row)
-            self.base_data_csv_path = project_data.get('base_data_csv_path')  # Restore base CSV path
+            if self.base_data_csv_path and os.path.exists(self.base_data_csv_path):
+                try:
+                    with open(self.base_data_csv_path, 'r', encoding='utf-8') as f:
+                        reader = csv.DictReader(f)
+                        for row in reader:
+                            self.base_data_csv.append(self._normalize_row_keys_uppercase(row))
+                    print(f"  Re-read base CSV from disk: {len(self.base_data_csv)} rows")
+                    # Refresh base_data from the reloaded CSV using the saved row index
+                    if 0 <= self.current_base_csv_row_index < len(self.base_data_csv):
+                        self.base_data = self.base_data_csv[self.current_base_csv_row_index]
+                        print(f"  Refreshed base_data from row {self.current_base_csv_row_index}")
+                except Exception as _csv_err:
+                    print(f"  Warning: could not re-read base CSV from disk: {_csv_err}")
+            else:
+                print("  Base CSV path not found on disk — base data unavailable")
             
             # Create data entry pane with loaded template
             self.create_data_entry_pane()
@@ -5273,6 +7603,28 @@ class VideoPlayer(QMainWindow):
             self.data_entry_placeholder.deleteLater()
             self.main_layout.addWidget(self.data_entry_widget, 1)
             
+            # Re-enable point navigation if base CSV is loaded, restoring saved position
+            if self.base_data_csv:
+                saved_row_index = self.current_base_csv_row_index
+
+                # Fallback for older projects that didn't store current_base_csv_row_index:
+                # try to locate base_data's point ID inside base_data_csv
+                if saved_row_index < 0 and self.base_data:
+                    current_pid = str(self._get_point_identifier_from_row(self.base_data) or '').strip()
+                    if current_pid:
+                        for i, row in enumerate(self.base_data_csv):
+                            if str(self._get_point_identifier_from_row(row) or '').strip() == current_pid:
+                                saved_row_index = i
+                                break
+
+                self._enable_point_navigation()   # enables buttons, resets index to -1
+                if 0 <= saved_row_index < len(self.base_data_csv):
+                    self.current_base_csv_row_index = saved_row_index  # put back the real position
+                    n = len(self.base_data_csv)
+                    point_id = self._get_point_identifier_from_row(self.base_data_csv[saved_row_index]) or str(saved_row_index + 1)
+                    self.point_nav_label.setText(f"{saved_row_index + 1}/{n}: Point {point_id} — resumed")
+                    self.point_nav_label.setStyleSheet("font-size: 11px; color: #2196F3;")
+
             # Load all data entries from CSV
             output_file = os.path.join(self.data_dir, "data_entries.csv")
             if os.path.exists(output_file):
@@ -5349,7 +7701,23 @@ class VideoPlayer(QMainWindow):
                 )
             
             self.current_project_file = project_path
-            
+            self._update_progress_label()
+
+            # If grab_photos_dir wasn't saved in this project, ask once now
+            if not self.grab_photos_dir:
+                ask = QMessageBox(self)
+                ask.setWindowTitle("Grab Photos Folder")
+                ask.setText(
+                    "This project doesn't have a grab photos folder saved yet.\n\n"
+                    "Would you like to set one now?\n"
+                    "(Photos will display in the video area for grab-only points.)"
+                )
+                set_btn = ask.addButton("Set Folder…", QMessageBox.AcceptRole)
+                ask.addButton("Skip", QMessageBox.RejectRole)
+                ask.exec_()
+                if ask.clickedButton() == set_btn:
+                    self.set_grab_photos_dir()
+
             QMessageBox.information(
                 self, "Project Loaded",
                 f"Project loaded successfully!\n\n"

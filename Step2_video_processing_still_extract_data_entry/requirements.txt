@@ -3,3 +3,4 @@ PyQt5>=5.15.0
 PyQtWebEngine>=5.15.0
 numpy>=1.24.0
 pyinstaller>=6.0.0
+pyshp>=2.3.1
