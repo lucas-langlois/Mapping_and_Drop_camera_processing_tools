@@ -36,12 +36,10 @@ Mapping_and_Drop_camera_processing_tools/
 │
 └── Step2_video_processing_still_extract_data_entry/
     ├── video_player.py                 # 👈 Main application source
-    ├── build_exe.py                    # Build script (produces dist/drop_cam_analysis_app.exe)
+    ├── build_exe.py                    # Build script (produces dist/drop_cam_analysis_app.exe locally)
     ├── requirements.txt                # Python dependencies
     ├── README.md                       # Detailed Step 2 documentation
     ├── TUTORIAL.md                     # Step-by-step tutorial
-    ├── dist/
-    │   └── drop_cam_analysis_app.exe   # ⬇️  Download from Releases, then move to Step2 root
     ├── drop_videos/                    # Place renamed videos here (exe must be in this folder too)
     ├── drop_stills/                    # Extracted still frames saved here
     ├── grab_photos/                    # Grab photos for no-video points
