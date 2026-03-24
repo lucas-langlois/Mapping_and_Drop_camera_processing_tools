@@ -41,8 +41,8 @@ Mapping_and_Drop_camera_processing_tools/
     ├── README.md                       # Detailed Step 2 documentation
     ├── TUTORIAL.md                     # Step-by-step tutorial
     ├── dist/
-    │   └── drop_cam_analysis_app.exe   # ✅ Pre-built Windows executable (see Releases)
-    ├── drop_videos/                    # Place renamed videos here
+    │   └── drop_cam_analysis_app.exe   # ⬇️  Download from Releases, then move to Step2 root
+    ├── drop_videos/                    # Place renamed videos here (exe must be in this folder too)
     ├── drop_stills/                    # Extracted still frames saved here
     ├── grab_photos/                    # Grab photos for no-video points
     ├── projects/                       # Saved project files
@@ -129,7 +129,19 @@ The tool will:
 
 📥 **[Download drop_cam_analysis_app.exe from the latest release](https://github.com/lucas-langlois/Mapping_and_Drop_camera_processing_tools/releases/latest)**
 
-Just download and double-click — no Python required.
+> ⚠️ **Important — placement matters!**
+> The app locates `drop_videos/`, `drop_stills/`, `grab_photos/`, `projects/` and `data/` relative to wherever the `.exe` is placed.
+> After downloading, move the exe into the **`Step2_video_processing_still_extract_data_entry/`** folder (alongside those folders), then double-click to run.
+>
+> ```
+> Step2_video_processing_still_extract_data_entry/
+>   drop_cam_analysis_app.exe   ← place it here
+>   drop_videos/
+>   drop_stills/
+>   grab_photos/
+>   projects/
+>   data/
+> ```
 
 **Option 2: Run from Source**:
 ```bash
