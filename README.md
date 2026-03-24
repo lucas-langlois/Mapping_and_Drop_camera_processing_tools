@@ -20,22 +20,34 @@ Mapping_and_Drop_camera_processing_tools/
 ├── Step0_grab_photo_mathing/
 │   ├── START_HERE.R                    # 👈 Quick start for grab photo matching
 │   ├── link_photos_to_csv_app.R        # Interactive Shiny app
+│   ├── install_packages.R              # R package installer
+│   ├── launch_app.R                    # App launcher
 │   ├── README.md                       # Detailed Step 0 documentation
 │   └── Grab_photos/                    # Place your grab photos here
 │
 ├── Step1_video_renaming_point_matching/
 │   ├── START_HERE.R                    # 👈 Quick start for video renaming
 │   ├── video_renamer_app.R             # Interactive Shiny app
+│   ├── match_and_rename_videos_fun.R   # Core matching logic
+│   ├── install_packages.R              # R package installer
+│   ├── launch_app.R                    # App launcher
 │   ├── README.md                       # Detailed Step 1 documentation
 │   └── Videos/                         # Place your DJI videos here
 │
 └── Step2_video_processing_still_extract_data_entry/
-    ├── TUTORIAL.md                     # Detailed Step 2 tutorial
-    ├── drop_videos/                    # Renamed videos go here
-    ├── drop_stills/                    # Extracted frames saved here
+    ├── video_player.py                 # 👈 Main application source
+    ├── build_exe.py                    # Build script (produces dist/drop_cam_analysis_app.exe)
+    ├── requirements.txt                # Python dependencies
+    ├── README.md                       # Detailed Step 2 documentation
+    ├── TUTORIAL.md                     # Step-by-step tutorial
+    ├── dist/
+    │   └── drop_cam_analysis_app.exe   # ✅ Pre-built Windows executable (Git LFS)
+    ├── drop_videos/                    # Place renamed videos here
+    ├── drop_stills/                    # Extracted still frames saved here
     ├── grab_photos/                    # Grab photos for no-video points
-    ├── data/                           # Data entry templates & output
-    └── video_player.py                 # Video player application
+    ├── projects/                       # Saved project files
+    └── data/
+        └── data_entry_templates/       # CSV & JSON data entry templates
 ```
 
 ---
@@ -113,10 +125,18 @@ The tool will:
 - Renamed video files from Step 1
 - Data entry template CSV
 
-**Quick Start (Run from Source)**:
+**Option 1: Use the Pre-Built Executable (Recommended)**:
+
+The standalone Windows app is included in the repository via Git LFS:
+```
+Step2_video_processing_still_extract_data_entry/dist/drop_cam_analysis_app.exe
+```
+Just download and double-click — no Python required.
+
+**Option 2: Run from Source**:
 ```bash
 # Navigate to Step2 folder
-cd Step2_video_processing_still_extract_data_entry/Source_code
+cd Step2_video_processing_still_extract_data_entry
 
 # Install dependencies
 pip install -r requirements.txt
@@ -125,21 +145,13 @@ pip install -r requirements.txt
 python video_player.py
 ```
 
-**Alternative: Build Standalone Executable**:
+**Option 3: Rebuild the Executable**:
 ```bash
-# Install PyInstaller
-pip install pyinstaller
+# Navigate to Step2 folder
+cd Step2_video_processing_still_extract_data_entry
 
-# Build the .exe (output in dist/ folder)
+# Build the .exe (output in dist/drop_cam_analysis_app.exe)
 python build_exe.py
-```
-> **Note**: The executable is not included in this repository due to its large size (~500MB-3GB). Build it locally using the instructions above.
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Launch the video player
-python video_player.py
 ```
 
 The tool provides:
