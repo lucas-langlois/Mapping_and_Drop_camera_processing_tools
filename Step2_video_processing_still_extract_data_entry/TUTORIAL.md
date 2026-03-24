@@ -1,4 +1,4 @@
-# Drop Cam Video Analysis - Detailed Tutorial
+﻿# Drop Cam Video Analysis - Detailed Tutorial
 
 This tutorial will guide you through the complete workflow of using the Drop Cam Video Analysis tool for marine/environmental video annotation.
 
@@ -439,27 +439,41 @@ Groups are saved automatically as `[template_name]_groups.json` in the same dire
 
 ## Loading Videos
 
-### Step 1: Load Video Queue
+### Step 1: Set the Video Folder
 
-1. Click the **"Load Videos from drop_videos/"** button
-2. The application scans the `drop_videos/` folder
-3. Confirmation message shows: "Loaded X video(s) from drop_videos/"
-4. The status bar shows: "Video 1/X: [filename] (Next drop: 1)"
+Videos are no longer managed as a static queue. Instead, you point the app at a folder and videos load on demand as you navigate base CSV rows.
 
-### Step 2: Navigate Videos
+**Option A: Use the default `drop_videos/` folder**
+1. Click the **"📁 Use drop_videos/"** button in the video controls
+2. A confirmation message confirms the folder is set
+3. The folder name appears in the status label next to the button
 
-- **Next Video ▶** button: Load the next video in the queue
-- **◀ Previous Video** button: Go back to the previous video
-- Videos loop: after the last video, it returns to the first
+**Option B: Use a custom folder**
+1. Click **"Choose Folder…"**
+2. Browse to your video folder and click **OK**
+3. The folder name updates in the status label
+
+> **Note:** You only need to set the folder once per project — the path is saved automatically.
+
+### Step 2: Navigate to a Row to Load a Video
+
+With the video folder set and a base CSV loaded, use the row navigation buttons to step through your survey:
+
+- **◀ Prev Row**: Go to the previous CSV row
+- **Next Row ▶**: Go to the next CSV row
+- **Go To Row…**: Jump directly to any row by number
+
+The app matches the `VIDEO_FILENAME` column from the current row against files in the video folder. If a matching video is found, it loads automatically. If no match is found, a no-video placeholder is shown instead.
+
+The status label shows your current position (e.g., `"3/152: Point ID003 | 🎥 Video"`) and the folder label confirms which folder is active.
 
 ### What Happens When a Video Loads
 
 1. Video appears in the player window
 2. Timeline slider shows video length
 3. Frame counter shows: "Frame: 0 / [total frames]"
-4. If you have base CSV loaded:
-   - System automatically searches for matching VIDEO_FILENAME
-   - If found, data entry form pre-fills with location data
+4. If you have a base CSV loaded:
+   - Data entry form pre-fills with location data from the matching row
    - Drop counter shows the next sequential number for this POINT_ID
 
 ---
@@ -682,7 +696,7 @@ If conditions are completely different:
 After extracting the final frame of the video, fill in its data then either:
 - Click **"Save Entry"** manually
 - Or extract another frame (which saves the last drop)
-- Or click **"Next Video"** (which auto-saves current data)
+- Or advance to the next row (which auto-saves current data)
 
 ### Workflow Summary
 
@@ -719,20 +733,20 @@ Repeat until video complete!
 - Click **"Save Entry"** button
 - Confirm: "Data entry saved"
 
-**Option C: Auto-save on video change**
-- Click **"Next Video ▶"** 
-- System auto-saves current data before loading next video
+**Option C: Auto-save on row navigation**
+- Click **"Next Row ▶"** 
+- Current data is auto-saved before the next row loads
 
-### Step 6: Move to Next Video
+### Step 6: Move to the Next Point
 
-1. Click **Next Video ▶** when finished with current video
+1. Click **Next Row ▶** when finished with current video
 2. Current data is auto-saved (if any)
-3. The next video loads
-4. **Drop counter continues** if the new video has the same POINT_ID
+3. If the next row has a video file, it loads automatically
+4. **Drop counter continues** if the new video shares the same POINT_ID
    - Example: Point 5, Video A had drop1 and drop2 → Video B (same Point 5) starts at drop3
    - The counter looks at all entries with that POINT_ID regardless of which video they came from
-5. **Drop counter resets to 1** if the new video has a different POINT_ID
-6. Form pre-fills with new video’s metadata
+5. **Drop counter resets to 1** if the new row has a different POINT_ID
+6. Form pre-fills with new row’s metadata
 7. Ready to start with the new video’s first drop!
 
 ---
@@ -772,7 +786,7 @@ The folder path is saved in your project file, so you only need to do this once 
 
 ### Step 1: Navigate to the Point
 
-Use the **◀ Prev Point** / **Next Point ▶** buttons to navigate to the grab-only row in the base CSV. The status bar shows the point number and POINT_ID.
+Use the **◀ Prev Row** / **Next Row ▶** buttons to navigate to the grab-only row in the base CSV. The status bar shows the row number and POINT_ID.
 
 ### Step 2: Inline Photo Viewer
 
@@ -820,9 +834,9 @@ For points that have **both** a video and grab photos, a **"View Grab Photo"** b
 
 1. Click **"Save Entry"**
 2. After saving, a dialog appears:
-   > **"Advance to the next point now?"**
-   - **Yes** → immediately loads the next point in the base CSV
-   - **No** → stays on the same point (useful if you want to enter a second grab for the same spot)
+   > **"Advance to the next row now?"**
+   - **Yes** → immediately loads the next row in the base CSV
+   - **No** → stays on the same row (useful if you want to enter a second grab for the same spot)
 
 ### Grab DROP_ID Numbering
 
@@ -886,8 +900,7 @@ Save your entire project state and resume exactly where you left off — perfect
 When you save a project, it stores:
 - ✅ Data entry template path
 - ✅ Path to the base CSV file (the file is always re-read fresh from disk on load)
-- ✅ Current point row index (so Prev/Next Point buttons are immediately active)
-- ✅ Video queue (list of all videos)
+- ✅ Current row index (so Prev/Next Row buttons are immediately active)
 - ✅ Current video and frame position
 - ✅ Drop counter state
 - ✅ All validation rules
@@ -903,7 +916,7 @@ When you save a project, it stores:
 2. Startup dialog: **"Start New Project or Load Existing?"**
 3. Click **"Start New Project"**
 4. Load your data entry template, then base CSV
-5. Load videos from `drop_videos/`
+5. Load videos: click **"📁 Use drop_videos/"** or set a custom folder
 6. Immediately click **"💾 Save Project"** so you have a restore point
 
 ### Saving Your Project
@@ -928,9 +941,9 @@ When you save a project, it stores:
 5. ✨ Everything restored:
    - Template and validation rules loaded
    - Base CSV re-read fresh from disk — latest version picked up automatically
-   - Point navigation position restored — Prev/Next Point buttons active immediately
-   - Nav label shows: `"5/152: Point ID005 — resumed"` (exact point, not generic "Ready")
-   - Video queue restored; current video opened at exact frame
+   - Row navigation position restored — Prev/Next Row buttons active immediately
+   - Nav label shows: `"5/152: Point ID005 — resumed"` (exact row, not generic "Ready")
+   - Video folder restored; current video opened at exact frame
    - Drop counter set correctly from existing entries
    - All previous entries loaded
    - **Grab photos folder restored** — photos display immediately for no-video points
@@ -952,15 +965,15 @@ When you save a project, it stores:
 ```
 1:00 PM — Launch app
 1:01 PM — Load “Survey_Jan2025” project
-1:02 PM — Point nav label shows “10/152: Point ID010 — resumed”
+1:02 PM \u2014 Row nav label shows “10/152: Point ID010 — resumed”
 1:02 PM — Video opens at exact frame; ready for next drop
-1:05 PM — Continue processing from Point 11
+1:05 PM \u2014 Continue processing from Row 11
 3:30 PM — Save project and close
 ```
 
 **Benefits:**
 - No re-entering template or base CSV paths
-- No re-loading video queue
+- No re-loading video folder
 - Base CSV updates (GPS fixes, etc.) picked up automatically
 - Instant resume with correct point position
 - Perfect continuation of drop numbering
@@ -1300,7 +1313,8 @@ Here's a complete example of analyzing 3 videos:
 2. Created template with 15 columns
 3. Created base CSV with metadata for 3 videos
 4. Launched app, loaded template and base CSV
-5. Set up 8 validation rules:
+5. Set the video folder with **"📁 Use drop_videos/"**
+6. Set up 8 validation rules:
    - SG_PRESENT allowed values: 0, 1
    - SG_COVER range: 0-100
    - Conditional: If SG_PRESENT=0, then SG_COVER=0
@@ -1311,7 +1325,7 @@ Here's a complete example of analyzing 3 videos:
    - Sum rule: all cover fields must equal 100%
 
 ### Video 1 Analysis (POINT_ID=1)
-1. Clicked "Load Videos from drop_videos/"
+1. Clicked **Next Row ▶** to navigate to row 1
 2. Video 1 loads, form pre-fills with LAT/LONG/DEPTH from base CSV
 3. Watched video at 2x speed to identify observation points
 
@@ -1359,14 +1373,14 @@ Here's a complete example of analyzing 3 videos:
 **Time saved: 30%!** 🎉
 
 ### Video 2 Analysis (POINT_ID=1, same location)
-1. Clicked "Next Video ▶"
+1. Clicked **Next Row ▶** (to the second video row for this point)
 2. Form pre-fills with same LAT/LONG/DEPTH
 3. **Drop counter shows drop6** (continues from Video 1)
 4. Extracted 3 more drops → `Video2_drop6.jpg`, `Video2_drop7.jpg`, `Video2_drop8.jpg`
 5. Total for POINT_ID=1: 8 drops across 2 videos
 
 ### Video 3 Analysis (POINT_ID=2, different location)
-1. Clicked "Next Video ▶"
+1. Clicked **Next Row ▶** to advance to the next row
 2. Form pre-fills with different LAT/LONG/DEPTH
 3. **Drop counter resets to drop1** (new POINT_ID)
 4. Extracted 4 drops for this location

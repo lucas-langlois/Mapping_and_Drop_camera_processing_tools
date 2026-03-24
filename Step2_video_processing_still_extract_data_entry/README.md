@@ -11,8 +11,8 @@ A comprehensive video player application with integrated data entry for marine/e
 ✅ **Timeline Slider** - Fast scrubbing through video with tooltips  
 ✅ **Variable Speed Control** - 0.25x to 12x playback speeds  
 ✅ **Video Zoom** - 50% to 400% zoom with smooth scroll/pan (great for detail work!)  
-✅ **Auto-Load Video Queue** - Load multiple videos from `drop_videos/` folder  
-✅ **Video Navigation** - Previous/Next video buttons for queue  
+✅ **Video Folder Setup** - Set `drop_videos/` (or any folder) as the video source with one click  
+✅ **Row-Driven Video Loading** - Videos load automatically as you navigate base CSV rows  
 ✅ **Dual-Screen Mode** - Detach data entry panel to separate window for 2-monitor setups  
 ✅ **Optimized UI** - Compact controls maximize video viewing area  
 ✅ **Helpful Tooltips** - Hover over any button for description  
@@ -34,9 +34,10 @@ A comprehensive video player application with integrated data entry for marine/e
 ✅ **Calculated Fields** - Auto-calculate values from formulas (read-only, green background); cascades correctly (e.g., BARE_COVER → TOTAL_COVER)  
 ✅ **Template-Driven Subgroup Normalization** - Species subgroups auto-fill blanks as 0 or NA based on rules  
 ✅ **Copy from Previous** - Quickly reuse values from previous entries  
+✅ **Date-Sorted Row Navigation** - Base CSV rows are automatically sorted by DATE_TIME on load for consistent ordering  
 ✅ **Grab-Only Mode** - Enter data for points that have a grab photo but no video; DROP_ID uses `grab{N}` prefix  
 ✅ **GRAB_ONLY Sync** - Changing the GRAB_ONLY field live toggles between `drop{N}` and `grab{N}` and updates FILENAME automatically  
-✅ **Grab-Only Auto-Advance** - After saving a grab entry, prompted to advance to next point immediately  
+✅ **Grab-Only Auto-Advance** - After saving a grab entry, prompted to advance to next row immediately  
 ✅ **Grab Photos Folder** - Set a folder for grab photos once via the **📁 Set Folder** button; path is saved in the project and restored on load  
 ✅ **Inline Photo Viewer** - Grab photos for no-video points display directly in the video viewport — no popup required; Prev/Next Photo controls appear when multiple photos exist for the point  
 ✅ **Multi-Photo GRAB_FILENAME** - `GRAB_FILENAME` supports semicolon-separated lists (`photo1.jpg;photo2.jpg`) and numbered sibling auto-discovery (`photo_1.jpg`, `photo_2.jpg`, …)  
@@ -45,7 +46,7 @@ A comprehensive video player application with integrated data entry for marine/e
 ✅ **Auto-Fill Reset** - When a trigger field changes away from its trigger value, the previously auto-filled fields are cleared automatically (e.g., switching SG_PRESENT back from 0 → 1 removes the "NA" fills ready for real values)  
 ✅ **Field Groups** - Organise complex forms into named groups; each group filters the data entry pane to show only its member fields, reducing visual clutter on large templates  
 ✅ **Project Save/Load** - Resume exactly where you left off; base CSV is always re-read fresh from disk on load  
-✅ **Point Navigation Restored on Load** - Project open restores exact point position and re-enables Prev/Next Point buttons  
+✅ **Row Navigation Restored on Load** - Project open restores exact row position and re-enables Prev/Next Row buttons  
 ✅ **Interactive Map View** - 4-colour status map: amber = current, green = seagrass present, white = entered (no SG), blue = pending  
 ✅ **Batch Aggregation Method Editing** - Apply one aggregation method to selected or all fields in one click  
 
@@ -137,10 +138,10 @@ If you need a standalone `.exe` file (no Python required to run):
 
 **Correct Order:** Find frame → Fill data → Press 'S' (saves + extracts)
 
-1. **Load Videos**
-   - Click "Load Videos from drop_videos/"
-   - All videos in the folder are queued
-   - Use Previous/Next Video buttons to navigate
+1. **Set Video Folder**
+   - Click **"📁 Use drop_videos/"** (or **"Choose Folder…"** for a custom path)
+   - The folder is set as the video source; videos load automatically as you navigate rows
+   - Use **◀ Prev Row / Next Row ▶** to step through base CSV rows and load the matching video
 
 2. **For Each Drop:**
    
@@ -163,7 +164,7 @@ If you need a standalone `.exe` file (no Python required to run):
 
 3. **Last Drop**
    - After extracting final frame, fill its data
-   - Save by: Extracting again, clicking "Save Entry", or "Next Video"
+   - Save by: Extracting again, clicking "Save Entry", or advancing to the next row
 
 4. **Review and Edit**
    - Click "Load All Entries" to browse
@@ -311,13 +312,13 @@ Any field with an `allowed_values` rule is automatically rendered as a dropdown 
 
 ### Grab-Only Mode
 For sampling points where you have a grab photo but no drop video:
-1. Navigate to the point using **◀ Prev Point / Next Point ▶**
+1. Navigate to the point using **◀ Prev Row / Next Row ▶**
 2. Set `GRAB_ONLY = 1` — the form switches to grab entry mode:
    - DROP_ID changes to `grab1` (or next sequential grab number)
    - FILENAME is set from the GRAB_FILENAME column of the base CSV
    - AL_COVER and FRESH_VEG_COVER auto-fill to NA
 3. Fill in observations and click **Save Entry**
-4. Prompted: **"Advance to next point?"** — Yes skips immediately to the next base CSV row
+4. Prompted: **"Advance to next row?"** — Yes skips immediately to the next base CSV row
 
 **Inline Photo Viewer (automatic for no-video points):**
 
@@ -349,7 +350,7 @@ The **"View Grab Photo"** button opens a popup dialog. For points with multiple 
 
 ### Project Save/Load (Enhanced)
 - **Base CSV is always re-read fresh from disk** on project load — any updates made to the file outside the app are picked up automatically
-- Point navigation position (`current_base_csv_row_index`) is saved and restored — Prev/Next Point buttons enabled immediately on load
+- Row navigation position (`current_base_csv_row_index`) is saved and restored — Prev/Next Row buttons enabled immediately on load
 - On load, the nav label shows exactly where you left off (e.g., `"5/152: Point ID005 — resumed"`) instead of the generic "Ready" message
 - **Grab Photos Folder path** is saved and restored — no need to re-set it each session
 - If loading an older project that didn't save the grab photos folder, a prompt asks you to set it

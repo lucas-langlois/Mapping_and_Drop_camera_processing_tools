@@ -2014,8 +2014,6 @@ class VideoPlayer(QMainWindow):
         self.pan_last_pos = None
         
         # Auto-loader variables
-        self.video_queue = []
-        self.current_video_index = 0
         self.drop_counter = 1  # Counter for saved stills
 
         # Unified CSV row navigation
@@ -2247,7 +2245,7 @@ class VideoPlayer(QMainWindow):
                 )
                 if folder_path:
                     self.drop_videos_dir = folder_path
-                    self.load_video_queue(silent=True)  # just populate queue; nav will pick correct video
+                    self._update_video_dir_label()
 
         # Step 4: Set grab photos folder (optional, shown when base CSV loaded)
         if self.base_data_csv:
@@ -2287,13 +2285,17 @@ class VideoPlayer(QMainWindow):
         return True
 
     def _load_base_csv_rows_uppercase_headers(self, csv_path):
-        """Load base CSV rows and normalize all column names to uppercase."""
+        """Load base CSV rows, normalize column names to uppercase, and sort by DATE_TIME."""
         with open(csv_path, 'r', encoding='utf-8') as csv_file:
             reader = csv.DictReader(csv_file)
             normalized_rows = []
             for row in reader:
                 normalized_rows.append(self._normalize_row_keys_uppercase(row))
-            return normalized_rows
+        # Sort rows by DATE_TIME so both queues share the same order
+        normalized_rows.sort(
+            key=lambda r: self._parse_datetime_for_sort(self._get_datetime_source_from_row(r))
+        )
+        return normalized_rows
 
     def _normalize_row_keys_uppercase(self, row):
         """Return a copy of a dictionary with keys normalized to uppercase."""
@@ -2329,6 +2331,24 @@ class VideoPlayer(QMainWindow):
             'VIDEO_TIMESTAMP', 'VIDEO_DATETIME', 'GPS_DATETIME',
             'SURVEY_DAT', 'DATE'
         ])
+
+    def _parse_datetime_for_sort(self, date_text):
+        """Return a datetime object suitable for sorting, or datetime.max on failure."""
+        text = str(date_text or '').strip()
+        if not text:
+            return datetime.max
+        # Try common formats with and without time component
+        for fmt in [
+            "%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M", "%d/%m/%Y",
+            "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d",
+            "%d-%m-%Y %H:%M:%S", "%d-%m-%Y %H:%M", "%d-%m-%Y",
+            "%Y/%m/%d %H:%M:%S", "%Y/%m/%d %H:%M", "%Y/%m/%d",
+        ]:
+            try:
+                return datetime.strptime(text, fmt)
+            except ValueError:
+                pass
+        return datetime.max
 
     def _parse_month_from_date_text(self, date_text):
         """Extract 2-digit month from a date-like string when possible."""
@@ -2639,48 +2659,24 @@ class VideoPlayer(QMainWindow):
         autoload_layout = QHBoxLayout()
         autoload_layout.setSpacing(4)
         
-        # Load videos from drop_videos button
-        self.autoload_btn = QPushButton("Load drop_videos/")
-        self.autoload_btn.setToolTip("Load all videos from the drop_videos folder")
-        self.autoload_btn.clicked.connect(self.load_video_queue)
-        self.autoload_btn.setMaximumWidth(130)
+        # Use default drop_videos/ folder button
+        self.autoload_btn = QPushButton("📁 Use drop_videos/")
+        self.autoload_btn.setToolTip("Set the default drop_videos folder as the videos source")
+        self.autoload_btn.clicked.connect(self._use_default_video_folder)
+        self.autoload_btn.setMaximumWidth(145)
         autoload_layout.addWidget(self.autoload_btn)
-        
+
         # Choose video folder button
-        self.choose_folder_btn = QPushButton("Choose Folder...")
+        self.choose_folder_btn = QPushButton("Choose Folder…")
         self.choose_folder_btn.setToolTip("Choose a custom folder containing videos")
         self.choose_folder_btn.clicked.connect(self.choose_video_folder)
-        self.choose_folder_btn.setMaximumWidth(110)
+        self.choose_folder_btn.setMaximumWidth(115)
         autoload_layout.addWidget(self.choose_folder_btn)
-        
-        # Previous video button
-        self.prev_video_btn = QPushButton("◀ Prev")
-        self.prev_video_btn.setToolTip("Previous Video")
-        self.prev_video_btn.clicked.connect(self.previous_video)
-        self.prev_video_btn.setEnabled(False)
-        self.prev_video_btn.setMaximumWidth(60)
-        autoload_layout.addWidget(self.prev_video_btn)
-        
-        # Next video button
-        self.next_video_btn = QPushButton("Next ▶")
-        self.next_video_btn.setToolTip("Next Video")
-        self.next_video_btn.clicked.connect(self.next_video)
-        self.next_video_btn.setEnabled(False)
-        self.next_video_btn.setMaximumWidth(60)
-        autoload_layout.addWidget(self.next_video_btn)
 
-        # Go to specific video button
-        self.goto_video_btn = QPushButton("Go To...")
-        self.goto_video_btn.setToolTip("Jump to a specific video in queue")
-        self.goto_video_btn.clicked.connect(self.goto_video)
-        self.goto_video_btn.setEnabled(False)
-        self.goto_video_btn.setMaximumWidth(70)
-        autoload_layout.addWidget(self.goto_video_btn)
-        
-        # Video queue status label
-        self.queue_label = QLabel("No videos")
-        self.queue_label.setStyleSheet("font-size: 11px;")
-        autoload_layout.addWidget(self.queue_label)
+        # Video folder status label
+        self.video_dir_label = QLabel("📁 Videos folder not set")
+        self.video_dir_label.setStyleSheet("font-size: 11px; color: #888;")
+        autoload_layout.addWidget(self.video_dir_label)
         autoload_layout.addStretch()
         
         video_layout.addLayout(autoload_layout)
@@ -2689,28 +2685,28 @@ class VideoPlayer(QMainWindow):
         grab_layout = QHBoxLayout()
         grab_layout.setSpacing(4)
 
-        self.prev_point_btn = QPushButton("◀ Prev Point")
-        self.prev_point_btn.setToolTip("Go to previous point in base CSV")
+        self.prev_point_btn = QPushButton("◀ Prev Row")
+        self.prev_point_btn.setToolTip("Go to previous CSV row")
         self.prev_point_btn.clicked.connect(self.prev_point)
         self.prev_point_btn.setEnabled(False)
         self.prev_point_btn.setMaximumWidth(90)
         grab_layout.addWidget(self.prev_point_btn)
 
-        self.next_point_btn = QPushButton("Next Point ▶")
-        self.next_point_btn.setToolTip("Go to next point in base CSV")
+        self.next_point_btn = QPushButton("Next Row ▶")
+        self.next_point_btn.setToolTip("Go to next CSV row")
         self.next_point_btn.clicked.connect(self.next_point)
         self.next_point_btn.setEnabled(False)
         self.next_point_btn.setMaximumWidth(90)
         grab_layout.addWidget(self.next_point_btn)
 
-        self.goto_point_btn = QPushButton("Go To...")
-        self.goto_point_btn.setToolTip("Jump to a specific point in the base CSV")
+        self.goto_point_btn = QPushButton("Go To Row…")
+        self.goto_point_btn.setToolTip("Jump to a specific CSV row")
         self.goto_point_btn.clicked.connect(self.goto_point)
         self.goto_point_btn.setEnabled(False)
-        self.goto_point_btn.setMaximumWidth(70)
+        self.goto_point_btn.setMaximumWidth(85)
         grab_layout.addWidget(self.goto_point_btn)
 
-        self.point_nav_label = QLabel("Load a base CSV to navigate points")
+        self.point_nav_label = QLabel("Load a base CSV to navigate rows")
         self.point_nav_label.setStyleSheet("font-size: 11px; color: #888;")
         grab_layout.addWidget(self.point_nav_label)
 
@@ -3563,8 +3559,8 @@ class VideoPlayer(QMainWindow):
         ret, frame = self.cap.read()
         
         if ret:
-            # Check if we're in auto-loader mode
-            if self.video_queue and self.video_path in self.video_queue:
+            # Check if we're in managed mode (videos folder + base CSV set)
+            if self.drop_videos_dir and self.video_path:
                 # Auto-load base data from CSV on first extraction if not already loaded
                 if not self.base_data:
                     self.auto_load_base_data_from_csv()
@@ -3621,9 +3617,7 @@ class VideoPlayer(QMainWindow):
                     print(f"  Updated FILENAME field to: {next_filename}")
                 
                 # Update queue label to show new drop count
-                self.queue_label.setText(
-                    f"{self.current_video_index + 1}/{len(self.video_queue)}: Drop {self.drop_counter}"
-                )
+                self._update_video_dir_label()
                 
                 # Show success message
                 msg = f"Frame saved to:\n{output_path}\n\nData entry auto-saved with DROP_ID: {drop_id}\n\n"
@@ -3659,7 +3653,7 @@ class VideoPlayer(QMainWindow):
             QMessageBox.warning(self, "Error", "Failed to extract frame")
             return
 
-        in_queue_mode = self.video_queue and self.video_path in self.video_queue
+        in_queue_mode = bool(self.drop_videos_dir and self.video_path)
 
         if in_queue_mode:
             os.makedirs(self.drop_stills_dir, exist_ok=True)
@@ -3717,10 +3711,8 @@ class VideoPlayer(QMainWindow):
                     widget.setText(next_filename)
                 widget.blockSignals(False)
 
-            if self.video_queue and hasattr(self, 'queue_label'):
-                self.queue_label.setText(
-                    f"{self.current_video_index + 1}/{len(self.video_queue)}: Drop {self.drop_counter}"
-                )
+            if hasattr(self, 'video_dir_label'):
+                self._update_video_dir_label()
 
             self.update_extract_button_state()
 
@@ -3731,150 +3723,78 @@ class VideoPlayer(QMainWindow):
         )
             
     def choose_video_folder(self):
-        """Choose a custom video folder and load videos from it"""
+        """Choose a custom video folder to load videos from."""
         folder_path = QFileDialog.getExistingDirectory(
             self, "Select Video Folder",
             self.drop_videos_dir,
             QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks
         )
-        
         if folder_path:
             self.drop_videos_dir = folder_path
-            self.load_video_queue()
-    
-    def load_video_queue(self, silent=False):
-        """Load all videos from drop_videos directory.
+            self._update_video_dir_label()
 
-        Args:
-            silent: When True, skip auto-loading the first video and skip the
-                    confirmation dialog.  Used during startup so that
-                    navigate_to_base_csv_row(0) takes control immediately after.
-        """
-        if not os.path.exists(self.drop_videos_dir):
-            os.makedirs(self.drop_videos_dir)
-            if not silent:
-                QMessageBox.information(
-                    self, "Directory Created",
-                    f"Created drop_videos directory:\n{self.drop_videos_dir}\n\nPlease add video files to this directory."
-                )
-            return
-        
-        # Find all video files
-        video_extensions = ('.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.m4v')
-        self.video_queue = [
-            os.path.join(self.drop_videos_dir, f)
-            for f in os.listdir(self.drop_videos_dir)
-            if f.lower().endswith(video_extensions)
-        ]
-        
-        if not self.video_queue:
-            if not silent:
-                QMessageBox.warning(
-                    self, "No Videos Found",
-                    f"No video files found in:\n{self.drop_videos_dir}"
-                )
-            return
-        
-        # Sort videos alphabetically
-        self.video_queue.sort()
-        self.current_video_index = 0
-        
-        # Create drop_stills directory
-        os.makedirs(self.drop_stills_dir, exist_ok=True)
-        
-        # Enable navigation buttons
-        self.prev_video_btn.setEnabled(True)
-        self.next_video_btn.setEnabled(True)
-        self.goto_video_btn.setEnabled(True)
-
-        if silent:
-            # Caller (startup) will navigate to the correct first point
-            return
-
-        # Load first video (normal non-startup path)
-        self.load_video_from_queue(0)
-        
+    def _use_default_video_folder(self):
+        """Set drop_videos_dir to the default drop_videos/ folder."""
+        os.makedirs(self.drop_videos_dir, exist_ok=True)
+        self._update_video_dir_label()
         QMessageBox.information(
-            self, "Videos Loaded",
-            f"Loaded {len(self.video_queue)} video(s) from:\n{self.drop_videos_dir}\n\n"
-            f"Stills will be saved to drop_stills/\n\n"
-            f"Use 'S' key or Extract Frame button to save stills."
+            self, "Videos Folder Set",
+            f"Videos will be loaded from:\n{self.drop_videos_dir}\n\n"
+            "Use \u25c0 Prev Row / Next Row \u25b6 to navigate rows and load videos."
         )
-    
-    def load_video_from_queue(self, index):
-        """Load a specific video from the queue"""
-        if not self.video_queue or index < 0 or index >= len(self.video_queue):
-            return
 
-        # Leave photo viewer mode before loading a real video
+    def _update_video_dir_label(self):
+        """Refresh the videos-folder status label."""
+        if hasattr(self, 'video_dir_label'):
+            if self.drop_videos_dir and os.path.isdir(self.drop_videos_dir):
+                folder_name = os.path.basename(self.drop_videos_dir.rstrip('/\\')) or self.drop_videos_dir
+                self.video_dir_label.setText(f"\ud83d\udcc1 {folder_name}")
+                self.video_dir_label.setStyleSheet("font-size: 11px; color: #333;")
+                self.video_dir_label.setToolTip(self.drop_videos_dir)
+            else:
+                self.video_dir_label.setText("\ud83d\udcc1 Videos folder not set")
+                self.video_dir_label.setStyleSheet("font-size: 11px; color: #888;")
+                self.video_dir_label.setToolTip("")
+
+    def _load_video_file(self, video_path):
+        """Open a single video file directly (caller sets base_data/current_base_csv_row_index first).
+
+        The drop counter and form population happen here using the already-set
+        self.base_data, so the counter is always keyed on the correct POINT_ID.
+        """
         self._exit_photo_viewer_mode()
 
-        # Exit grab-only mode when a real video is loaded
         if self.grab_only_mode:
             self.grab_only_mode = False
-            # Update nav label to reflect video mode
-            if self.current_base_csv_row_index >= 0 and self.base_data_csv:
-                total = len(self.base_data_csv)
-                point_id = self._get_point_identifier_from_row(
-                    self.base_data_csv[self.current_base_csv_row_index]) or '?'
-                self.point_nav_label.setText(
-                    f"{self.current_base_csv_row_index + 1}/{total}: Point {point_id} | 🎬 Video")
-                self.point_nav_label.setStyleSheet("font-size: 11px; color: #2196F3;")
-        
-        self.current_video_index = index
-        video_path = self.video_queue[index]
-        
-        # Set video path first
-        self.video_path = video_path
-        video_name = os.path.splitext(os.path.basename(video_path))[0]
-        
-        # Load base data FIRST - this sets the correct Site/Point ID
-        # Do NOT call populate_fields_from_base_data() yet
-        if self.base_data_csv:
-            self.base_data = {}
-            # Find matching base data without populating fields yet
-            for row in self.base_data_csv:
-                video_fn = self._get_video_filename_from_row(row)
-                if video_fn:
-                    video_fn_base = os.path.basename(str(video_fn).strip())
-                    csv_video_name = os.path.splitext(video_fn_base)[0]
-                    if csv_video_name.lower() == video_name.lower() or video_fn_base.lower() == os.path.basename(video_path).lower():
-                        self.base_data = row
-                        print(f"  Loaded base data for ID: {self._get_point_identifier_from_row(row) or 'N/A'}")
-                        break
-        
-        # NOW reset drop counter with the correct Site/Point ID from new base_data
+
+        # Drop counter — keyed on POINT_ID from base_data already set by caller
         self.drop_counter = self.get_next_drop_number_for_point()
-        
-        # NOW populate fields (this will call update_drop_fields_for_next() with correct counter)
+
         if self.base_data:
             self.populate_fields_from_base_data()
-        
-        # Load video
+
         if self.cap:
             self.cap.release()
-        
+
         self.video_path = video_path
         self.cap = cv2.VideoCapture(video_path, cv2.CAP_FFMPEG)
         self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-        # Try to open only video stream (ignore audio)
         try:
             self.cap.set(cv2.CAP_PROP_AUDIO_STREAM, -1)
-        except:
+        except Exception:
             pass
-        
+
         if not self.cap.isOpened():
             QMessageBox.critical(self, "Error", f"Failed to open video:\n{video_path}")
             return
-        
+
         self.total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
         self.fps = self.cap.get(cv2.CAP_PROP_FPS)
         self.current_frame = 0
-        
+
         self.timeline_slider.setMaximum(self.total_frames - 1)
         self.timeline_slider.setValue(0)
-        
-        # Enable controls
+
         self.play_btn.setEnabled(True)
         self.prev_frame_btn.setEnabled(True)
         self.next_frame_btn.setEnabled(True)
@@ -3884,128 +3804,10 @@ class VideoPlayer(QMainWindow):
         self.zoom_slider.setEnabled(True)
         self.timeline_slider.setEnabled(True)
         self.update_extract_button_state()
-        
-        # Update queue label
-        self.queue_label.setText(
-            f"{self.current_video_index + 1}/{len(self.video_queue)}: "
-            f"{os.path.basename(video_path)[:30]} (Drop {self.drop_counter})"
-        )
-        
+        self._update_video_dir_label()
+        os.makedirs(self.drop_stills_dir, exist_ok=True)
         self.display_frame()
-    
-    def previous_video(self):
-        """Load previous video from queue"""
-        if not self.video_queue:
-            return
 
-        if not self.validate_current_video_entry_still_match(show_message=True):
-            return
-        
-        # Confirm before moving to previous video
-        reply = QMessageBox.question(
-            self, "Move to Previous Video?",
-            "⚠️ Have you extracted and saved ALL drops for this video?\n\n"
-            "IMPORTANT: Make sure the last drop is saved before continuing.\n\n"
-            "Moving to the previous video will:\n"
-            "• Set DROP_ID for that video automatically\n"
-            "• Load base data for that video\n"
-            "• Clear observation fields\n\n"
-            "Continue to previous video?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        )
-        
-        if reply == QMessageBox.No:
-            return
-        
-        if self.is_playing:
-            self.toggle_play()
-        
-        new_index = (self.current_video_index - 1) % len(self.video_queue)
-        self.load_video_from_queue(new_index)
-    
-    def next_video(self):
-        """Load next video from queue"""
-        if not self.video_queue:
-            return
-
-        if not self.validate_current_video_entry_still_match(show_message=True):
-            return
-        
-        # Confirm before moving to next video
-        reply = QMessageBox.question(
-            self, "Move to Next Video?",
-            "⚠️ Have you extracted and saved ALL drops for this video?\n\n"
-            "IMPORTANT: Make sure the last drop is saved before continuing.\n\n"
-            "Moving to the next video will:\n"
-            "• Set DROP_ID for that video automatically\n"
-            "• Load base data for the new video\n"
-            "• Clear observation fields\n\n"
-            "Continue to next video?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        )
-        
-        if reply == QMessageBox.No:
-            return
-        
-        if self.is_playing:
-            self.toggle_play()
-        
-        new_index = (self.current_video_index + 1) % len(self.video_queue)
-        self.load_video_from_queue(new_index)
-
-    def goto_video(self):
-        """Jump directly to a specific video in the queue"""
-        if not self.video_queue:
-            return
-
-        if not self.validate_current_video_entry_still_match(show_message=True):
-            return
-
-        items = [
-            f"{idx + 1}/{len(self.video_queue)} - {os.path.basename(path)}"
-            for idx, path in enumerate(self.video_queue)
-        ]
-
-        selected_item, ok = QInputDialog.getItem(
-            self,
-            "Go To Video",
-            "Select a video:",
-            items,
-            self.current_video_index,
-            False
-        )
-
-        if not ok or not selected_item:
-            return
-
-        target_index = items.index(selected_item)
-        if target_index == self.current_video_index:
-            return
-
-        # Confirm before moving to selected video
-        reply = QMessageBox.question(
-            self, "Move to Selected Video?",
-            "⚠️ Have you extracted and saved ALL drops for this video?\n\n"
-            "IMPORTANT: Make sure the last drop is saved before continuing.\n\n"
-            "Moving to the selected video will:\n"
-            "• Set DROP_ID for that video automatically\n"
-            "• Load base data for that video\n"
-            "• Clear observation fields\n\n"
-            "Continue to selected video?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        )
-
-        if reply == QMessageBox.No:
-            return
-
-        if self.is_playing:
-            self.toggle_play()
-
-        self.load_video_from_queue(target_index)
-    
     def save_data_entry(self):
         """Save current data entry to CSV file"""
         # If user is viewing an existing saved entry, update it in-place (do not append duplicate)
@@ -4042,7 +3844,7 @@ class VideoPlayer(QMainWindow):
                             w.setText(data_row['FILENAME'])
                         w.blockSignals(False)
         elif (not filename_value or filename_is_placeholder) and self.video_path:
-            if self.video_queue and self.video_path in self.video_queue:
+            if self.drop_videos_dir and self.video_path:
                 current_drop_id = data_row.get('DROP_ID', '').strip()
                 queue_filename, _ = self._generate_queue_still_filename(current_drop_id)
                 data_row['FILENAME'] = queue_filename
@@ -4161,7 +3963,7 @@ class VideoPlayer(QMainWindow):
                     extracted_after_save = True
 
             # In queue mode, Save+Extract should initialize a fresh next entry
-            if extracted_after_save and self.video_queue and self.video_path in self.video_queue:
+            if extracted_after_save and self.drop_videos_dir and self.video_path:
                 if not self.base_data:
                     self.auto_load_base_data_from_csv()
 
@@ -4223,8 +4025,8 @@ class VideoPlayer(QMainWindow):
     
     def initialise_new_entry(self):
         """Save current entry (without extracting frame) and prepare for next entry"""
-        # Check if we're in auto-loader mode
-        if not self.video_queue or not self.video_path or self.video_path not in self.video_queue:
+        # Require a video to be loaded
+        if not self.drop_videos_dir or not self.video_path:
             QMessageBox.warning(
                 self, "Not in Video Queue Mode",
                 "This feature only works when using 'Load Videos from drop_videos/'.\n\n"
@@ -4287,9 +4089,7 @@ class VideoPlayer(QMainWindow):
             print(f"  Updated FILENAME field to: {next_filename}")
         
         # Update queue label to show new drop count
-        self.queue_label.setText(
-            f"{self.current_video_index + 1}/{len(self.video_queue)}: Drop {self.drop_counter}"
-        )
+        self._update_video_dir_label()
 
         # Mark UI state as a new (unsaved) entry after initialization
         self.current_entry_index = len(self.all_data_entries)
@@ -4531,7 +4331,7 @@ class VideoPlayer(QMainWindow):
 
     def validate_current_video_entry_still_match(self, show_message=True):
         """Ensure current video has matching counts between data entries and extracted still files."""
-        if not self.video_queue or not self.video_path or self.video_path not in self.video_queue:
+        if not self.drop_videos_dir or not self.video_path:
             return True
 
         entry_count, still_count = self._count_current_video_entries_and_stills()
@@ -4866,7 +4666,7 @@ class VideoPlayer(QMainWindow):
             painter.end()
             self.video_label.setPixmap(pixmap)
             self.info_label.setText("\U0001f4f7 Photos available — set grab photos folder to display")
-            self.queue_label.setText("Photos available — folder not set")
+            self.video_dir_label.setText("Photos available — folder not set")
             return
 
         # ── No photos at all — plain black "NO VIDEO" screen ─────────────
@@ -4885,7 +4685,7 @@ class VideoPlayer(QMainWindow):
         painter.end()
         self.video_label.setPixmap(pixmap)
         self.info_label.setText("No video loaded")
-        self.queue_label.setText("No video for this point")
+        self.video_dir_label.setText("No video for this row")
 
     # ── Unified point navigation ──────────────────────────────────────────
 
@@ -4896,7 +4696,7 @@ class VideoPlayer(QMainWindow):
         self.next_point_btn.setEnabled(True)
         self.goto_point_btn.setEnabled(True)
         n = len(self.base_data_csv)
-        self.point_nav_label.setText(f"Ready: {n} point{'s' if n != 1 else ''} loaded. Click Next Point \u25b6 to start.")
+        self.point_nav_label.setText(f"Ready: {n} row{'s' if n != 1 else ''} loaded. Click Next Row \u25b6 to start.")
         self.point_nav_label.setStyleSheet("font-size: 11px; color: #4CAF50;")
         self._update_progress_label()
 
@@ -4913,14 +4713,18 @@ class VideoPlayer(QMainWindow):
 
         total = len(self.base_data_csv)
 
-        # Count unique entered point IDs
+        # Build set of POINT_IDs that have at least one data entry
         entered_pids = set()
         for e in (self.all_data_entries or []):
             pid = str(self._get_point_identifier_from_row(e) or '').strip()
             if pid:
                 entered_pids.add(pid)
 
-        n_entered = len(entered_pids)
+        # Count rows whose POINT_ID is covered by an entry
+        n_entered = sum(
+            1 for row in self.base_data_csv
+            if str(self._get_point_identifier_from_row(row) or '').strip() in entered_pids
+        )
         remaining = total - n_entered
         pct = int(round(100 * n_entered / total)) if total else 0
 
@@ -4973,7 +4777,7 @@ class VideoPlayer(QMainWindow):
         color = "#2E7D32" if n_entered == total else "#1565C0"
         self.progress_label.setText(
             f"<span style='color:{color}; font-weight:bold;'>{n_entered}/{total}</span>"
-            f"<span style='color:#555;'> points entered ({remaining} remaining){current_text}</span>"
+            f"<span style='color:#555;'> rows entered ({remaining} remaining){current_text}</span>"
         )
 
     def navigate_to_base_csv_row(self, index):
@@ -4981,7 +4785,7 @@ class VideoPlayer(QMainWindow):
         if not self.base_data_csv or index < 0 or index >= len(self.base_data_csv):
             return
 
-        self._new_entry_draft = None  # Switching point — old draft is no longer applicable
+        self._new_entry_draft = None  # Switching row — old draft is no longer applicable
         self.current_base_csv_row_index = index
         row = self.base_data_csv[index]
         self.base_data = row
@@ -4994,37 +4798,50 @@ class VideoPlayer(QMainWindow):
         has_grab_photo = bool(grab_fn and str(grab_fn).strip().upper() not in ('', 'NA', 'N/A', 'NONE'))
 
         if has_video:
-            # Try to find and load the video from the queue
             video_fn_base = os.path.basename(str(video_fn).strip())
-            csv_video_name = os.path.splitext(video_fn_base)[0]
-            found_idx = None
-            for q_idx, vp in enumerate(self.video_queue):
-                if os.path.splitext(os.path.basename(vp))[0].lower() == csv_video_name.lower():
-                    found_idx = q_idx
-                    break
+            # Build path directly from configured videos folder
+            video_path = ''
+            if self.drop_videos_dir:
+                candidate = os.path.join(self.drop_videos_dir, video_fn_base)
+                if os.path.isfile(candidate):
+                    video_path = candidate
+                else:
+                    # Case-insensitive fallback (Windows usually handles this but be safe)
+                    try:
+                        for f in os.listdir(self.drop_videos_dir):
+                            if f.lower() == video_fn_base.lower():
+                                video_path = os.path.join(self.drop_videos_dir, f)
+                                break
+                    except OSError:
+                        pass
 
-            if found_idx is not None:
-                # load_video_from_queue will set grab_only_mode=False and populate fields
-                self.load_video_from_queue(found_idx)
+            if video_path:
+                # _load_video_file uses base_data (already set above) for drop counter
+                self._load_video_file(video_path)
                 status = "\U0001f3ac Video"
                 if has_grab_photo:
                     status += " | \U0001f4f7 Grab photo available"
-                self.point_nav_label.setText(f"{index + 1}/{total}: Point {point_id} | {status}")
+                self.point_nav_label.setText(f"Row {index + 1}/{total}: Point {point_id} | {status}")
                 self.point_nav_label.setStyleSheet("font-size: 11px; color: #2196F3;")
             else:
-                # Video referenced but not in queue — fall through to populate from base CSV
+                # Video referenced but not found on disk
                 self.grab_only_mode = False
                 self.drop_counter = self.get_next_drop_number_for_point()
                 self.populate_fields_from_base_data()
+                _vid_dir_name = os.path.basename(self.drop_videos_dir.rstrip('/\\')) if self.drop_videos_dir else ''
+                not_found_reason = (
+                    "(no videos folder set)" if not self.drop_videos_dir
+                    else f"not found in {_vid_dir_name}"
+                )
                 self.point_nav_label.setText(
-                    f"{index + 1}/{total}: Point {point_id} | \U0001f3ac Video ({video_fn_base}) \u2014 not found in queue")
+                    f"Row {index + 1}/{total}: Point {point_id} | \U0001f3ac Video ({video_fn_base}) \u2014 {not_found_reason}")
                 self.point_nav_label.setStyleSheet("font-size: 11px; color: orange;")
-                if self.video_queue:
+                if self.drop_videos_dir:
                     QMessageBox.warning(
-                        self, "Video Not Found in Queue",
-                        f"This point has a matched video ({video_fn_base}) but it was not found "
-                        f"in the loaded video queue.\n\nMake sure you have loaded the correct "
-                        f"drop_videos folder.")
+                        self, "Video Not Found",
+                        f"Row {index + 1} references video file:\n  {video_fn_base}\n\n"
+                        f"File not found in:\n  {self.drop_videos_dir}\n\n"
+                        "Make sure the correct videos folder is set.")
         else:
             # No video — enter grab_only_mode; always exactly 1 grab entry per point
             self.grab_only_mode = True
@@ -5056,7 +4873,7 @@ class VideoPlayer(QMainWindow):
                 status = "\u26a0\ufe0f No video, no grab photo \u2014 NA entry pre-filled, edit if needed"
                 style = "font-size: 11px; color: #F44336;"
 
-            self.point_nav_label.setText(f"{index + 1}/{total}: Point {point_id} | {status}")
+            self.point_nav_label.setText(f"Row {index + 1}/{total}: Point {point_id} | {status}")
             self.point_nav_label.setStyleSheet(style)
 
         self.update_grab_photo_button_state()
@@ -5069,10 +4886,12 @@ class VideoPlayer(QMainWindow):
             return
 
         n = len(self.base_data_csv)
-        items = [
-            f"{idx + 1}/{n}: {self._get_point_identifier_from_row(row) or str(idx + 1)}"
-            for idx, row in enumerate(self.base_data_csv)
-        ]
+        def _row_label(idx, row):
+            point_id = self._get_point_identifier_from_row(row) or str(idx + 1)
+            vid_fn = self._get_video_filename_from_row(row)
+            vid_part = f" — {os.path.basename(str(vid_fn).strip())}" if vid_fn and str(vid_fn).strip().upper() not in ('', 'NA', 'N/A', 'NONE') else " — (no video)"
+            return f"{idx + 1}/{n}: Point {point_id}{vid_part}"
+        items = [_row_label(idx, row) for idx, row in enumerate(self.base_data_csv)]
 
         current = max(0, self.current_base_csv_row_index)
         selected_item, ok = QInputDialog.getItem(
@@ -5200,7 +5019,7 @@ class VideoPlayer(QMainWindow):
         self._photo_index = 0
         self.photo_nav_widget.setVisible(len(photo_list) > 1)
         self._show_photo_at_index(0)
-        self.queue_label.setText(
+        self.video_dir_label.setText(
             f"\U0001f4f7 {len(photo_list)} photo(s) — photo viewer mode"
         )
 
@@ -5394,19 +5213,16 @@ class VideoPlayer(QMainWindow):
                     video_name = filename.split('_drop')[0]
                     video_filename = video_name + '.mp4'  # Assume mp4, could also check for other extensions
             
-            # Try to find and open the NEXT video in the queue
+            # Try to navigate to the next CSV row after the last entry's video row
             video_loaded = False
-            if video_filename and self.video_queue:
-                # Search for the video in the queue
-                for idx, video_path in enumerate(self.video_queue):
-                    if os.path.basename(video_path) == video_filename or os.path.splitext(os.path.basename(video_path))[0] == os.path.splitext(video_filename)[0]:
-                        # Found the last video - load the NEXT one
-                        next_idx = (idx + 1) % len(self.video_queue)
-                        if next_idx != idx:  # Make sure there's a next video
-                            # Load the next video - this will populate fields with correct DROP_ID
-                            self.load_video_from_queue(next_idx)
-                            next_video_name = os.path.basename(self.video_queue[next_idx])
-                            print(f"  Auto-loaded NEXT video: {next_video_name}")
+            if video_filename and self.base_data_csv:
+                for ridx, row in enumerate(self.base_data_csv):
+                    fn = self._get_video_filename_from_row(row)
+                    if fn and os.path.splitext(os.path.basename(str(fn).strip()))[0].lower() == os.path.splitext(video_filename)[0].lower():
+                        next_ridx = ridx + 1
+                        if next_ridx < len(self.base_data_csv):
+                            self.navigate_to_base_csv_row(next_ridx)
+                            print(f"  Auto-navigated to next CSV row: {next_ridx + 1}")
                             video_loaded = True
                         break
             
@@ -5752,6 +5568,24 @@ class VideoPlayer(QMainWindow):
             else:
                 print(f"  ⚠ Warning: Previous entry had no value for {field_name}")
     
+    def _get_base_csv_populated_fields(self):
+        """Return set of field names that have a value from the current base CSV row.
+
+        These fields should be protected from 'Copy All from Previous' to avoid
+        overwriting row-specific metadata (DEPTH, LAT, LON, etc.) with values
+        from a different point.
+        """
+        protected = set()
+        if not self.base_data:
+            return protected
+        for field_name in self.data_fields:
+            value = self._get_prefill_value_for_field(field_name)
+            if value not in (None, ''):
+                protected.add(field_name)
+        # Always protect DROP_ID / FILENAME even if not in base_data
+        protected.update(['DROP_ID', 'FILENAME'])
+        return protected
+
     def copy_all_from_previous_entry(self):
         """Copy all field values from the previous entry"""
         print(f"Copy all from previous called")
@@ -5787,10 +5621,15 @@ class VideoPlayer(QMainWindow):
         print(f"  ✓ Can copy from saved entry index {source_index} (Entry #{source_index + 1})")
         
         # Confirm action
+        # Detect which fields are pre-populated from the base CSV for this row
+        protected_fields = self._get_base_csv_populated_fields()
+        # Also include the hardcoded non-copyable set as a safety net
+        protected_fields.update(self.non_copyable_fields)
+
         reply = QMessageBox.question(
             self, "Copy All Fields",
-            "Copy all field values from the previous entry?\n\n"
-            "This will overwrite the current form data.",
+            "Copy observation field values from the previous entry?\n\n"
+            f"Fields pre-populated from the base CSV ({len(protected_fields)}) will be preserved.",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
@@ -5805,13 +5644,13 @@ class VideoPlayer(QMainWindow):
         for widget in self.data_fields.values():
             widget.blockSignals(True)
         
-        # Copy all field values (except non-copyable metadata fields)
+        # Copy all field values (except fields populated from base CSV or hardcoded non-copyable)
         fields_copied = 0
         skipped_fields = []
         
         for field_name, widget in self.data_fields.items():
-            # Skip non-copyable fields (metadata/unique identifiers)
-            if field_name in self.non_copyable_fields:
+            # Skip fields pre-populated from the base CSV for this row
+            if field_name in protected_fields:
                 skipped_fields.append(field_name)
                 continue
             
@@ -5834,7 +5673,7 @@ class VideoPlayer(QMainWindow):
 
         # Apply dependent rules and refresh extract availability after bulk copy
         for field_name in self.data_fields.keys():
-            if field_name in self.non_copyable_fields:
+            if field_name in protected_fields:
                 continue
             self.check_autofill_rules(field_name)
             self.check_calculated_rules(field_name)
@@ -5846,10 +5685,10 @@ class VideoPlayer(QMainWindow):
         
         if skipped_fields:
             # Show only first few skipped fields if there are many
-            skipped_display = ', '.join(skipped_fields[:5])
-            if len(skipped_fields) > 5:
-                skipped_display += f" and {len(skipped_fields) - 5} more"
-            msg += f"Preserved unique fields: {skipped_display}\n\n"
+            skipped_display = ', '.join(skipped_fields[:8])
+            if len(skipped_fields) > 8:
+                skipped_display += f" and {len(skipped_fields) - 8} more"
+            msg += f"Preserved (from base CSV): {skipped_display}\n\n"
         
         msg += "Review and modify as needed, then save or navigate to auto-save."
         
@@ -7498,19 +7337,30 @@ class VideoPlayer(QMainWindow):
                 return False
         
         try:
-            # Collect project state
+            proj_dir = os.path.dirname(os.path.abspath(project_path))
+
+            def rel(p):
+                """Convert absolute path to relative (against project file dir). Forward slashes."""
+                if not p:
+                    return ''
+                try:
+                    return os.path.relpath(p, proj_dir).replace('\\', '/')
+                except ValueError:
+                    # relpath fails across drives on Windows — keep absolute
+                    return p.replace('\\', '/')
+
+            # Collect project state — all paths stored relative to the project file
             project_data = {
-                'template_path': self.template_path,
-                'base_data_csv_path': self.base_data_csv_path,
+                'template_path': rel(self.template_path),
+                'base_data_csv_path': rel(self.base_data_csv_path),
                 'current_base_csv_row_index': self.current_base_csv_row_index,
-                'video_queue': self.video_queue,
-                'current_video_index': self.current_video_index,
-                'current_video_path': self.video_path,
+                'drop_videos_dir': rel(self.drop_videos_dir),
+                'current_video_path': rel(self.video_path),
                 'current_frame': self.current_frame if self.cap else 0,
                 'drop_counter': self.drop_counter,
                 'current_entry_index': self.current_entry_index,
                 'base_data': self.base_data,
-                'grab_photos_dir': self.grab_photos_dir,
+                'grab_photos_dir': rel(self.grab_photos_dir),
                 'saved_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
             
@@ -7544,9 +7394,19 @@ class VideoPlayer(QMainWindow):
             # Load project data
             with open(project_path, 'r', encoding='utf-8') as f:
                 project_data = json.load(f)
-            
+
+            proj_dir = os.path.dirname(os.path.abspath(project_path))
+
+            def abs_p(p):
+                """Resolve a project-relative (or already-absolute) path to absolute."""
+                if not p:
+                    return ''
+                if os.path.isabs(p):
+                    return p  # backward-compatible with old absolute-path projects
+                return os.path.normpath(os.path.join(proj_dir, p))
+
             # Restore template
-            self.template_path = project_data.get('template_path')
+            self.template_path = abs_p(project_data.get('template_path', ''))
             if not self.template_path or not os.path.exists(self.template_path):
                 QMessageBox.critical(self, "Error", "Template file not found. Project cannot be loaded.")
                 return False
@@ -7560,16 +7420,17 @@ class VideoPlayer(QMainWindow):
             self.load_validation_rules()
             
             # Restore state
-            self.video_queue = project_data.get('video_queue', [])
-            self.current_video_index = project_data.get('current_video_index', 0)
+            saved_vid_dir = abs_p(project_data.get('drop_videos_dir', ''))
+            if saved_vid_dir and os.path.isdir(saved_vid_dir):
+                self.drop_videos_dir = saved_vid_dir
             self.drop_counter = 1
             self.current_entry_index = project_data.get('current_entry_index', -1)
             self.base_data = project_data.get('base_data', {})
-            self.base_data_csv_path = project_data.get('base_data_csv_path')
+            self.base_data_csv_path = abs_p(project_data.get('base_data_csv_path', ''))
             self.current_base_csv_row_index = project_data.get('current_base_csv_row_index', -1)
 
             # Restore grab photos folder
-            saved_gpd = project_data.get('grab_photos_dir', '')
+            saved_gpd = abs_p(project_data.get('grab_photos_dir', ''))
             if saved_gpd and os.path.isdir(saved_gpd):
                 self.grab_photos_dir = saved_gpd
                 display = os.path.basename(saved_gpd) or saved_gpd
@@ -7622,7 +7483,7 @@ class VideoPlayer(QMainWindow):
                     self.current_base_csv_row_index = saved_row_index  # put back the real position
                     n = len(self.base_data_csv)
                     point_id = self._get_point_identifier_from_row(self.base_data_csv[saved_row_index]) or str(saved_row_index + 1)
-                    self.point_nav_label.setText(f"{saved_row_index + 1}/{n}: Point {point_id} — resumed")
+                    self.point_nav_label.setText(f"Row {saved_row_index + 1}/{n}: Point {point_id} — resumed")
                     self.point_nav_label.setStyleSheet("font-size: 11px; color: #2196F3;")
 
             # Load all data entries from CSV
@@ -7633,7 +7494,7 @@ class VideoPlayer(QMainWindow):
                     self.all_data_entries = list(reader)
             
             # Restore video if it exists
-            current_video_path = project_data.get('current_video_path')
+            current_video_path = abs_p(project_data.get('current_video_path', ''))
             if current_video_path and os.path.exists(current_video_path):
                 # Load the video
                 if self.cap:
@@ -7664,15 +7525,8 @@ class VideoPlayer(QMainWindow):
                     self.zoom_slider.setEnabled(True)
                     self.update_extract_button_state()
                     
-                    # Update queue label if in queue mode
-                    if self.video_queue:
-                        self.queue_label.setText(
-                            f"{self.current_video_index + 1}/{len(self.video_queue)}: Drop {self.drop_counter}"
-                        )
-                        # Enable video navigation buttons
-                        self.prev_video_btn.setEnabled(True)
-                        self.next_video_btn.setEnabled(True)
-                        self.goto_video_btn.setEnabled(True)
+                    # Update video dir label
+                    self._update_video_dir_label()
                     
                     self.display_frame()
             
