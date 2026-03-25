@@ -3863,7 +3863,7 @@ class VideoPlayer(QMainWindow):
         # Auto-fill DATE_TIME if DATE and TIME are provided
         if data_row.get('DATE') and data_row.get('TIME'):
             data_row['DATE_TIME'] = f"{data_row['DATE']} {data_row['TIME']}"
-        else:
+        elif not data_row.get('DATE_TIME'):
             data_row['DATE_TIME'] = ''
 
         normalized = self._normalize_percentage_fields_in_row(data_row)
@@ -5714,7 +5714,7 @@ class VideoPlayer(QMainWindow):
         # Auto-fill DATE_TIME if DATE and TIME are provided
         if data_row.get('DATE') and data_row.get('TIME'):
             data_row['DATE_TIME'] = f"{data_row['DATE']} {data_row['TIME']}"
-        else:
+        elif not data_row.get('DATE_TIME'):
             data_row['DATE_TIME'] = ''
 
         normalized = self._normalize_percentage_fields_in_row(data_row)
