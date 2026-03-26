@@ -1069,35 +1069,95 @@ class AggregationConfigDialog(QDialog):
 
 class MapDialog(QDialog):
     """Dialog for displaying points on a Leaflet map"""
-    def __init__(self, points_data, current_point_id, parent=None):
+    def __init__(self, points_data, current_point_id, entries_by_point=None,
+                 available_fields=None, color_field='', color_value='1', parent=None):
         super().__init__(parent)
         self.setWindowTitle("Point Locations Map")
         self.setGeometry(100, 100, 1000, 700)
-        
+
         # Store data
-        self.points_data = points_data  # List of dicts with point_id, lat, lon
+        self.points_data = [dict(p) for p in points_data]  # work on copies
         self.current_point_id = current_point_id
-        
+        self.entries_by_point = entries_by_point or {}
+        self.available_fields = available_fields or []
+
+        # Expose chosen field/value so caller can read them back after exec_()
+        self.color_field_name = color_field
+        self.color_value = color_value
+
         # Setup UI
         layout = QVBoxLayout()
-        
+
+        # ── Field selector row ────────────────────────────────────────────
+        selector_row = QHBoxLayout()
+        selector_row.addWidget(QLabel("Colour points by field:"))
+        self.field_combo = QComboBox()
+        self.field_combo.addItem("(none — show entry status only)", "")
+        for f in self.available_fields:
+            self.field_combo.addItem(f, f)
+        # pre-select saved field
+        if color_field:
+            idx = self.field_combo.findData(color_field)
+            if idx >= 0:
+                self.field_combo.setCurrentIndex(idx)
+        selector_row.addWidget(self.field_combo, 1)
+
+        selector_row.addWidget(QLabel("equals:"))
+        self.value_edit = QLineEdit(color_value)
+        self.value_edit.setMaximumWidth(80)
+        self.value_edit.setToolTip(
+            "Value that should count as 'positive' (green dot).\n"
+            "Default is 1. Change to 'yes', 'present', etc. if needed."
+        )
+        selector_row.addWidget(self.value_edit)
+
+        refresh_btn = QPushButton("Refresh Map")
+        refresh_btn.clicked.connect(self._refresh)
+        selector_row.addWidget(refresh_btn)
+        layout.addLayout(selector_row)
+        # ─────────────────────────────────────────────────────────────────
+
         # Create web view
         self.web_view = QWebEngineView()
-        
-        # Generate and load HTML
-        html = self.generate_map_html()
-        self.web_view.setHtml(html)
-        
         layout.addWidget(self.web_view)
-        
+
         # Close button
         close_btn = QPushButton("Close")
         close_btn.clicked.connect(self.accept)
         layout.addWidget(close_btn)
-        
+
         self.setLayout(layout)
 
-    def generate_map_html(self):
+        # Initial render
+        self._refresh()
+
+    def _refresh(self):
+        """Re-compute point statuses from the current field/value selection and reload map."""
+        field = self.field_combo.currentData() or ''
+        value = self.value_edit.text().strip()
+        self.color_field_name = field
+        self.color_value = value
+
+        for point in self.points_data:
+            pid = str(point['point_id'])
+            if pid == self.current_point_id:
+                point['status'] = 'current'
+            elif pid in self.entries_by_point:
+                if field:
+                    has_positive = any(
+                        str(e.get(field, '') or '').strip() == value
+                        for e in self.entries_by_point[pid]
+                    )
+                    point['status'] = 'positive' if has_positive else 'entered'
+                else:
+                    point['status'] = 'entered'
+            else:
+                point['status'] = 'pending'
+
+        html = self.generate_map_html(field, value)
+        self.web_view.setHtml(html)
+
+    def generate_map_html(self, color_field='', color_value='1'):
         """Generate HTML with Leaflet map"""
         # Calculate center of map (use current point if available, otherwise first point)
         if self.points_data:
@@ -1115,13 +1175,13 @@ class MapDialog(QDialog):
         # Build markers JavaScript
         _STATUS_COLORS = {
             'current':  '#FF6F00',  # amber — currently active point
-            'seagrass': '#2E7D32',  # dark green — at least one SG_PRESENT=1
-            'entered':  '#FFFFFF',  # white — entered but no seagrass observed
+            'positive': '#2E7D32',  # dark green — field matches target value
+            'entered':  '#FFFFFF',  # white — entered but field not matched
             'pending':  '#1565C0',  # blue — not yet entered
         }
         _BORDER_COLORS = {
             'current':  '#FFCC02',
-            'seagrass': '#A5D6A7',
+            'positive': '#A5D6A7',
             'entered':  '#90A4AE',
             'pending':  '#90CAF9',
         }
@@ -1180,6 +1240,14 @@ class MapDialog(QDialog):
             markers_js.append(marker_js)
         
         markers_code = '\n'.join(markers_js)
+
+        # Build dynamic legend labels
+        if color_field:
+            positive_label = f"{color_field} = {color_value} (positive)"
+            entered_label  = f"Entered — {color_field} ≠ {color_value}"
+        else:
+            positive_label = "Entered (positive match)"
+            entered_label  = "Entered"
         
         html = f"""
         <!DOCTYPE html>
@@ -1250,8 +1318,8 @@ class MapDialog(QDialog):
                     var div = L.DomUtil.create('div', 'legend');
                     div.innerHTML = '<h4 style="margin: 0 0 8px 0;">Point Status</h4>';
                     div.innerHTML += '<div class="legend-item"><span class="legend-icon" style="background-color: #FF6F00; border-color: #FFCC02;"></span>Current point</div>';
-                    div.innerHTML += '<div class="legend-item"><span class="legend-icon" style="background-color: #2E7D32; border-color: #A5D6A7;"></span>Seagrass present (SG=1)</div>';
-                    div.innerHTML += '<div class="legend-item"><span class="legend-icon" style="background-color: #FFFFFF; border-color: #90A4AE;"></span>Entered — no seagrass</div>';
+                    div.innerHTML += '<div class="legend-item"><span class="legend-icon" style="background-color: #2E7D32; border-color: #A5D6A7;"></span>{positive_label}</div>';
+                    div.innerHTML += '<div class="legend-item"><span class="legend-icon" style="background-color: #FFFFFF; border-color: #90A4AE;"></span>{entered_label}</div>';
                     div.innerHTML += '<div class="legend-item"><span class="legend-icon" style="background-color: #1565C0; border-color: #90CAF9;"></span>Not yet entered</div>';
                     return div;
                 }};
@@ -2058,6 +2126,10 @@ class VideoPlayer(QMainWindow):
         # Validation rules variables
         self.validation_rules = []  # List of validation rules
         self.template_path = None  # Store template path for rules file naming
+
+        # Map colour field — the template field used to colour points green on the map
+        self.map_color_field = ''   # e.g. 'SG_PRESENT'
+        self.map_color_value = '1'  # value that means "positive" (green)
         
         # Fields that should NOT be copied from previous entry (metadata/unique fields)
         self.non_copyable_fields = [
@@ -6506,22 +6578,36 @@ class VideoPlayer(QMainWindow):
             if pid:
                 entries_by_point.setdefault(pid, []).append(entry)
 
-        for point in points_data:
-            pid = str(point['point_id'])
-            if pid == current_point_id:
-                point['status'] = 'current'
-            elif pid in entries_by_point:
-                has_sg = any(
-                    str(e.get('SG_PRESENT', '') or '').strip() == '1'
-                    for e in entries_by_point[pid]
-                )
-                point['status'] = 'seagrass' if has_sg else 'entered'
-            else:
-                point['status'] = 'pending'
+        # Collect available fields from template + existing entries for the field selector
+        available_fields = list(self.template_fieldnames or [])
+        for entries in entries_by_point.values():
+            for e in entries:
+                for k in e.keys():
+                    if k not in available_fields:
+                        available_fields.append(k)
 
-        # Show map dialog
-        dialog = MapDialog(points_data, current_point_id, self)
+        # Auto-detect a sensible default if no field has been chosen yet
+        if not self.map_color_field and available_fields:
+            # Try a few common presence/absence field names first
+            for candidate in ('SG_PRESENT', 'SG_PA', 'PRESENCE', 'PRESENT', 'PA'):
+                if candidate in available_fields:
+                    self.map_color_field = candidate
+                    break
+
+        # Show map dialog — it computes statuses internally and refreshes on field change
+        dialog = MapDialog(
+            points_data, current_point_id,
+            entries_by_point=entries_by_point,
+            available_fields=available_fields,
+            color_field=self.map_color_field,
+            color_value=self.map_color_value,
+            parent=self
+        )
         dialog.exec_()
+
+        # Persist the user's last-chosen field/value for next time
+        self.map_color_field = dialog.color_field_name
+        self.map_color_value = dialog.color_value
     
     def load_validation_rules(self):
         """Load validation rules from JSON file"""
@@ -7361,6 +7447,8 @@ class VideoPlayer(QMainWindow):
                 'current_entry_index': self.current_entry_index,
                 'base_data': self.base_data,
                 'grab_photos_dir': rel(self.grab_photos_dir),
+                'map_color_field': self.map_color_field,
+                'map_color_value': self.map_color_value,
                 'saved_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
             
@@ -7428,6 +7516,10 @@ class VideoPlayer(QMainWindow):
             self.base_data = project_data.get('base_data', {})
             self.base_data_csv_path = abs_p(project_data.get('base_data_csv_path', ''))
             self.current_base_csv_row_index = project_data.get('current_base_csv_row_index', -1)
+
+            # Restore map colour field (may be absent in older project files)
+            self.map_color_field = project_data.get('map_color_field', '')
+            self.map_color_value = project_data.get('map_color_value', '1')
 
             # Restore grab photos folder
             saved_gpd = abs_p(project_data.get('grab_photos_dir', ''))
