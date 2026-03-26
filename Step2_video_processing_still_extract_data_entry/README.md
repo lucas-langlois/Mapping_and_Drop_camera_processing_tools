@@ -47,7 +47,7 @@ A comprehensive video player application with integrated data entry for marine/e
 ✅ **Field Groups** - Organise complex forms into named groups; each group filters the data entry pane to show only its member fields, reducing visual clutter on large templates  
 ✅ **Project Save/Load** - Resume exactly where you left off; base CSV is always re-read fresh from disk on load  
 ✅ **Row Navigation Restored on Load** - Project open restores exact row position and re-enables Prev/Next Row buttons  
-✅ **Interactive Map View** - 4-colour status map: amber = current, green = seagrass present, white = entered (no SG), blue = pending  
+✅ **Interactive Map View** - 4-colour status map: amber = current, green = positive match, white = entered (no match), blue = pending; user-selectable colour field  
 ✅ **Batch Aggregation Method Editing** - Apply one aggregation method to selected or all fields in one click  
 
 ### Frame Extraction
@@ -370,17 +370,26 @@ Field Groups let you organise large templates into manageable sections:
 - "All fields" view is always available
 - Groups are saved as `[template_name]_groups.json` alongside the template and rules files
 
-### Interactive Map View (4-Colour Status)
-The map now reflects your data collection progress in real time:
+### Interactive Map View (User-Selectable Colour Field)
+The map reflects your data collection progress in real time and works with **any survey type** — seagrass, coral, fish, grab samples, etc.
+
+**Colour field selector (new in v1.1.2):**
+
+At the top of the map dialog a toolbar lets you choose:
+- **Colour points by field** — dropdown populated from your template fields; pick any field (e.g. `SG_PRESENT`, `CORAL_PRESENT`, `SPECIES_FOUND`)
+- **equals** — the value that should register as "positive" (default `1`; change to `yes`, `present`, etc. as needed)
+- **Refresh Map** — instantly re-colours all points based on the new selection
+
+The chosen field and value are saved in the project file and restored next session. On first open, the app auto-detects common presence/absence field names (`SG_PRESENT`, `SG_PA`, `PRESENCE`, `PRESENT`, `PA`) and pre-selects the first match found.
 
 | Colour | Meaning |
 |--------|---------|
 | 🟠 Amber (larger) | Current active point |
-| 🟢 Dark green | At least one entry with SG_PRESENT = 1 |
-| ⚪ White | Entry exists — all SG_PRESENT = 0 or NA |
+| 🟢 Dark green | At least one entry where the chosen field = chosen value |
+| ⚪ White | Entry exists — chosen field did not match |
 | 🔵 Blue | Not yet entered |
 
-Status is computed from `all_data_entries` every time the map opens. The legend in the bottom-right explains all four states.
+The legend in the bottom-right updates dynamically to show the field name and value you selected. Status is computed from `all_data_entries` every time you hit **Refresh Map**.
 
 
 ## Data Validation Rules (QAQC)
