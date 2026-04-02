@@ -6,6 +6,9 @@ Features: Play/Pause, Frame navigation, Timeline scrubbing, Speed control, Frame
 import sys
 import os
 import copy
+import time
+import threading
+import queue as _queue
 from datetime import datetime
 import csv
 import json
@@ -25,7 +28,8 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QLineEdit, QTextEdit, QScrollArea, QGroupBox, QGridLayout,
                              QShortcut, QInputDialog, QDialog, QListWidget, QListWidgetItem,
                              QDialogButtonBox, QFrame, QDoubleSpinBox, QCheckBox, QSizePolicy,
-                             QDesktopWidget, QProgressBar)
+                             QDesktopWidget, QProgressBar,
+                             QTreeWidget, QTreeWidgetItem, QHeaderView, QAbstractItemView)
 from PyQt5.QtCore import QTimer, Qt, QUrl, QEvent
 from PyQt5.QtGui import QImage, QPixmap, QKeySequence, QColor, QPainter, QFont
 from PyQt5.QtWebEngineWidgets import QWebEngineView
@@ -65,6 +69,143 @@ class _ComboFieldWidget(QComboBox):
         # Reset to the first option rather than wiping all options
         if self.count() > 0:
             self.setCurrentIndex(0)
+
+    def wheelEvent(self, event):
+        # Ignore scroll wheel so scrolling the form doesn't accidentally change the value
+        event.ignore()
+
+
+class EntryLookupDialog(QDialog):
+    """Browse all saved entries grouped by site (POINT_ID), select one to view/edit."""
+
+    def __init__(self, parent, all_entries, point_id_fields=None):
+        super().__init__(parent)
+        self.all_entries = all_entries
+        self.point_id_fields = point_id_fields or ['POINT_ID', 'SITE', 'SITE_ID', 'POINT', 'STATION', 'STATION_ID']
+        self.selected_index = None  # flat index into all_entries
+
+        self.setWindowTitle("Browse Saved Entries")
+        self.setMinimumSize(600, 480)
+        self.resize(700, 560)
+
+        layout = QVBoxLayout(self)
+
+        # Summary label
+        self._summary_label = QLabel()
+        self._summary_label.setStyleSheet("font-weight: bold; padding: 4px;")
+        layout.addWidget(self._summary_label)
+
+        # Search bar
+        search_layout = QHBoxLayout()
+        search_layout.addWidget(QLabel("Search:"))
+        self._search_box = QLineEdit()
+        self._search_box.setPlaceholderText("Filter by site or DROP_ID…")
+        self._search_box.textChanged.connect(self._apply_filter)
+        search_layout.addWidget(self._search_box)
+        layout.addLayout(search_layout)
+
+        # Tree widget  col0=Site/DROP_ID, col1=Date, col2=Filename
+        self._tree = QTreeWidget()
+        self._tree.setColumnCount(3)
+        self._tree.setHeaderLabels(["Site / Entry", "Date", "Filename"])
+        self._tree.header().setSectionResizeMode(0, QHeaderView.Stretch)
+        self._tree.header().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        self._tree.header().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        self._tree.setSelectionMode(QAbstractItemView.SingleSelection)
+        self._tree.itemSelectionChanged.connect(self._on_selection_changed)
+        self._tree.itemDoubleClicked.connect(self._on_double_click)
+        layout.addWidget(self._tree)
+
+        # Buttons
+        btn_layout = QHBoxLayout()
+        self._open_btn = QPushButton("Open Selected Entry")
+        self._open_btn.setEnabled(False)
+        self._open_btn.setStyleSheet("background-color: #1976D2; color: white; padding: 6px 14px;")
+        self._open_btn.clicked.connect(self.accept)
+        btn_layout.addWidget(self._open_btn)
+
+        cancel_btn = QPushButton("Close")
+        cancel_btn.clicked.connect(self.reject)
+        btn_layout.addWidget(cancel_btn)
+        layout.addLayout(btn_layout)
+
+        self._build_tree(all_entries)
+
+    # ------------------------------------------------------------------
+    def _get_point_id(self, row):
+        for f in self.point_id_fields:
+            v = row.get(f, '').strip()
+            if v:
+                return v
+        return '(no site ID)'
+
+    def _build_tree(self, entries):
+        """Populate the tree from the given entry list (subset when filtering)."""
+        self._tree.clear()
+        # Group entries preserving their original flat index
+        from collections import OrderedDict
+        groups = OrderedDict()
+        for flat_idx, entry in enumerate(self.all_entries):
+            pid = self._get_point_id(entry)
+            groups.setdefault(pid, []).append((flat_idx, entry))
+
+        total_entries = len(self.all_entries)
+        total_sites = len(groups)
+        self._summary_label.setText(
+            f"{total_entries} entries across {total_sites} sites"
+        )
+
+        filter_text = self._search_box.text().strip().lower() if hasattr(self, '_search_box') else ''
+
+        for pid, items in groups.items():
+            # Apply filter at site level
+            if filter_text and filter_text not in pid.lower():
+                # Check if any child matches
+                if not any(
+                    filter_text in str(entry.get('DROP_ID', '')).lower() or
+                    filter_text in str(entry.get('FILENAME', '')).lower()
+                    for _, entry in items
+                ):
+                    continue
+
+            site_item = QTreeWidgetItem(self._tree)
+            site_item.setText(0, f"{pid}  ({len(items)} entr{'y' if len(items)==1 else 'ies'})")
+            site_item.setExpanded(True)
+            site_item.setFlags(site_item.flags() & ~Qt.ItemIsSelectable)
+            font = site_item.font(0)
+            font.setBold(True)
+            site_item.setFont(0, font)
+            site_item.setForeground(0, QColor('#1565C0'))
+
+            for flat_idx, entry in items:
+                drop_id = entry.get('DROP_ID', '').strip() or f"Entry {flat_idx + 1}"
+                date_val = entry.get('DATE', entry.get('DATE_TIME', '')).strip()
+                filename = entry.get('FILENAME', '').strip()
+
+                child = QTreeWidgetItem(site_item)
+                child.setText(0, f"  {drop_id}")
+                child.setText(1, date_val)
+                child.setText(2, filename)
+                child.setData(0, Qt.UserRole, flat_idx)
+
+    def _apply_filter(self):
+        self._build_tree(self.all_entries)
+
+    def _on_selection_changed(self):
+        items = self._tree.selectedItems()
+        if items:
+            idx = items[0].data(0, Qt.UserRole)
+            if idx is not None:
+                self.selected_index = idx
+                self._open_btn.setEnabled(True)
+                return
+        self.selected_index = None
+        self._open_btn.setEnabled(False)
+
+    def _on_double_click(self, item, column):
+        if item.data(0, Qt.UserRole) is not None:
+            self.selected_index = item.data(0, Qt.UserRole)
+            self.accept()
 
 
 class ValidationRulesDialog(QDialog):
@@ -1114,6 +1255,12 @@ class MapDialog(QDialog):
         refresh_btn = QPushButton("Refresh Map")
         refresh_btn.clicked.connect(self._refresh)
         selector_row.addWidget(refresh_btn)
+
+        centre_btn = QPushButton("📍 Centre on current point")
+        centre_btn.setToolTip("Pan the map to the currently active point")
+        centre_btn.clicked.connect(self.centre_on_current)
+        selector_row.addWidget(centre_btn)
+
         layout.addLayout(selector_row)
         # ─────────────────────────────────────────────────────────────────
 
@@ -1156,6 +1303,10 @@ class MapDialog(QDialog):
 
         html = self.generate_map_html(field, value)
         self.web_view.setHtml(html)
+
+    def centre_on_current(self):
+        """Pan the map to the current point without rebuilding the whole map."""
+        self.web_view.page().runJavaScript("centreOnCurrent();")
 
     def generate_map_html(self, color_field='', color_value='1'):
         """Generate HTML with Leaflet map"""
@@ -1302,6 +1453,10 @@ class MapDialog(QDialog):
             <script>
                 // Initialize map
                 var map = L.map('map').setView([{center_lat}, {center_lon}], 13);
+                var currentPointLatLng = [{center_lat}, {center_lon}];
+                function centreOnCurrent() {{
+                    map.setView(currentPointLatLng, 13);
+                }}
                 
                 // Add satellite basemap (Esri World Imagery)
                 L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{{z}}/{{y}}/{{x}}', {{
@@ -2076,10 +2231,12 @@ class VideoPlayer(QMainWindow):
         self.current_frame = 0
         self.playback_speed = 1.0
         self.zoom_level = 1.0
+        self.rotation_angle = 0  # 0, 90, 180, or 270 degrees clockwise
         self.cached_frame = None
         self.cached_frame_number = -1
         self.is_panning = False
         self.pan_last_pos = None
+        self._slider_dragging = False  # True while user is dragging the timeline slider
         
         # Auto-loader variables
         self.drop_counter = 1  # Counter for saved stills
@@ -2560,7 +2717,9 @@ class VideoPlayer(QMainWindow):
         self.timeline_slider.setToolTip("Drag to navigate through video frames")
         self.timeline_slider.setPageStep(100)  # Jump 100 frames when clicking on slider track
         self.timeline_slider.setSingleStep(1)  # Move 1 frame with arrow keys
-        self.timeline_slider.valueChanged.connect(self.slider_changed)
+        self.timeline_slider.sliderMoved.connect(self.slider_scrubbing)
+        self.timeline_slider.sliderReleased.connect(self.slider_released)
+        self.timeline_slider.sliderPressed.connect(self.slider_pressed)
         video_layout.addWidget(self.timeline_slider)
         
         # Control buttons layout - Row 1: Main controls
@@ -2633,6 +2792,9 @@ class VideoPlayer(QMainWindow):
         self.prev_frame_btn.clicked.connect(self.previous_frame)
         self.prev_frame_btn.setEnabled(False)
         self.prev_frame_btn.setMinimumWidth(75)
+        self.prev_frame_btn.setAutoRepeat(True)
+        self.prev_frame_btn.setAutoRepeatDelay(500)
+        self.prev_frame_btn.setAutoRepeatInterval(500)
         self.prev_frame_btn.setStyleSheet(
             "QPushButton { background-color: #546e7a; color: white; font-size: 11px; "
             "padding: 3px 6px; border-radius: 4px; } "
@@ -2647,6 +2809,9 @@ class VideoPlayer(QMainWindow):
         self.next_frame_btn.clicked.connect(self.next_frame)
         self.next_frame_btn.setEnabled(False)
         self.next_frame_btn.setMinimumWidth(75)
+        self.next_frame_btn.setAutoRepeat(True)
+        self.next_frame_btn.setAutoRepeatDelay(500)
+        self.next_frame_btn.setAutoRepeatInterval(500)
         self.next_frame_btn.setStyleSheet(
             "QPushButton { background-color: #546e7a; color: white; font-size: 11px; "
             "padding: 3px 6px; border-radius: 4px; } "
@@ -2661,6 +2826,9 @@ class VideoPlayer(QMainWindow):
         self.skip_back_btn.clicked.connect(lambda: self.skip_frames(-10))
         self.skip_back_btn.setEnabled(False)
         self.skip_back_btn.setMinimumWidth(65)
+        self.skip_back_btn.setAutoRepeat(True)
+        self.skip_back_btn.setAutoRepeatDelay(500)
+        self.skip_back_btn.setAutoRepeatInterval(150)
         self.skip_back_btn.setStyleSheet(
             "QPushButton { background-color: #546e7a; color: white; font-size: 11px; "
             "padding: 3px 6px; border-radius: 4px; } "
@@ -2675,6 +2843,9 @@ class VideoPlayer(QMainWindow):
         self.skip_forward_btn.clicked.connect(lambda: self.skip_frames(10))
         self.skip_forward_btn.setEnabled(False)
         self.skip_forward_btn.setMinimumWidth(65)
+        self.skip_forward_btn.setAutoRepeat(True)
+        self.skip_forward_btn.setAutoRepeatDelay(500)
+        self.skip_forward_btn.setAutoRepeatInterval(150)
         self.skip_forward_btn.setStyleSheet(
             "QPushButton { background-color: #546e7a; color: white; font-size: 11px; "
             "padding: 3px 6px; border-radius: 4px; } "
@@ -2687,7 +2858,7 @@ class VideoPlayer(QMainWindow):
         speed_label = QLabel("Speed:")
         controls_layout.addWidget(speed_label)
         self.speed_combo = QComboBox()
-        self.speed_combo.addItems(["0.25x", "0.5x", "1x", "2x", "4x", "8x", "12x", "24x", "48x"])
+        self.speed_combo.addItems(["0.25x", "0.5x", "1x", "2x", "4x"])
         self.speed_combo.setCurrentIndex(2)  # 1x default
         self.speed_combo.setToolTip("Playback speed")
         self.speed_combo.currentTextChanged.connect(self.change_speed)
@@ -2714,7 +2885,17 @@ class VideoPlayer(QMainWindow):
         self.zoom_label.setMinimumWidth(45)
         self.zoom_label.setStyleSheet("font-size: 11px;")
         controls_layout.addWidget(self.zoom_label)
-        
+
+        # Rotation control
+        rotate_label = QLabel("Rotate:")
+        controls_layout.addWidget(rotate_label)
+        self.rotate_combo = QComboBox()
+        self.rotate_combo.addItems(["0°", "90° CW", "180°", "90° CCW"])
+        self.rotate_combo.setToolTip("Rotate the video display")
+        self.rotate_combo.setMaximumWidth(80)
+        self.rotate_combo.currentTextChanged.connect(self.change_rotation)
+        controls_layout.addWidget(self.rotate_combo)
+
         # Extract current frame button
         self.extract_btn = QPushButton("Extract")
         self.extract_btn.setToolTip("Extract Current Frame")
@@ -2917,21 +3098,45 @@ class VideoPlayer(QMainWindow):
         
         layout.addLayout(nav_layout)
         
-        # Load all entries button
+        # Load all entries / browse buttons row
+        load_browse_layout = QHBoxLayout()
         load_entries_btn = QPushButton("Load All Entries")
         load_entries_btn.setToolTip("Load all saved entries from the data file for navigation")
         load_entries_btn.clicked.connect(self.load_all_entries)
         load_entries_btn.setStyleSheet("background-color: #FF9800; color: white; padding: 5px;")
-        layout.addWidget(load_entries_btn)
+        load_browse_layout.addWidget(load_entries_btn)
+
+        browse_entries_btn = QPushButton("🔍 Browse Entries")
+        browse_entries_btn.setToolTip("Browse all saved entries by site, view and jump to any entry")
+        browse_entries_btn.clicked.connect(self.open_entry_lookup)
+        browse_entries_btn.setStyleSheet("background-color: #388E3C; color: white; padding: 5px;")
+        load_browse_layout.addWidget(browse_entries_btn)
+        layout.addLayout(load_browse_layout)
         
-        # Copy all from previous button
+        # Copy from previous buttons row
         self.copy_prev_field_buttons = []
-        self.copy_all_btn = QPushButton("◄ Copy All from Previous Entry")
+        copy_btns_layout = QHBoxLayout()
+
+        self.copy_all_btn = QPushButton("◄ Copy All from Previous")
         self.copy_all_btn.clicked.connect(self.copy_all_from_previous_entry)
         self.copy_all_btn.setStyleSheet("background-color: #673AB7; color: white; padding: 5px;")
-        self.copy_all_btn.setToolTip("Copy all field values from the previous entry")
+        self.copy_all_btn.setToolTip(
+            "Copy all observation field values from the previous entry\n"
+            "(pre-populated base-CSV fields are preserved)")
         self.copy_all_btn.setEnabled(False)
-        layout.addWidget(self.copy_all_btn)
+        copy_btns_layout.addWidget(self.copy_all_btn)
+
+        self.copy_meta_btn = QPushButton("◄ Copy Metadata Only")
+        self.copy_meta_btn.clicked.connect(self.copy_metadata_from_previous_entry)
+        self.copy_meta_btn.setStyleSheet("background-color: #0277BD; color: white; padding: 5px;")
+        self.copy_meta_btn.setToolTip(
+            "Copy only contextual/metadata fields from the previous entry\n"
+            "(e.g. DEPTH, SUBSTRATE, TIDAL, METHOD, VESSEL, COMMENTS …)\n"
+            "Observation/cover fields and pre-populated fields are NOT overwritten")
+        self.copy_meta_btn.setEnabled(False)
+        copy_btns_layout.addWidget(self.copy_meta_btn)
+
+        layout.addLayout(copy_btns_layout)
         
         # Create fields dynamically from template
         if self.template_fieldnames:
@@ -3225,8 +3430,9 @@ class VideoPlayer(QMainWindow):
                 "QPushButton:hover { background-color: #ef6c00; } "
                 "QPushButton:disabled { background-color: #aaa; color: #eee; }"
             )
-            interval = self._get_playback_interval_ms()
-            self.timer.start(interval)
+            # Fire at 150ms — same interval as the 10-frame skip button auto-repeat.
+            # play_next_frame reads multiple frames per tick to match real time.
+            self.timer.start(150)
         else:
             self.play_btn.setText("▶  Play")
             self.play_btn.setStyleSheet(
@@ -3237,22 +3443,6 @@ class VideoPlayer(QMainWindow):
             )
             self.timer.stop()
 
-    def _get_playback_interval_ms(self):
-        """Get timer interval for current playback speed.
-
-        - Speeds < 1x: slower by increasing interval.
-        - Speeds >= 1x: keep near base frame cadence and use frame stepping in play loop.
-        """
-        if self.fps <= 0:
-            return 33  # Fallback ~30 FPS
-
-        if self.playback_speed < 1.0:
-            interval = int(1000 / (self.fps * self.playback_speed))
-        else:
-            interval = int(1000 / self.fps)
-
-        return max(1, interval)
-    
     def change_zoom(self, value):
         """Change video zoom level"""
         self.zoom_level = value / 100.0
@@ -3267,7 +3457,24 @@ class VideoPlayer(QMainWindow):
         # Redisplay current frame with new zoom
         if self.cap and self.cached_frame is not None:
             self.display_frame_data(self.cached_frame)
-            
+
+    def change_rotation(self, rotation_text):
+        """Change video rotation"""
+        rotation_map = {"0°": 0, "90° CW": 90, "180°": 180, "90° CCW": 270}
+        self.rotation_angle = rotation_map.get(rotation_text, 0)
+        if self.cap and self.cached_frame is not None:
+            self.display_frame_data(self.cached_frame)
+
+    def _apply_rotation(self, frame):
+        """Apply current rotation_angle to a frame using cv2.rotate"""
+        if self.rotation_angle == 90:
+            return cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+        elif self.rotation_angle == 180:
+            return cv2.rotate(frame, cv2.ROTATE_180)
+        elif self.rotation_angle == 270:
+            return cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+        return frame
+
     def change_speed(self, speed_text):
         """Change playback speed"""
         speed_map = {
@@ -3275,17 +3482,13 @@ class VideoPlayer(QMainWindow):
             "0.5x": 0.5,
             "1x": 1.0,
             "2x": 2.0,
-            "4x": 4.0,
-            "8x": 8.0,
-            "12x": 12.0,
-            "24x": 24.0,
-            "48x": 48.0
+            "4x": 4.0
         }
         self.playback_speed = speed_map.get(speed_text, 1.0)
         
         if self.is_playing:
-            interval = self._get_playback_interval_ms()
-            self.timer.start(interval)
+            # Reset so new speed takes effect immediately.
+            self.timer.start(150)
 
     def eventFilter(self, obj, event):
         """Handle mouse interactions for video zoom and drag-panning."""
@@ -3413,15 +3616,44 @@ class VideoPlayer(QMainWindow):
         h_scroll.setValue(int(new_content_x - viewport_pos.x()))
         v_scroll.setValue(int(new_content_y - viewport_pos.y()))
 
-    def slider_changed(self, value):
-        """Handle timeline slider changes"""
+    def slider_pressed(self):
+        """User started dragging — pause playback and enter scrub mode."""
+        self._slider_dragging = True
+        if self.is_playing:
+            self.toggle_play()
+
+    def slider_scrubbing(self, value):
+        """Called continuously while the slider is being dragged.
+        Only update the frame counter / time label — no decode — so it stays instant."""
         if not self.cap:
             return
-        
-        # Pause if playing and user is manually scrubbing
+        self.current_frame = value
+        time_seconds = value / self.fps if self.fps > 0 else 0
+        hours = int(time_seconds // 3600)
+        minutes = int((time_seconds % 3600) // 60)
+        seconds = int(time_seconds % 60)
+        self.info_label.setText(
+            f"Frame: {value} / {self.total_frames - 1} | "
+            f"Time: {hours:02d}:{minutes:02d}:{seconds:02d} | FPS: {self.fps:.2f}"
+        )
+
+    def slider_released(self):
+        """User released the slider — seek once and decode the final frame."""
+        self._slider_dragging = False
+        if not self.cap:
+            return
+        self.cap.set(cv2.CAP_PROP_POS_FRAMES, self.current_frame)
+        self.display_frame()
+
+    def slider_changed(self, value):
+        """Handle programmatic slider changes (from frame navigation / playback).
+        Ignored while the user is dragging — sliderMoved/Released handle that."""
+        if getattr(self, '_slider_dragging', False):
+            return
+        if not self.cap:
+            return
         if self.is_playing and abs(value - self.current_frame) > 1:
             self.toggle_play()
-            
         self.current_frame = value
         self.cap.set(cv2.CAP_PROP_POS_FRAMES, self.current_frame)
         self.display_frame()
@@ -3437,16 +3669,34 @@ class VideoPlayer(QMainWindow):
             
         new_frame = self.current_frame + frame_count
         new_frame = max(0, min(new_frame, self.total_frames - 1))  # Clamp to valid range
-        
-        self.current_frame = new_frame
-        self.cap.set(cv2.CAP_PROP_POS_FRAMES, self.current_frame)
-        
-        # Block slider signals to prevent feedback loop
-        self.timeline_slider.blockSignals(True)
-        self.timeline_slider.setValue(self.current_frame)
-        self.timeline_slider.blockSignals(False)
-        
-        self.display_frame()
+
+        if frame_count > 0:
+            # Forward skip: read sequentially to avoid costly keyframe seeks (same
+            # approach as next_frame; significantly faster for H.264/H.265 content).
+            last_frame = None
+            steps = new_frame - self.current_frame
+            for _ in range(steps):
+                ret, f = self.cap.read()
+                if ret:
+                    last_frame = f
+                    self.current_frame += 1
+                else:
+                    break
+            self.timeline_slider.blockSignals(True)
+            self.timeline_slider.setValue(self.current_frame)
+            self.timeline_slider.blockSignals(False)
+            if last_frame is not None:
+                self.display_frame_data(last_frame)
+            else:
+                self.display_frame()
+        else:
+            # Backward skip: must seek (no sequential alternative going backwards).
+            self.current_frame = new_frame
+            self.cap.set(cv2.CAP_PROP_POS_FRAMES, self.current_frame)
+            self.timeline_slider.blockSignals(True)
+            self.timeline_slider.setValue(self.current_frame)
+            self.timeline_slider.blockSignals(False)
+            self.display_frame()
         
     def previous_frame(self):
         """Go to previous frame"""
@@ -3505,7 +3755,14 @@ class VideoPlayer(QMainWindow):
             self.display_frame()
     
     def play_next_frame(self):
-        """Play next frame during playback (optimized for smooth playback)"""
+        """Advance by a burst of sequential cap.read() calls then display the last frame.
+
+        The timer fires every 150 ms (matching the 10-frame skip button auto-repeat).
+        Each tick reads  round(fps * speed * 0.15)  frames sequentially — the same
+        fast pipeline-warm burst that makes the skip buttons feel smooth — and
+        displays only the final one.  This keeps the video advancing at the correct
+        real-time rate regardless of the video's FPS or chosen speed.
+        """
         if not self.cap or not self.is_playing:
             return
 
@@ -3513,32 +3770,32 @@ class VideoPlayer(QMainWindow):
             self.toggle_play()
             return
 
-        # For 1x and slower, read sequentially to preserve natural playback cadence.
-        # For faster speeds, read multiple sequential frames per tick and show the last one.
-        frame_step = 1 if self.playback_speed <= 1.0 else max(1, int(round(self.playback_speed)))
+        fps = self.fps if self.fps > 0 else 30.0
+        # Frames to advance this tick to match real time at chosen speed
+        frames_per_tick = max(1, round(fps * self.playback_speed * 0.15))
 
-        frame_to_display = None
-        frames_read = 0
-        for _ in range(frame_step):
-            ret, frame = self.cap.read()
-            if not ret or frame is None:
-                break
-            frame_to_display = frame
-            self.current_frame += 1
-            frames_read += 1
-
+        last_frame = None
+        for _ in range(frames_per_tick):
             if self.current_frame >= self.total_frames - 1:
                 break
+            ret, f = self.cap.read()
+            if not ret or f is None:
+                break
+            last_frame = f
+            self.current_frame += 1
 
-        if frames_read == 0 or frame_to_display is None:
+        if last_frame is None:
             self.toggle_play()
             return
 
-        self.timeline_slider.blockSignals(True)  # Prevent slider feedback during playback
+        self.timeline_slider.blockSignals(True)
         self.timeline_slider.setValue(self.current_frame)
         self.timeline_slider.blockSignals(False)
-        self.display_frame_data(frame_to_display)
-                
+        self.display_frame_data(last_frame)
+
+        if self.current_frame >= self.total_frames - 1:
+            self.toggle_play()
+
     def display_frame(self):
         """Display current frame"""
         if not self.cap:
@@ -3554,8 +3811,11 @@ class VideoPlayer(QMainWindow):
         self.cached_frame = frame.copy()
         self.cached_frame_number = self.current_frame
 
+        # Apply rotation if set
+        display_frame = self._apply_rotation(frame)
+
         # Convert BGR to RGB
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        rgb_frame = cv2.cvtColor(display_frame, cv2.COLOR_BGR2RGB)
         h, w, ch = rgb_frame.shape
         bytes_per_line = ch * w
         
@@ -3565,20 +3825,13 @@ class VideoPlayer(QMainWindow):
         
         # Get scroll area viewport size
         viewport_size = self.video_scroll.viewport().size()
-        
-        # Calculate base scaled size to fit viewport
-        base_scaled = pixmap.scaled(
-            viewport_size,
-            Qt.KeepAspectRatio,
-            Qt.SmoothTransformation
-        )
-        
-        # Apply zoom to the base scaled size
-        target_width = int(base_scaled.width() * self.zoom_level)
-        target_height = int(base_scaled.height() * self.zoom_level)
-        
-        # Create final scaled pixmap with zoom
-        transformation = Qt.SmoothTransformation if self.zoom_level > 1.0 else Qt.FastTransformation
+
+        # Single scale pass: fit to viewport then apply zoom factor.
+        # Use FastTransformation during playback to avoid render stalls;
+        # switch to Smooth when paused for better image quality.
+        target_width = int(viewport_size.width() * self.zoom_level)
+        target_height = int(viewport_size.height() * self.zoom_level)
+        transformation = Qt.FastTransformation if self.is_playing else Qt.SmoothTransformation
         scaled_pixmap = pixmap.scaled(
             target_width,
             target_height,
@@ -3631,6 +3884,7 @@ class VideoPlayer(QMainWindow):
         ret, frame = self.cap.read()
         
         if ret:
+            frame = self._apply_rotation(frame)
             # Check if we're in managed mode (videos folder + base CSV set)
             if self.drop_videos_dir and self.video_path:
                 # Auto-load base data from CSV on first extraction if not already loaded
@@ -3725,6 +3979,7 @@ class VideoPlayer(QMainWindow):
             QMessageBox.warning(self, "Error", "Failed to extract frame")
             return
 
+        frame = self._apply_rotation(frame)
         in_queue_mode = bool(self.drop_videos_dir and self.video_path)
 
         if in_queue_mode:
@@ -3902,19 +4157,21 @@ class VideoPlayer(QMainWindow):
         filename_is_placeholder = filename_value.lower() == '[will be set on next extraction]'
 
         if self.grab_only_mode:
-            # In grab-only mode: use GRAB_FILENAME as the filename if FILENAME is blank
+            # In grab-only mode: use GRAB_FILENAME as the filename if FILENAME is blank/placeholder
             if not filename_value or filename_is_placeholder:
                 grab_fn = self._get_row_value(self.base_data, ['GRAB_FILENAME'])
                 if grab_fn and str(grab_fn).strip() not in ('', 'NA', 'N/A', 'NONE'):
                     data_row['FILENAME'] = str(grab_fn).strip()
-                    if 'FILENAME' in self.data_fields:
-                        w = self.data_fields['FILENAME']
-                        w.blockSignals(True)
-                        if isinstance(w, QTextEdit):
-                            w.setPlainText(data_row['FILENAME'])
-                        else:
-                            w.setText(data_row['FILENAME'])
-                        w.blockSignals(False)
+                else:
+                    data_row['FILENAME'] = 'NA'
+                if 'FILENAME' in self.data_fields:
+                    w = self.data_fields['FILENAME']
+                    w.blockSignals(True)
+                    if isinstance(w, QTextEdit):
+                        w.setPlainText(data_row['FILENAME'])
+                    else:
+                        w.setText(data_row['FILENAME'])
+                    w.blockSignals(False)
         elif (not filename_value or filename_is_placeholder) and self.video_path:
             if self.drop_videos_dir and self.video_path:
                 current_drop_id = data_row.get('DROP_ID', '').strip()
@@ -3999,12 +4256,15 @@ class VideoPlayer(QMainWindow):
                 f"Data entry saved to:\n{output_file}"
             )
 
-            # Grab-only mode: offer to advance to the next point immediately
+            # Grab-only mode: GRAB_ONLY=1 means no usable video — no frame extraction needed.
+            # Prompt user to advance to the next base CSV row.
             if self.grab_only_mode:
                 advance_reply = QMessageBox.question(
                     self,
-                    "Advance to Next Point?",
-                    "Entry saved.\n\nAdvance to the next point now?",
+                    "Advance to Next Row?",
+                    "Entry saved.\n\n"
+                    "GRAB_ONLY = 1: no video frame extraction is needed for this point.\n\n"
+                    "Advance to the next CSV row now?",
                     QMessageBox.Yes | QMessageBox.No,
                     QMessageBox.Yes
                 )
@@ -5247,7 +5507,47 @@ class VideoPlayer(QMainWindow):
         dlg.exec_()
 
     # ─────────────────────────────────────────────────────────────────────
-    
+
+    def open_entry_lookup(self):
+        """Open the Entry Browser dialog so the user can jump to any saved entry."""
+        # Ensure entries are loaded first
+        if not self.all_data_entries:
+            output_file = os.path.join(self.data_dir, "data_entries.csv")
+            if not os.path.exists(output_file):
+                QMessageBox.information(self, "No Entries",
+                    "No data entries file found yet. Save an entry first.")
+                return
+            try:
+                with open(output_file, 'r', encoding='utf-8') as f:
+                    self.all_data_entries = list(csv.DictReader(f))
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Could not read entries:\n{e}")
+                return
+            if not self.all_data_entries:
+                QMessageBox.information(self, "No Entries", "The data entries file is empty.")
+                return
+            self.current_entry_index = len(self.all_data_entries)
+            self.update_navigation_buttons()
+            self._update_progress_label()
+
+        # Save any in-progress edits before browsing
+        if self.unsaved_changes and self.current_entry_index < len(self.all_data_entries):
+            if not self.save_current_entry_changes():
+                return
+
+        dlg = EntryLookupDialog(
+            self,
+            self.all_data_entries,
+            point_id_fields=['POINT_ID', 'SITE', 'SITE_ID', 'POINT', 'STATION', 'STATION_ID']
+        )
+        if dlg.exec_() == QDialog.Accepted and dlg.selected_index is not None:
+            idx = dlg.selected_index
+            if 0 <= idx < len(self.all_data_entries):
+                self.current_entry_index = idx
+                self.load_entry_at_index(idx)
+                self.update_navigation_buttons()
+                self._update_progress_label()
+
     def load_all_entries(self):
         """Load all data entries from CSV file"""
         output_file = os.path.join(self.data_dir, "data_entries.csv")
@@ -5374,6 +5674,8 @@ class VideoPlayer(QMainWindow):
         def set_copy_buttons_enabled(enabled):
             if hasattr(self, 'copy_all_btn') and self.copy_all_btn is not None:
                 self.copy_all_btn.setEnabled(enabled)
+            if hasattr(self, 'copy_meta_btn') and self.copy_meta_btn is not None:
+                self.copy_meta_btn.setEnabled(enabled)
             if hasattr(self, 'copy_prev_field_buttons') and self.copy_prev_field_buttons:
                 for button in self.copy_prev_field_buttons:
                     button.setEnabled(enabled)
@@ -5765,7 +6067,90 @@ class VideoPlayer(QMainWindow):
         msg += "Review and modify as needed, then save or navigate to auto-save."
         
         QMessageBox.information(self, "Observation Fields Copied", msg)
-    
+
+    # Metadata fields considered safe to carry across entries (contextual/admin,
+    # not observation/cover data).  Pre-populated base-CSV fields are ALSO
+    # excluded automatically at runtime via _get_base_csv_populated_fields().
+    _METADATA_COPY_FIELDS = {
+        'DEPTH', 'TIDAL', 'SUBSTRATE', 'COMMENTS', 'METHOD', 'VESSEL',
+        'MEADOW', 'AUTHOR', 'CUSTODIAN', 'UPDATED', 'LOCATION',
+        'SURVEY_NAM', 'SURVEY_DAT', 'MONTH', 'CUSTODIAN',
+    }
+
+    def copy_metadata_from_previous_entry(self):
+        """Copy only contextual/metadata fields from the previous entry.
+
+        Observation and cover fields are left untouched.
+        Fields already pre-populated from the base CSV are also preserved.
+        """
+        if not self.all_data_entries:
+            QMessageBox.information(self, "No Previous Entry",
+                "There are no saved entries to copy from.")
+            return
+
+        if self.current_entry_index > 0 and self.current_entry_index < len(self.all_data_entries):
+            source_index = self.current_entry_index - 1
+        elif self.current_entry_index >= len(self.all_data_entries):
+            source_index = len(self.all_data_entries) - 1
+        else:
+            QMessageBox.information(self, "No Previous Entry",
+                "You are at the first entry. There is no previous entry to copy from.")
+            return
+
+        # Fields pre-populated from the base CSV for the current row
+        protected_fields = self._get_base_csv_populated_fields()
+        protected_fields.update(self.non_copyable_fields)
+
+        # Determine which metadata fields actually exist in this template
+        fields_to_copy = [
+            f for f in self.data_fields
+            if f.upper() in {m.upper() for m in self._METADATA_COPY_FIELDS}
+            and f not in protected_fields
+        ]
+
+        if not fields_to_copy:
+            QMessageBox.information(self, "Nothing to Copy",
+                "No metadata fields were found that can be copied\n"
+                "(all are either pre-populated from the base CSV or not in this template).")
+            return
+
+        reply = QMessageBox.question(
+            self, "Copy Metadata Fields",
+            f"Copy {len(fields_to_copy)} metadata field(s) from the previous entry?\n\n"
+            f"Fields: {', '.join(fields_to_copy)}\n\n"
+            "Observation/cover fields will NOT be changed.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        if reply == QMessageBox.No:
+            return
+
+        previous_entry = self.all_data_entries[source_index]
+
+        for widget in self.data_fields.values():
+            widget.blockSignals(True)
+
+        fields_copied = 0
+        for field_name in fields_to_copy:
+            widget = self.data_fields[field_name]
+            value = previous_entry.get(field_name, '')
+            if isinstance(widget, QTextEdit):
+                widget.setPlainText(value)
+            else:
+                widget.setText(value)
+            if value:
+                fields_copied += 1
+
+        for widget in self.data_fields.values():
+            widget.blockSignals(False)
+
+        self.mark_entry_changed()
+        self.update_extract_button_state()
+
+        QMessageBox.information(self, "Metadata Copied",
+            f"Copied {fields_copied} metadata field value(s) from entry #{source_index + 1}.\n\n"
+            "Review and modify as needed.")
+
     def auto_save_data_entry(self, drop_id, still_filename):
         """Automatically save data entry when extracting a still.
 
@@ -7085,11 +7470,25 @@ class VideoPlayer(QMainWindow):
         else:
             current_value = widget.text().strip()
 
-        # Bucket rules for this trigger field into matching / non-matching
+        # Helper to read any field's current value (for skip_if checks)
+        def _get_current_field_value(fname):
+            w = self.data_fields.get(fname)
+            if not w:
+                return ''
+            return w.toPlainText().strip() if isinstance(w, QTextEdit) else w.text().strip()
+
+        # Bucket rules for this trigger field into matching / non-matching.
+        # Rules with a skip_if_field whose current value equals skip_if_value are
+        # excluded entirely (neither applied nor cleared) so that another field can
+        # act as a higher-priority override (e.g. GRAB_ONLY=1 keeping SEAGRASS_C=NA).
         matching_rules = []
         non_matching_rules = []
         for rule in self.validation_rules:
             if rule.get('type') == 'autofill' and rule.get('trigger_field') == changed_field:
+                skip_field = rule.get('skip_if_field')
+                skip_val = str(rule.get('skip_if_value', '')).strip()
+                if skip_field and _get_current_field_value(skip_field) == skip_val:
+                    continue  # honour the override; leave target fields untouched
                 trigger_value = str(rule.get('trigger_value', '')).strip()
                 if current_value == trigger_value:
                     matching_rules.append(rule)
@@ -7114,6 +7513,9 @@ class VideoPlayer(QMainWindow):
         if not fields_to_set and not fields_to_clear:
             return
 
+        # Track whether GRAB_ONLY is written so we can sync grab_only_mode after
+        grab_only_written = False
+
         # Block signals to avoid cascading triggers
         for w in self.data_fields.values():
             w.blockSignals(True)
@@ -7126,6 +7528,8 @@ class VideoPlayer(QMainWindow):
                     target_widget.setPlainText(str(value))
                 else:
                     target_widget.setText(str(value))
+                if field_name == 'GRAB_ONLY':
+                    grab_only_written = True
 
         # Reset fields whose condition is no longer met
         for field_name in fields_to_clear:
@@ -7136,9 +7540,40 @@ class VideoPlayer(QMainWindow):
                 else:
                     target_widget.setText('')
 
+        # Re-enforce all OTHER currently-active autofill rules so that a
+        # higher-priority trigger (e.g. GRAB_ONLY=1) is never accidentally
+        # undone by the clearing step above.
+        for rule in self.validation_rules:
+            if rule.get('type') != 'autofill':
+                continue
+            trigger_field = rule.get('trigger_field')
+            if not trigger_field or trigger_field == changed_field:
+                continue  # handled above; don't re-process
+            skip_field = rule.get('skip_if_field')
+            skip_val = str(rule.get('skip_if_value', '')).strip()
+            if skip_field and _get_current_field_value(skip_field) == skip_val:
+                continue
+            trigger_value = str(rule.get('trigger_value', '')).strip()
+            if _get_current_field_value(trigger_field) != trigger_value:
+                continue
+            for field_name, value in rule.get('actions', {}).items():
+                if field_name in self.data_fields:
+                    target_widget = self.data_fields[field_name]
+                    if isinstance(target_widget, QTextEdit):
+                        target_widget.setPlainText(str(value))
+                    else:
+                        target_widget.setText(str(value))
+                    if field_name == 'GRAB_ONLY':
+                        grab_only_written = True
+
         # Unblock signals
         for w in self.data_fields.values():
             w.blockSignals(False)
+
+        # Sync grab_only_mode flag if GRAB_ONLY was written via autofill
+        # (its own signal was blocked so _sync_drop_id_with_grab_only wasn't triggered)
+        if grab_only_written:
+            self._sync_drop_id_with_grab_only()
 
         self.mark_entry_changed()
     

@@ -1,0 +1,210 @@
+{
+  "groups": [
+    {
+      "name": "Metadata",
+      "colour": "#E3F2FD",
+      "fields": [
+        "SITE",
+        "DROP_ID",
+        "DATE_TIME",
+        "TIME",
+        "SURVEY_DAT",
+        "MONTH",
+        "YEAR",
+        "FILENAME",
+        "SURVEY_NAM",
+        "LOCATION",
+        "LATITUDE",
+        "LONGITUDE",
+        "DEPTH",
+        "TIDAL",
+        "SUBSTRATE"
+      ],
+      "subgroups": []
+    },
+    {
+      "name": "Grab Sample",
+      "colour": "#FFF8E1",
+      "fields": [
+        "GRAB_P",
+        "GRAB_ONLY",
+        "GRAB_FILENAME"
+      ],
+      "subgroups": []
+    },
+    {
+      "name": "Open Substrate",
+      "colour": "#FFF8E1",
+      "fields": [
+        "OPEN_100"
+      ],
+      "subgroups": []
+    },
+    {
+      "name": "Seagrass",
+      "colour": "#E8F5E9",
+      "fields": [
+        "SEAGRASS_P",
+        "RANK",
+        "RANK_TYPE",
+        "EXCLUDE_B",
+        "SEAGRASS_C",
+        "EPI_COVER",
+        "CR_COMP",
+        "CS_COMP",
+        "EA_COMP",
+        "HU_COMP",
+        "HD_COMP",
+        "HO_COMP",
+        "HS_COMP",
+        "HT_COMP",
+        "SI_COMP",
+        "TC_COMP",
+        "TH_COMP",
+        "ZC_COMP"
+      ],
+      "subgroups": [
+        {
+          "name": "Species Composition (% adding to 100)",
+          "parent_field": "SEAGRASS_C",
+          "fields": [
+            "CR_COMP",
+            "CS_COMP",
+            "EA_COMP",
+            "HU_COMP",
+            "HD_COMP",
+            "HO_COMP",
+            "HS_COMP",
+            "HT_COMP",
+            "SI_COMP",
+            "TC_COMP",
+            "TH_COMP",
+            "ZC_COMP"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Algae",
+      "colour": "#FFFDE7",
+      "fields": [
+        "AG_COVER",
+        "AG_TURF_MA",
+        "AG_ERECT_M",
+        "AG_ENCRUST",
+        "AG_ERECT_C",
+        "AG_FILAMEN"
+      ],
+      "subgroups": [
+        {
+          "name": "Algae Types (% adding to 100)",
+          "parent_field": "AG_COVER",
+          "fields": [
+            "AG_TURF_MA",
+            "AG_ERECT_M",
+            "AG_ENCRUST",
+            "AG_ERECT_C",
+            "AG_FILAMEN"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Hard Coral",
+      "colour": "#FCE4EC",
+      "fields": [
+        "HC_COVER",
+        "HC_BRANC",
+        "HC_DIG",
+        "HC_ENC",
+        "HC_FOL",
+        "HC_MAS",
+        "HC_SOL",
+        "HC_TAB"
+      ],
+      "subgroups": [
+        {
+          "name": "Coral Types (% adding to 100)",
+          "parent_field": "HC_COVER",
+          "fields": [
+            "HC_BRANC",
+            "HC_DIG",
+            "HC_ENC",
+            "HC_FOL",
+            "HC_MAS",
+            "HC_SOL",
+            "HC_TAB"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Soft Coral",
+      "colour": "#F3E5F5",
+      "fields": [
+        "SC_COVER",
+        "SC_PEN",
+        "SC_GORG",
+        "SC_WHIP",
+        "SC_OTHER"
+      ],
+      "subgroups": [
+        {
+          "name": "Soft Coral Types (% adding to 100)",
+          "parent_field": "SC_COVER",
+          "fields": [
+            "SC_PEN",
+            "SC_GORG",
+            "SC_WHIP",
+            "SC_OTHER"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Other Benthic Invertebrates",
+      "colour": "#FBE9E7",
+      "fields": [
+        "OTHER_BMI",
+        "BMI_SPONGE",
+        "BMI_ASCI",
+        "BMI_BRYO",
+        "BMI_HYDR"
+      ],
+      "subgroups": []
+    },
+    {
+      "name": "Open Substrate",
+      "colour": "#EFEBE9",
+      "fields": [
+        "OPEN_SUBST"
+      ],
+      "subgroups": []
+    },
+    {
+      "name": "Megafauna",
+      "colour": "#E0F7FA",
+      "fields": [
+        "DUGONG",
+        "TURTLE",
+        "DOLPHIN",
+        "SEA_CUCUMB"
+      ],
+      "subgroups": []
+    },
+    {
+      "name": "Survey Info",
+      "colour": "#F5F5F5",
+      "fields": [
+        "METHOD",
+        "VESSEL",
+        "COMMENTS",
+        "AUTHOR",
+        "UPDATED",
+        "CUSTODIAN",
+        "MEADOW"
+      ],
+      "subgroups": []
+    }
+  ]
+}

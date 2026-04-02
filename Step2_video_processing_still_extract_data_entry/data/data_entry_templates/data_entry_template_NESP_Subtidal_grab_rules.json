@@ -1,0 +1,494 @@
+{
+  "rules": [
+    {
+      "type": "allowed_values",
+      "field": "OPEN_100",
+      "values": [
+        "NA",
+        "0",
+        "1"
+      ],
+      "error": "OPEN_100 must be NA, 0, or 1"
+    },
+    {
+      "type": "autofill",
+      "trigger_field": "OPEN_100",
+      "trigger_value": "1",
+      "actions": {
+        "SEAGRASS_P": "0",
+        "SEAGRASS_C": "0",
+        "RANK": "NA",
+        "RANK_TYPE": "NA",
+        "CR_COMP": "NA",
+        "CS_COMP": "NA",
+        "EA_COMP": "NA",
+        "HU_COMP": "NA",
+        "HD_COMP": "NA",
+        "HO_COMP": "NA",
+        "HS_COMP": "NA",
+        "HT_COMP": "NA",
+        "SI_COMP": "NA",
+        "TC_COMP": "NA",
+        "TH_COMP": "NA",
+        "ZC_COMP": "NA",
+        "EPI_COVER": "0",
+        "AG_COVER": "0",
+        "AG_TURF_MA": "NA",
+        "AG_ERECT_M": "NA",
+        "AG_ENCRUST": "NA",
+        "AG_ERECT_C": "NA",
+        "AG_FILAMEN": "NA",
+        "HC_COVER": "0",
+        "HC_BRANC": "NA",
+        "HC_DIG": "NA",
+        "HC_ENC": "NA",
+        "HC_FOL": "NA",
+        "HC_MAS": "NA",
+        "HC_SOL": "NA",
+        "HC_TAB": "NA",
+        "SC_COVER": "0",
+        "SC_PEN": "NA",
+        "SC_GORG": "NA",
+        "SC_WHIP": "NA",
+        "SC_OTHER": "NA",
+        "OTHER_BMI": "0",
+        "BMI_SPONGE": "0",
+        "BMI_ASCI": "0",
+        "BMI_BRYO": "0",
+        "BMI_HYDR": "0"
+      }
+    },
+    {
+      "type": "allowed_values",
+      "field": "GRAB_P",
+      "values": [
+        "0",
+        "1"
+      ],
+      "error": "GRAB_P must be 0 or 1 (0 = No grab sample, 1 = Grab sample collected)"
+    },
+    {
+      "type": "required",
+      "field": "GRAB_P",
+      "error": "GRAB_P is required"
+    },
+    {
+      "type": "autofill",
+      "trigger_field": "GRAB_P",
+      "trigger_value": "0",
+      "actions": {
+        "GRAB_ONLY": "0"
+      }
+    },
+    {
+      "type": "allowed_values",
+      "field": "GRAB_ONLY",
+      "values": [
+        "0",
+        "1"
+      ],
+      "error": "GRAB_ONLY must be 0 or 1"
+    },
+    {
+      "type": "autofill",
+      "trigger_field": "GRAB_ONLY",
+      "trigger_value": "1",
+      "actions": {
+        "SEAGRASS_C": "NA",
+        "RANK": "NA",
+        "RANK_TYPE": "NA",
+        "AG_COVER": "NA",
+        "AG_TURF_MA": "NA",
+        "AG_ERECT_M": "NA",
+        "AG_ENCRUST": "NA",
+        "AG_ERECT_C": "NA",
+        "AG_FILAMEN": "NA",
+        "HC_COVER": "NA",
+        "HC_BRANC": "NA",
+        "HC_DIG": "NA",
+        "HC_ENC": "NA",
+        "HC_FOL": "NA",
+        "HC_MAS": "NA",
+        "HC_SOL": "NA",
+        "HC_TAB": "NA",
+        "SC_COVER": "NA",
+        "SC_PEN": "NA",
+        "SC_GORG": "NA",
+        "SC_WHIP": "NA",
+        "SC_OTHER": "NA",
+        "OTHER_BMI": "NA",
+        "BMI_SPONGE": "NA",
+        "BMI_ASCI": "NA",
+        "BMI_BRYO": "NA",
+        "BMI_HYDR": "NA",
+        "OPEN_SUBST": "NA"
+      }
+    },
+    {
+      "type": "allowed_values",
+      "field": "SEAGRASS_P",
+      "values": [
+        "0",
+        "1",
+        "NA"
+      ],
+      "error": "SEAGRASS_P must be 0, 1, or NA"
+    },
+    {
+      "type": "required",
+      "field": "SEAGRASS_P",
+      "error": "SEAGRASS_P is required (enter 0, 1, or NA)"
+    },
+    {
+      "type": "autofill",
+      "trigger_field": "SEAGRASS_P",
+      "trigger_value": "0",
+      "skip_if_field": "GRAB_ONLY",
+      "skip_if_value": "1",
+      "actions": {
+        "SEAGRASS_C": "0"
+      }
+    },
+    {
+      "type": "autofill",
+      "trigger_field": "SEAGRASS_P",
+      "trigger_value": "0",
+      "actions": {
+        "CR_COMP": "NA",
+        "CS_COMP": "NA",
+        "EA_COMP": "NA",
+        "HU_COMP": "NA",
+        "HD_COMP": "NA",
+        "HO_COMP": "NA",
+        "HS_COMP": "NA",
+        "HT_COMP": "NA",
+        "SI_COMP": "NA",
+        "TC_COMP": "NA",
+        "TH_COMP": "NA",
+        "ZC_COMP": "NA",
+        "EPI_COVER": "NA",
+        "RANK": "NA",
+        "RANK_TYPE": "NA"
+      }
+    },
+    {
+      "type": "autofill",
+      "trigger_field": "SEAGRASS_P",
+      "trigger_value": "NA",
+      "actions": {
+        "SEAGRASS_C": "NA",
+        "RANK": "NA",
+        "RANK_TYPE": "NA",
+        "CR_COMP": "NA",
+        "CS_COMP": "NA",
+        "EA_COMP": "NA",
+        "HU_COMP": "NA",
+        "HD_COMP": "NA",
+        "HO_COMP": "NA",
+        "HS_COMP": "NA",
+        "HT_COMP": "NA",
+        "SI_COMP": "NA",
+        "TC_COMP": "NA",
+        "TH_COMP": "NA",
+        "ZC_COMP": "NA",
+        "EPI_COVER": "NA",
+        "AG_COVER": "NA",
+        "AG_TURF_MA": "NA",
+        "AG_ERECT_M": "NA",
+        "AG_ENCRUST": "NA",
+        "AG_ERECT_C": "NA",
+        "AG_FILAMEN": "NA",
+        "HC_COVER": "NA",
+        "HC_BRANC": "NA",
+        "HC_DIG": "NA",
+        "HC_ENC": "NA",
+        "HC_FOL": "NA",
+        "HC_MAS": "NA",
+        "HC_SOL": "NA",
+        "HC_TAB": "NA",
+        "SC_COVER": "NA",
+        "SC_PEN": "NA",
+        "SC_GORG": "NA",
+        "SC_WHIP": "NA",
+        "SC_OTHER": "NA",
+        "OTHER_BMI": "NA",
+        "BMI_SPONGE": "NA",
+        "BMI_ASCI": "NA",
+        "BMI_BRYO": "NA",
+        "BMI_HYDR": "NA",
+        "OPEN_SUBST": "NA"
+      }
+    },
+    {
+      "type": "conditional_sum",
+      "if_field": "SEAGRASS_P",
+      "if_value": "1",
+      "fields": [
+        "CR_COMP",
+        "CS_COMP",
+        "EA_COMP",
+        "HU_COMP",
+        "HD_COMP",
+        "HO_COMP",
+        "HS_COMP",
+        "HT_COMP",
+        "SI_COMP",
+        "TC_COMP",
+        "TH_COMP",
+        "ZC_COMP"
+      ],
+      "target": 100.0,
+      "tolerance": 0.0,
+      "blank_as_zero": true,
+      "error": "When seagrass is present, all species percentages must sum to 100%"
+    },
+    {
+      "type": "conditional",
+      "if_field": "SEAGRASS_P",
+      "if_value": "0",
+      "then_field": "SEAGRASS_C",
+      "then_condition": "equals",
+      "then_value": "0",
+      "skip_if_field": "GRAB_ONLY",
+      "skip_if_value": "1",
+      "error": "If no seagrass is present, SEAGRASS_C must be 0"
+    },
+    {
+      "type": "conditional",
+      "if_field": "SEAGRASS_P",
+      "if_value": "1",
+      "then_field": "SEAGRASS_C",
+      "then_condition": "greater_than",
+      "then_value": "0",
+      "skip_if_field": "GRAB_ONLY",
+      "skip_if_value": "1",
+      "error": "If seagrass is present, SEAGRASS_C must be greater than 0"
+    },
+    {
+      "type": "conditional",
+      "if_field": "SEAGRASS_P",
+      "if_value": "1",
+      "then_field": "SEAGRASS_C",
+      "then_condition": "less_equal",
+      "then_value": "100",
+      "skip_if_field": "GRAB_ONLY",
+      "skip_if_value": "1",
+      "error": "If seagrass is present, SEAGRASS_C must be 100 or less"
+    },
+    {
+      "type": "autofill",
+      "trigger_field": "AG_COVER",
+      "trigger_value": "0",
+      "actions": {
+        "AG_TURF_MA": "NA",
+        "AG_ERECT_M": "NA",
+        "AG_ENCRUST": "NA",
+        "AG_ERECT_C": "NA",
+        "AG_FILAMEN": "NA"
+      }
+    },
+    {
+      "type": "autofill",
+      "trigger_field": "AG_COVER",
+      "trigger_value": "NA",
+      "actions": {
+        "AG_TURF_MA": "NA",
+        "AG_ERECT_M": "NA",
+        "AG_ENCRUST": "NA",
+        "AG_ERECT_C": "NA",
+        "AG_FILAMEN": "NA"
+      }
+    },
+    {
+      "type": "conditional_sum",
+      "if_field": "AG_COVER",
+      "if_condition": "greater",
+      "if_value": "0",
+      "fields": [
+        "AG_TURF_MA",
+        "AG_ERECT_M",
+        "AG_ENCRUST",
+        "AG_ERECT_C",
+        "AG_FILAMEN"
+      ],
+      "comparison": "equal",
+      "target": 100.0,
+      "tolerance": 0,
+      "blank_as_zero": true,
+      "error": "When algae cover > 0, all algae types percentages must sum to 100%"
+    },
+    {
+      "type": "autofill",
+      "trigger_field": "HC_COVER",
+      "trigger_value": "0",
+      "actions": {
+        "HC_BRANC": "NA",
+        "HC_DIG": "NA",
+        "HC_ENC": "NA",
+        "HC_FOL": "NA",
+        "HC_MAS": "NA",
+        "HC_SOL": "NA",
+        "HC_TAB": "NA"
+      }
+    },
+    {
+      "type": "autofill",
+      "trigger_field": "HC_COVER",
+      "trigger_value": "NA",
+      "actions": {
+        "HC_BRANC": "NA",
+        "HC_DIG": "NA",
+        "HC_ENC": "NA",
+        "HC_FOL": "NA",
+        "HC_MAS": "NA",
+        "HC_SOL": "NA",
+        "HC_TAB": "NA"
+      }
+    },
+    {
+      "type": "conditional_sum",
+      "if_field": "HC_COVER",
+      "if_condition": "greater",
+      "if_value": "0",
+      "fields": [
+        "HC_BRANC",
+        "HC_DIG",
+        "HC_ENC",
+        "HC_FOL",
+        "HC_MAS",
+        "HC_SOL",
+        "HC_TAB"
+      ],
+      "comparison": "equal",
+      "target": 100.0,
+      "tolerance": 0,
+      "blank_as_zero": true,
+      "error": "When hard coral cover > 0, all coral composition percentages must sum to 100%"
+    },
+    {
+      "type": "autofill",
+      "trigger_field": "SC_COVER",
+      "trigger_value": "0",
+      "actions": {
+        "SC_PEN": "NA",
+        "SC_GORG": "NA",
+        "SC_WHIP": "NA",
+        "SC_OTHER": "NA"
+      }
+    },
+    {
+      "type": "autofill",
+      "trigger_field": "SC_COVER",
+      "trigger_value": "NA",
+      "actions": {
+        "SC_PEN": "NA",
+        "SC_GORG": "NA",
+        "SC_WHIP": "NA",
+        "SC_OTHER": "NA"
+      }
+    },
+    {
+      "type": "conditional_sum",
+      "if_field": "SC_COVER",
+      "if_condition": "greater",
+      "if_value": "0",
+      "fields": [
+        "SC_PEN",
+        "SC_GORG",
+        "SC_WHIP",
+        "SC_OTHER"
+      ],
+      "comparison": "equal",
+      "target": 100.0,
+      "tolerance": 0,
+      "blank_as_zero": true,
+      "error": "When soft coral cover > 0, all soft coral composition percentages must sum to 100%"
+    },
+    {
+      "type": "allowed_values",
+      "field": "DUGONG",
+      "values": [
+        "0",
+        "1",
+        "NA"
+      ],
+      "error": "DUGONG must be 0, 1, or NA"
+    },
+    {
+      "type": "allowed_values",
+      "field": "TURTLE",
+      "values": [
+        "0",
+        "1",
+        "NA"
+      ],
+      "error": "TURTLE must be 0, 1, or NA"
+    },
+    {
+      "type": "allowed_values",
+      "field": "DOLPHIN",
+      "values": [
+        "0",
+        "1",
+        "NA"
+      ],
+      "error": "DOLPHIN must be 0, 1, or NA"
+    },
+    {
+      "type": "allowed_values",
+      "field": "SEA_CUCUMB",
+      "values": [
+        "0",
+        "1",
+        "NA"
+      ],
+      "error": "SEA_CUCUMB must be 0, 1, or NA"
+    },
+    {
+      "type": "required",
+      "field": "SEA_CUCUMB",
+      "error": "SEA_CUCUMB is required (enter 0, 1, or NA)"
+    },
+    {
+      "type": "allowed_values",
+      "field": "RANK_TYPE",
+      "values": [
+        "low",
+        "high",
+        "NA"
+      ],
+      "error": "RANK_TYPE must be low, high, or NA"
+    },
+    {
+      "type": "conditional_sum",
+      "if_field": "SEAGRASS_P",
+      "if_condition": "not_equals",
+      "if_value": "NA",
+      "skip_if_field": "GRAB_ONLY",
+      "skip_if_value": "1",
+      "fields": [
+        "SEAGRASS_C",
+        "AG_COVER",
+        "HC_COVER",
+        "SC_COVER",
+        "OTHER_BMI",
+        "BMI_SPONGE",
+        "BMI_ASCI",
+        "BMI_BRYO",
+        "BMI_HYDR",
+        "OPEN_SUBST"
+      ],
+      "comparison": "equal",
+      "target": 100.0,
+      "tolerance": 0.0,
+      "blank_as_zero": false,
+      "error": "Sum of SEAGRASS_C, AG_COVER, HC_COVER, SC_COVER, OTHER_BMI, BMI_SPONGE, BMI_ASCI, BMI_BRYO, BMI_HYDR, OPEN_SUBST must equal 100"
+    },
+    {
+      "type": "calculated",
+      "target_field": "OPEN_SUBST",
+      "formula": "100 - SEAGRASS_C - AG_COVER - HC_COVER - SC_COVER - OTHER_BMI - BMI_SPONGE - BMI_ASCI - BMI_BRYO - BMI_HYDR",
+      "decimals": 1
+    }
+  ]
+}
