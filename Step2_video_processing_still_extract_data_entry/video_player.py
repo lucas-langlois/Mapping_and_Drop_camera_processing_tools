@@ -3,6 +3,8 @@ MP4 Video Player with Frame Extraction
 Features: Play/Pause, Frame navigation, Timeline scrubbing, Speed control, Frame export
 """
 
+APP_VERSION = "1.2"
+
 import sys
 import os
 import copy
@@ -29,7 +31,8 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QShortcut, QInputDialog, QDialog, QListWidget, QListWidgetItem,
                              QDialogButtonBox, QFrame, QDoubleSpinBox, QCheckBox, QSizePolicy,
                              QDesktopWidget, QProgressBar,
-                             QTreeWidget, QTreeWidgetItem, QHeaderView, QAbstractItemView)
+                             QTreeWidget, QTreeWidgetItem, QHeaderView, QAbstractItemView,
+                             QSplitter, QFormLayout, QTableWidget, QTableWidgetItem)
 from PyQt5.QtCore import QTimer, Qt, QUrl, QEvent
 from PyQt5.QtGui import QImage, QPixmap, QKeySequence, QColor, QPainter, QFont
 from PyQt5.QtWebEngineWidgets import QWebEngineView
@@ -206,6 +209,117 @@ class EntryLookupDialog(QDialog):
         if item.data(0, Qt.UserRole) is not None:
             self.selected_index = item.data(0, Qt.UserRole)
             self.accept()
+
+
+class ReviewEntryAndStillDialog(QDialog):
+    """Read-only review: shows the extracted still image for a saved entry.
+    Opens without touching current_entry_index, unsaved_changes, or _new_entry_draft.
+    """
+
+    def __init__(self, parent, entry, drop_stills_dir):
+        super().__init__(parent)
+        self._entry = entry
+        self.drop_stills_dir = drop_stills_dir
+        self._orig_pixmap = None
+
+        drop_id = entry.get('DROP_ID', '').strip() or 'Entry'
+        self.setWindowTitle(f"Review Image Still \u2014 {drop_id}")
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+        self.setMinimumSize(640, 480)
+        self.resize(960, 720)
+
+        self._build_ui()
+        self._load()
+
+    # ------------------------------------------------------------------
+    def _build_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setSpacing(4)
+
+        # ── image display ─────────────────────────────────────────────
+        self._img_scroll = QScrollArea()
+        self._img_scroll.setWidgetResizable(True)
+        self._img_scroll.setStyleSheet("QScrollArea { background: #111; border: none; }")
+        self._img_label = QLabel()
+        self._img_label.setAlignment(Qt.AlignCenter)
+        self._img_label.setStyleSheet("background: #111; color: #ccc;")
+        self._img_scroll.setWidget(self._img_label)
+        layout.addWidget(self._img_scroll, 1)
+
+        # ── filename caption ──────────────────────────────────────────
+        self._caption_lbl = QLabel()
+        self._caption_lbl.setAlignment(Qt.AlignCenter)
+        self._caption_lbl.setStyleSheet("font-size: 10px; color: #666; padding: 2px;")
+        layout.addWidget(self._caption_lbl)
+
+        # ── buttons row ───────────────────────────────────────────────
+        self._fullscreen_btn = QPushButton("⛶ Full Screen")
+        self._fullscreen_btn.setToolTip("Toggle full-screen (F11)")
+        self._fullscreen_btn.setStyleSheet("padding: 5px 14px;")
+        self._fullscreen_btn.clicked.connect(self._toggle_fullscreen)
+        close_btn = QPushButton("Close")
+        close_btn.setStyleSheet("padding: 5px 20px;")
+        close_btn.clicked.connect(self.accept)
+        btn_row = QHBoxLayout()
+        btn_row.addWidget(self._fullscreen_btn)
+        btn_row.addStretch()
+        btn_row.addWidget(close_btn)
+        layout.addLayout(btn_row)
+
+    # ------------------------------------------------------------------
+    def _toggle_fullscreen(self):
+        if self.isFullScreen():
+            self.showNormal()
+            self._fullscreen_btn.setText("⛶ Full Screen")
+        else:
+            self.showFullScreen()
+            self._fullscreen_btn.setText("⛶ Exit Full Screen")
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_F11:
+            self._toggle_fullscreen()
+        elif event.key() in (Qt.Key_Escape,) and self.isFullScreen():
+            self.showNormal()
+            self._fullscreen_btn.setText("⛶ Full Screen")
+        else:
+            super().keyPressEvent(event)
+
+    # ------------------------------------------------------------------
+    def _load(self):
+        entry = self._entry
+        self._orig_pixmap = None  # reset
+
+        # ── still image ──────────────────────────────────────────────
+        filename = entry.get('FILENAME', '').strip()
+        img_path = os.path.join(self.drop_stills_dir, filename) if filename else ''
+        if img_path and os.path.isfile(img_path):
+            pixmap = QPixmap(img_path)
+            if not pixmap.isNull():
+                self._orig_pixmap = pixmap
+                self._img_label.setText('')
+                self._rescale_image()
+            else:
+                self._img_label.clear()
+                self._img_label.setText(f"Cannot load image:\n{filename}")
+        else:
+            self._img_label.clear()
+            msg = "(No still image)" if not filename else f"Image file not found:\n{filename}"
+            self._img_label.setText(msg)
+        self._caption_lbl.setText(filename or "(no filename in entry)")
+
+    def _rescale_image(self):
+        """Scale the stored original pixmap to fill the current viewport."""
+        if self._orig_pixmap is None or self._orig_pixmap.isNull():
+            return
+        vw = max(self._img_scroll.viewport().width(), 1)
+        vh = max(self._img_scroll.viewport().height(), 1)
+        scaled = self._orig_pixmap.scaled(vw, vh, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self._img_label.setPixmap(scaled)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._rescale_image()
 
 
 class ValidationRulesDialog(QDialog):
@@ -2219,7 +2333,7 @@ class TemplateBuilderDialog(QDialog):
 class VideoPlayer(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("MP4 Video Player & Frame Extractor")
+        self.setWindowTitle(f"Drop Cam Analysis App  v{APP_VERSION}")
         self.setGeometry(100, 100, 1600, 900)
         
         # Video variables
@@ -2277,6 +2391,7 @@ class VideoPlayer(QMainWindow):
         self.current_entry_index = -1  # Current position in data entries (-1 means no entries yet)
         self.unsaved_changes = False  # Track if current entry has unsaved changes
         self._new_entry_draft = None  # Snapshot of the new-entry form while browsing saved entries
+        self._copy_custom_fields_selection = set()  # Remembered field selection for Copy Custom Fields dialog
         
         print("Initialized: all_data_entries=[], current_entry_index=-1")
         
@@ -2290,7 +2405,7 @@ class VideoPlayer(QMainWindow):
         
         # Fields that should NOT be copied from previous entry (metadata/unique fields)
         self.non_copyable_fields = [
-            'DROP_ID', 'POINT_ID', 'FILENAME', 
+            'DROP_ID', 'POINT_ID', 'FILENAME',
             'LATITUDE', 'LONGITUDE', 'GPS_MARK',
             'DATE', 'TIME', 'DATE_TIME', 'YEAR',
             'VIDEO_FILENAME', 'VIDEO_TIMESTAMP', 'GPS_DATETIME'
@@ -3095,7 +3210,17 @@ class VideoPlayer(QMainWindow):
         self.next_entry_btn.clicked.connect(self.next_entry)
         self.next_entry_btn.setEnabled(False)
         nav_layout.addWidget(self.next_entry_btn)
-        
+
+        self.back_to_new_entry_btn = QPushButton("↩ New Entry")
+        self.back_to_new_entry_btn.setToolTip("Return to the new-entry form (saves any edits first)")
+        self.back_to_new_entry_btn.clicked.connect(self.back_to_new_entry)
+        self.back_to_new_entry_btn.setEnabled(False)
+        self.back_to_new_entry_btn.setStyleSheet(
+            "QPushButton { background-color: #1565C0; color: white; padding: 4px 8px; }"
+            "QPushButton:disabled { background-color: #aaaaaa; color: #dddddd; }"
+        )
+        nav_layout.addWidget(self.back_to_new_entry_btn)
+
         layout.addLayout(nav_layout)
         
         # Load all entries / browse buttons row
@@ -3111,6 +3236,23 @@ class VideoPlayer(QMainWindow):
         browse_entries_btn.clicked.connect(self.open_entry_lookup)
         browse_entries_btn.setStyleSheet("background-color: #388E3C; color: white; padding: 5px;")
         load_browse_layout.addWidget(browse_entries_btn)
+
+        self.review_still_btn = QPushButton("Review Image Still")
+        self.review_still_btn.setToolTip("Review the saved still image for the currently displayed entry (read-only)")
+        self.review_still_btn.clicked.connect(self.review_entry_and_still)
+        self.review_still_btn.setEnabled(False)
+        self.review_still_btn.setStyleSheet(
+            "QPushButton { background-color: #00838F; color: white; padding: 5px; }"
+            "QPushButton:disabled { background-color: #aaaaaa; color: #dddddd; }"
+        )
+        load_browse_layout.addWidget(self.review_still_btn)
+
+        view_table_btn = QPushButton("📋 View Data Table")
+        view_table_btn.setToolTip("View all saved entries in a scrollable table — check progress without opening Excel")
+        view_table_btn.clicked.connect(self.view_data_table)
+        view_table_btn.setStyleSheet("background-color: #5D4037; color: white; padding: 5px;")
+        load_browse_layout.addWidget(view_table_btn)
+
         layout.addLayout(load_browse_layout)
         
         # Copy from previous buttons row
@@ -3126,13 +3268,13 @@ class VideoPlayer(QMainWindow):
         self.copy_all_btn.setEnabled(False)
         copy_btns_layout.addWidget(self.copy_all_btn)
 
-        self.copy_meta_btn = QPushButton("◄ Copy Metadata Only")
-        self.copy_meta_btn.clicked.connect(self.copy_metadata_from_previous_entry)
+        self.copy_meta_btn = QPushButton("◄ Copy Custom Fields...")
+        self.copy_meta_btn.clicked.connect(self.copy_custom_fields_from_previous_entry)
         self.copy_meta_btn.setStyleSheet("background-color: #0277BD; color: white; padding: 5px;")
         self.copy_meta_btn.setToolTip(
-            "Copy only contextual/metadata fields from the previous entry\n"
-            "(e.g. DEPTH, SUBSTRATE, TIDAL, METHOD, VESSEL, COMMENTS …)\n"
-            "Observation/cover fields and pre-populated fields are NOT overwritten")
+            "Choose which fields to copy from the previous entry.\n"
+            "A checklist lets you pick any combination of fields.\n"
+            "Pre-populated base-CSV fields are always protected.")
         self.copy_meta_btn.setEnabled(False)
         copy_btns_layout.addWidget(self.copy_meta_btn)
 
@@ -3311,12 +3453,6 @@ class VideoPlayer(QMainWindow):
         
         # Action buttons
         button_layout = QHBoxLayout()
-        
-        init_entry_btn = QPushButton("📝 Initialise New Entry")
-        init_entry_btn.setToolTip("Create a new data entry with the next DROP_ID (doesn't extract frame)")
-        init_entry_btn.clicked.connect(self.initialise_new_entry)
-        init_entry_btn.setStyleSheet("background-color: #2196F3; color: white; font-weight: bold; padding: 8px;")
-        button_layout.addWidget(init_entry_btn)
         
         save_btn = QPushButton("Save Entry")
         save_btn.setToolTip("Save current entry to the data file")
@@ -4233,31 +4369,32 @@ class VideoPlayer(QMainWindow):
         fieldnames = self.template_fieldnames if self.template_fieldnames else list(data_row.keys())
         
         try:
-            with open(output_file, 'a', newline='', encoding='utf-8') as f:
-                writer = csv.DictWriter(f, fieldnames=fieldnames)
-                
-                # Write header if file is new
-                if not file_exists:
-                    writer.writeheader()
-                
-                # Write data row
-                writer.writerow(data_row)
-            
-            # Add to in-memory list if entries are loaded
+            # Add to in-memory list, sort, then rewrite the whole file so the
+            # CSV stays ordered by SITE_ID → DROP_ID even when re-visiting old points.
             if self.all_data_entries is not None:
                 self.all_data_entries.append(data_row)
-                self.current_entry_index = len(self.all_data_entries) - 1
+                self._sort_all_entries()
+                with open(output_file, 'w', newline='', encoding='utf-8') as f:
+                    writer = csv.DictWriter(f, fieldnames=fieldnames)
+                    writer.writeheader()
+                    writer.writerows(self.all_data_entries)
+            else:
+                # Fallback: plain append (all_data_entries not loaded)
+                with open(output_file, 'a', newline='', encoding='utf-8') as f:
+                    writer = csv.DictWriter(f, fieldnames=fieldnames)
+                    if not file_exists:
+                        writer.writeheader()
+                    writer.writerow(data_row)
+            
+            # Update UI state
+            if self.all_data_entries is not None:
+                self._new_entry_draft = None  # Committed — draft is now stale
+                self.current_entry_index = len(self.all_data_entries)
                 self.unsaved_changes = False
                 self.update_navigation_buttons()
                 self._update_progress_label()
 
-            QMessageBox.information(
-                self, "Success", 
-                f"Data entry saved to:\n{output_file}"
-            )
-
-            # Grab-only mode: GRAB_ONLY=1 means no usable video — no frame extraction needed.
-            # Prompt user to advance to the next base CSV row.
+            # Grab-only mode: ask whether to advance to the next CSV row
             if self.grab_only_mode:
                 advance_reply = QMessageBox.question(
                     self,
@@ -4272,16 +4409,12 @@ class VideoPlayer(QMainWindow):
                     self._new_entry_draft = None
                     self.next_point()
                 else:
-                    # Stay on same point — just reset the form for a fresh entry
-                    self.current_entry_index = len(self.all_data_entries)
-                    self.unsaved_changes = False
                     self.populate_fields_from_base_data()
                     self.update_drop_fields_for_next()
                     self.update_navigation_buttons()
                 return
 
-            # Prompt to also extract a frame after saving entry (not in grab-only mode)
-            extracted_after_save = False
+            # Offer to extract a frame too (video mode only)
             if self.cap and not self.grab_only_mode:
                 extract_reply = QMessageBox.question(
                     self,
@@ -4292,31 +4425,13 @@ class VideoPlayer(QMainWindow):
                 )
                 if extract_reply == QMessageBox.Yes:
                     self.extract_current_frame_without_data_save(data_row.get('FILENAME', ''))
-                    extracted_after_save = True
 
-            # In queue mode, Save+Extract should initialize a fresh next entry
-            if extracted_after_save and self.drop_videos_dir and self.video_path:
-                if not self.base_data:
-                    self.auto_load_base_data_from_csv()
-
-                if self.base_data:
-                    self.populate_fields_from_base_data()
-                else:
-                    self.clear_data_entry()
-
-                self.current_entry_index = len(self.all_data_entries)
-                self.unsaved_changes = False
-                self.update_navigation_buttons()
-                return
-            
-            # Optionally clear form after saving
-            reply = QMessageBox.question(
-                self, "Clear Form?",
-                "Do you want to clear the form for the next entry?",
-                QMessageBox.Yes | QMessageBox.No
-            )
-            if reply == QMessageBox.Yes:
+            # Auto-advance to the next new-entry form
+            if self.base_data:
+                self.populate_fields_from_base_data()
+            else:
                 self.clear_data_entry()
+            self.update_drop_fields_for_next()
                 
         except Exception as e:
             QMessageBox.critical(
@@ -4529,10 +4644,16 @@ class VideoPlayer(QMainWindow):
 
         self.update_extract_button_state()
         self.update_grab_photo_button_state()
-        
+
         # Set DROP_ID and FILENAME for next extraction
         self.update_drop_fields_for_next()
-    
+
+        # Autofill rules fired above call mark_entry_changed(), which sets
+        # unsaved_changes=True.  A freshly-populated base-data form is NOT a
+        # user edit, so reset the flag here so navigation auto-save guards
+        # don't accidentally trigger on a blank/initialised form.
+        self.unsaved_changes = False
+
     def auto_load_base_data_from_csv(self):
         """Automatically load base data from preloaded CSV matching current video filename"""
         if not self.video_path or not self.base_data_csv:
@@ -4786,7 +4907,7 @@ class VideoPlayer(QMainWindow):
         
         # Auto-fill YEAR, DATE, TIME from base data if available
         if self.base_data:
-            base_datetime = self._get_row_value(self.base_data, ['DATE_TIME', 'SURVEY_DATETIME', 'SURVEY_DATE_TIME'])
+            base_datetime = self._get_row_value(self.base_data, ['DATE_TIME', 'DATETIME', 'SURVEY_DATETIME', 'SURVEY_DATE_TIME'])
             video_timestamp = self._get_row_value(self.base_data, ['VIDEO_TIMESTAMP', 'VIDEO_DATETIME', 'GPS_DATETIME'])
             datetime_source = base_datetime or video_timestamp or self._get_row_value(self.base_data, ['SURVEY_DAT', 'DATE'])
 
@@ -4827,11 +4948,15 @@ class VideoPlayer(QMainWindow):
                 if month_value:
                     self.data_fields['MONTH'].setText(month_value)
 
-            # Set DATE_TIME field when available
+            # Set DATE_TIME / DATETIME field when available
             if base_datetime and 'DATE_TIME' in self.data_fields:
                 self.data_fields['DATE_TIME'].setText(base_datetime)
             elif datetime_source and 'DATE_TIME' in self.data_fields:
                 self.data_fields['DATE_TIME'].setText(datetime_source)
+            if base_datetime and 'DATETIME' in self.data_fields:
+                self.data_fields['DATETIME'].setText(base_datetime)
+            elif datetime_source and 'DATETIME' in self.data_fields:
+                self.data_fields['DATETIME'].setText(datetime_source)
         
         # Unblock signals
         for widget in self.data_fields.values():
@@ -5117,6 +5242,13 @@ class VideoPlayer(QMainWindow):
         if not self.base_data_csv or index < 0 or index >= len(self.base_data_csv):
             return
 
+        # If the user was viewing and editing a saved entry, auto-save those changes
+        # before the row switch discards the form.  Silently fails (returns False) only
+        # when validation blocks the save — in that case abort the navigation.
+        if self.unsaved_changes and 0 <= self.current_entry_index < len(self.all_data_entries):
+            if not self.save_current_entry_changes():
+                return
+
         self._new_entry_draft = None  # Switching row — old draft is no longer applicable
         self.current_base_csv_row_index = index
         row = self.base_data_csv[index]
@@ -5181,12 +5313,31 @@ class VideoPlayer(QMainWindow):
             self._show_no_video_placeholder()
             self.populate_fields_from_base_data()
 
-            # Auto-set GRAB_ONLY = 1
+            # Re-assert grab_only_mode after populate (autofill cascade may have reset it via
+            # _sync_drop_id_with_grab_only if a rule targets GRAB_ONLY while the field is still blank)
+            self.grab_only_mode = True
+
+            # Set GRAB_P = 1 first (blocked signals — no cascade needed for GRAB_P=1).
+            # This MUST be done before setting GRAB_ONLY, otherwise the re-enforce step
+            # inside check_autofill_rules('GRAB_ONLY') sees GRAB_P='0', matches the
+            # GRAB_P=0 → GRAB_ONLY='0' autofill rule, and silently overwrites GRAB_ONLY
+            # back to '0' before returning.
+            if 'GRAB_P' in self.data_fields:
+                w = self.data_fields['GRAB_P']
+                w.blockSignals(True)
+                (w.setPlainText if isinstance(w, QTextEdit) else w.setText)('1')
+                w.blockSignals(False)
+
+            # Now set GRAB_ONLY = 1 and run the full autofill cascade explicitly.
+            # With GRAB_P='1' already in place the re-enforce step won't overwrite it.
+            # The cascade sets HC_COVER, AG_COVER, BMI_* etc. to NA and METHOD='grab' —
+            # identical to what happens when a user types GRAB_ONLY=1 on a video row.
             if 'GRAB_ONLY' in self.data_fields:
                 w = self.data_fields['GRAB_ONLY']
                 w.blockSignals(True)
                 (w.setPlainText if isinstance(w, QTextEdit) else w.setText)('1')
                 w.blockSignals(False)
+                self.check_autofill_rules('GRAB_ONLY')
 
             # Pre-populate FILENAME from GRAB_FILENAME when available
             if has_grab_photo and 'FILENAME' in self.data_fields:
@@ -5195,7 +5346,13 @@ class VideoPlayer(QMainWindow):
                 (w.setPlainText if isinstance(w, QTextEdit) else w.setText)(str(grab_fn).strip())
                 w.blockSignals(False)
 
-            # Fill any remaining blank observation fields with NA
+            # Re-run drop field update now that grab_only_mode is confirmed True and
+            # GRAB_ONLY/FILENAME are correctly set (fixes DROP_ID showing "drop1" instead of "grab1")
+            self.update_drop_fields_for_next()
+
+            # Fill any remaining blank observation fields with NA, skipping fields
+            # that are managed by autofill rules whose trigger is not currently matched
+            # (e.g. SG comp fields when SG_PRESENT=1 — they should stay open for user input).
             self._autofill_blank_obs_fields_na()
 
             if has_grab_photo:
@@ -5211,6 +5368,15 @@ class VideoPlayer(QMainWindow):
         self.update_grab_photo_button_state()
         self.update_extract_button_state()
         self._update_progress_label()
+
+        # Always arrive at a new row in clean new-entry mode.
+        # If the user was browsing old entries (current_entry_index < len) and
+        # then navigated rows, we must NOT leave a stale index pointing at an
+        # old saved entry — that would cause the auto-save guard in next_entry()
+        # / previous_entry() to overwrite that old entry with the new row's blank form.
+        self.current_entry_index = len(self.all_data_entries)
+        self.unsaved_changes = False
+        self.update_navigation_buttons()
 
     def goto_point(self):
         """Jump directly to a specific point in the base CSV."""
@@ -5262,16 +5428,82 @@ class VideoPlayer(QMainWindow):
             return
         self.navigate_to_base_csv_row(new_index)
 
+    def _sort_all_entries(self):
+        """Sort all_data_entries in-place by SITE_ID then DROP_ID (natural numeric sort).
+
+        Both fields are split into alternating (text, number) token pairs so that
+        purely-numeric IDs sort numerically: 5 < 10 < 111 rather than 10 < 111 < 5.
+        """
+        def _natural_key(s):
+            """Split 'ABC_10_grab2' → ('abc_', 10, '_grab', 2) for natural ordering."""
+            parts = []
+            for chunk in re.split(r'(\d+)', str(s or '').strip().lower()):
+                parts.append(int(chunk) if chunk.isdigit() else chunk)
+            return parts
+
+        def _key(row):
+            site = str(row.get('SITE_ID', '') or '').strip()
+            drop = str(row.get('DROP_ID', '') or '').strip()
+            return (_natural_key(site), _natural_key(drop))
+
+        self.all_data_entries.sort(key=_key)
+
     def _autofill_blank_obs_fields_na(self):
-        """Fill blank non-metadata data-entry fields with NA."""
+        """Fill blank non-metadata data-entry fields with NA.
+
+        Fields that are targets of autofill rules are skipped unless a
+        currently-matching rule explicitly covers them.  This keeps fields
+        like SG comp fields open when SG_PRESENT=1 (no rule fires for =1)
+        while still filling truly unmanaged blank fields with NA.
+
+        Fields belonging to groups whose name contains "metadata" or "survey"
+        (case-insensitive) are also left alone — they are either already
+        prefilled from the base CSV or should remain blank for user entry.
+        """
+        # Build set of fields in metadata / survey-info groups to skip
+        metadata_group_fields: set = set()
+        for group in self._load_field_groups():
+            gname = group.get('name', '').lower()
+            if 'metadata' in gname or 'survey' in gname:
+                metadata_group_fields.update(group.get('fields', []))
+                for sg in group.get('subgroups', []):
+                    metadata_group_fields.update(sg.get('fields', []))
+
+        # Build map: field_name → list of (trigger_field, trigger_value)
+        rule_managed: dict = {}
+        if self.validation_rules:
+            for rule in self.validation_rules:
+                if rule.get('type') == 'autofill':
+                    tf = rule.get('trigger_field')
+                    tv = str(rule.get('trigger_value', '')).strip()
+                    for target in rule.get('actions', {}):
+                        rule_managed.setdefault(target, []).append((tf, tv))
+
+        def _widget_val(fname):
+            w = self.data_fields.get(fname)
+            if not w:
+                return ''
+            return w.toPlainText().strip() if isinstance(w, QTextEdit) else w.text().strip()
+
         for field_name, widget in self.data_fields.items():
             if field_name in self.non_copyable_fields:
                 continue
+            if field_name in metadata_group_fields:
+                continue  # Leave metadata/survey fields untouched
             if isinstance(widget, QTextEdit):
                 val = widget.toPlainText().strip()
             else:
                 val = widget.text().strip()
             if not val:
+                # If managed by autofill, only fill with NA when a matching
+                # rule is currently active for this field.
+                if field_name in rule_managed:
+                    active = any(
+                        _widget_val(tf) == tv
+                        for tf, tv in rule_managed[field_name]
+                    )
+                    if not active:
+                        continue  # Leave blank — waiting for user input
                 widget.blockSignals(True)
                 (widget.setPlainText if isinstance(widget, QTextEdit) else widget.setText)('NA')
                 widget.blockSignals(False)
@@ -5530,7 +5762,12 @@ class VideoPlayer(QMainWindow):
             self.update_navigation_buttons()
             self._update_progress_label()
 
-        # Save any in-progress edits before browsing
+        # If on the new entry form, snapshot typed data as a draft so it can be
+        # restored when the user navigates back via Next Entry ▶.
+        if self.current_entry_index >= len(self.all_data_entries):
+            self._capture_new_entry_draft()
+
+        # Save any in-progress edits to a saved entry before browsing.
         if self.unsaved_changes and self.current_entry_index < len(self.all_data_entries):
             if not self.save_current_entry_changes():
                 return
@@ -5547,6 +5784,111 @@ class VideoPlayer(QMainWindow):
                 self.load_entry_at_index(idx)
                 self.update_navigation_buttons()
                 self._update_progress_label()
+
+    def view_data_table(self):
+        """Open a resizable dialog showing all data_entries.csv rows in a QTableWidget."""
+        # Prefer in-memory entries; fall back to reading from disk
+        entries = self.all_data_entries
+        if not entries:
+            output_file = os.path.join(self.data_dir, "data_entries.csv")
+            if not os.path.exists(output_file):
+                QMessageBox.information(self, "No Data", "No data entries file found yet.")
+                return
+            try:
+                with open(output_file, 'r', encoding='utf-8') as f:
+                    reader = csv.DictReader(f)
+                    entries = list(reader)
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Could not read data entries:\n{e}")
+                return
+            if not entries:
+                QMessageBox.information(self, "No Data", "The data entries file is empty.")
+                return
+
+        # Determine column order: template order when available, else dict key order
+        if self.template_fieldnames:
+            columns = [c for c in self.template_fieldnames if c in entries[0]]
+            extras = [c for c in entries[0] if c not in set(columns)]
+            columns = columns + extras
+        else:
+            columns = list(entries[0].keys())
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle(f"Data Entries Table  —  {len(entries)} row(s)")
+        dlg.resize(1200, 600)
+        layout = QVBoxLayout(dlg)
+
+        # ── Search bar ────────────────────────────────────────────────────
+        search_row = QHBoxLayout()
+        search_row.addWidget(QLabel("Search:"))
+        search_box = QLineEdit()
+        search_box.setPlaceholderText("Type to filter rows…")
+        search_box.setClearButtonEnabled(True)
+        search_row.addWidget(search_box, 1)
+
+        col_filter_box = QComboBox()
+        col_filter_box.addItem("All columns")
+        col_filter_box.addItems(columns)
+        search_row.addWidget(col_filter_box)
+        layout.addLayout(search_row)
+
+        # ── Table ─────────────────────────────────────────────────────────
+        table = QTableWidget()
+        table.setColumnCount(len(columns))
+        table.setHorizontalHeaderLabels(columns)
+        table.setEditTriggers(QTableWidget.NoEditTriggers)
+        table.setSelectionBehavior(QTableWidget.SelectRows)
+        table.setAlternatingRowColors(True)
+        table.setSortingEnabled(True)
+        table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
+        table.horizontalHeader().setStretchLastSection(True)
+        table.verticalHeader().setDefaultSectionSize(22)
+        table.setStyleSheet("font-size: 11px;")
+        layout.addWidget(table, 1)
+
+        def _populate(rows):
+            table.setSortingEnabled(False)
+            table.setRowCount(len(rows))
+            for r, row in enumerate(rows):
+                for c, col in enumerate(columns):
+                    val = row.get(col, '')
+                    item = QTableWidgetItem(str(val) if val is not None else '')
+                    table.setItem(r, c, item)
+            table.setSortingEnabled(True)
+
+        _populate(entries)
+
+        def _filter():
+            text = search_box.text().strip().lower()
+            col_idx = col_filter_box.currentIndex() - 1  # -1 means all columns
+            if not text:
+                _populate(entries)
+                return
+            filtered = []
+            for row in entries:
+                if col_idx >= 0:
+                    val = str(row.get(columns[col_idx], '') or '').lower()
+                    if text in val:
+                        filtered.append(row)
+                else:
+                    if any(text in str(v or '').lower() for v in row.values()):
+                        filtered.append(row)
+            _populate(filtered)
+
+        search_box.textChanged.connect(_filter)
+        col_filter_box.currentIndexChanged.connect(_filter)
+
+        # ── Status + close ────────────────────────────────────────────────
+        bottom_row = QHBoxLayout()
+        status_label = QLabel(f"{len(entries)} rows  ·  {len(columns)} columns")
+        status_label.setStyleSheet("color: #555; font-size: 10px;")
+        bottom_row.addWidget(status_label, 1)
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(dlg.accept)
+        bottom_row.addWidget(close_btn)
+        layout.addLayout(bottom_row)
+
+        dlg.exec_()
 
     def load_all_entries(self):
         """Load all data entries from CSV file"""
@@ -5683,15 +6025,23 @@ class VideoPlayer(QMainWindow):
         if not self.all_data_entries or self.current_entry_index < 0:
             self.prev_entry_btn.setEnabled(False)
             self.next_entry_btn.setEnabled(False)
+            if hasattr(self, 'back_to_new_entry_btn'):
+                self.back_to_new_entry_btn.setEnabled(False)
+            if hasattr(self, 'review_still_btn'):
+                self.review_still_btn.setEnabled(False)
             set_copy_buttons_enabled(False)
             self.entry_position_label.setText("No entries - extract a frame to start")
             return
-        
+
         # Check if we're working on a new entry (beyond the saved entries)
         if self.current_entry_index >= len(self.all_data_entries):
             # Working on a new entry
             self.prev_entry_btn.setEnabled(True)  # Can go back to last saved entry
             self.next_entry_btn.setEnabled(False)  # No next entry yet
+            if hasattr(self, 'back_to_new_entry_btn'):
+                self.back_to_new_entry_btn.setEnabled(False)  # Already on new entry
+            if hasattr(self, 'review_still_btn'):
+                self.review_still_btn.setEnabled(False)  # No saved entry to review
             set_copy_buttons_enabled(True)
             status = f"New entry (will be #{len(self.all_data_entries) + 1})"
             if self.unsaved_changes:
@@ -5702,8 +6052,12 @@ class VideoPlayer(QMainWindow):
             self.prev_entry_btn.setEnabled(self.current_entry_index > 0)
             # Next is always enabled for saved entries: advances to next saved, or back to new entry form
             self.next_entry_btn.setEnabled(True)
+            if hasattr(self, 'back_to_new_entry_btn'):
+                self.back_to_new_entry_btn.setEnabled(True)  # Can jump straight to new entry form
+            if hasattr(self, 'review_still_btn'):
+                self.review_still_btn.setEnabled(True)  # Viewing a saved entry — can review its still
             set_copy_buttons_enabled(self.current_entry_index > 0)
-            
+
             status = f"Entry {self.current_entry_index + 1} of {len(self.all_data_entries)}"
             if self.unsaved_changes:
                 status += " *"
@@ -5762,6 +6116,7 @@ class VideoPlayer(QMainWindow):
         fieldnames = self.template_fieldnames if self.template_fieldnames else list(data_row.keys())
         
         try:
+            self._sort_all_entries()
             with open(output_file, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
                 writer.writeheader()
@@ -5856,7 +6211,32 @@ class VideoPlayer(QMainWindow):
         else:
             self.current_entry_index += 1
             self.load_entry_at_index(self.current_entry_index)
-    
+
+    def back_to_new_entry(self):
+        """Jump directly back to the new-entry form from any saved entry, auto-saving edits first."""
+        # Already on the new entry form — nothing to do
+        if self.current_entry_index >= len(self.all_data_entries):
+            return
+
+        # Auto-save any edits to the current saved entry
+        if self.unsaved_changes:
+            if not self.save_current_entry_changes():
+                return  # Validation blocked save — stay on this entry
+
+        self.current_entry_index = len(self.all_data_entries)
+        self._restore_new_entry_draft()
+        self.update_navigation_buttons()
+
+    def review_entry_and_still(self):
+        """Open the read-only Review Image Still dialog for the currently displayed saved entry."""
+        if self.current_entry_index < 0 or self.current_entry_index >= len(self.all_data_entries):
+            return  # Should not be reachable (button is disabled on new-entry form)
+        entry = self.all_data_entries[self.current_entry_index]
+        dlg = ReviewEntryAndStillDialog(self, entry, self.drop_stills_dir)
+        dlg.exec_()
+        # Intentionally no state change on close — current_entry_index,
+        # unsaved_changes, and _new_entry_draft are all unaffected.
+
     def copy_from_previous_entry(self, field_name):
         """Copy value from previous entry for a specific field"""
         print(f"Copy from previous called for field: {field_name}")
@@ -6068,21 +6448,8 @@ class VideoPlayer(QMainWindow):
         
         QMessageBox.information(self, "Observation Fields Copied", msg)
 
-    # Metadata fields considered safe to carry across entries (contextual/admin,
-    # not observation/cover data).  Pre-populated base-CSV fields are ALSO
-    # excluded automatically at runtime via _get_base_csv_populated_fields().
-    _METADATA_COPY_FIELDS = {
-        'DEPTH', 'TIDAL', 'SUBSTRATE', 'COMMENTS', 'METHOD', 'VESSEL',
-        'MEADOW', 'AUTHOR', 'CUSTODIAN', 'UPDATED', 'LOCATION',
-        'SURVEY_NAM', 'SURVEY_DAT', 'MONTH', 'CUSTODIAN',
-    }
-
-    def copy_metadata_from_previous_entry(self):
-        """Copy only contextual/metadata fields from the previous entry.
-
-        Observation and cover fields are left untouched.
-        Fields already pre-populated from the base CSV are also preserved.
-        """
+    def copy_custom_fields_from_previous_entry(self):
+        """Let the user pick which fields to copy from the previous entry via a checklist dialog."""
         if not self.all_data_entries:
             QMessageBox.information(self, "No Previous Entry",
                 "There are no saved entries to copy from.")
@@ -6097,41 +6464,88 @@ class VideoPlayer(QMainWindow):
                 "You are at the first entry. There is no previous entry to copy from.")
             return
 
-        # Fields pre-populated from the base CSV for the current row
+        # Fields that cannot be overwritten
         protected_fields = self._get_base_csv_populated_fields()
         protected_fields.update(self.non_copyable_fields)
 
-        # Determine which metadata fields actually exist in this template
-        fields_to_copy = [
-            f for f in self.data_fields
-            if f.upper() in {m.upper() for m in self._METADATA_COPY_FIELDS}
-            and f not in protected_fields
-        ]
-
-        if not fields_to_copy:
+        # All copyable fields in template order
+        copyable_fields = [f for f in self.data_fields if f not in protected_fields]
+        if not copyable_fields:
             QMessageBox.information(self, "Nothing to Copy",
-                "No metadata fields were found that can be copied\n"
-                "(all are either pre-populated from the base CSV or not in this template).")
-            return
-
-        reply = QMessageBox.question(
-            self, "Copy Metadata Fields",
-            f"Copy {len(fields_to_copy)} metadata field(s) from the previous entry?\n\n"
-            f"Fields: {', '.join(fields_to_copy)}\n\n"
-            "Observation/cover fields will NOT be changed.",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        )
-        if reply == QMessageBox.No:
+                "All fields are pre-populated from the base CSV or otherwise protected.")
             return
 
         previous_entry = self.all_data_entries[source_index]
 
+        # ── Build checklist dialog ────────────────────────────────────────
+        dlg = QDialog(self)
+        dlg.setWindowTitle(f"Copy Custom Fields from Entry #{source_index + 1}")
+        dlg.resize(420, 520)
+        outer = QVBoxLayout(dlg)
+
+        outer.addWidget(QLabel(
+            f"Select the fields you want to copy from entry #{source_index + 1}:\n"
+            "(previous value shown in brackets)"
+        ))
+
+        # Scrollable checklist
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        container = QWidget()
+        vbox = QVBoxLayout(container)
+        vbox.setSpacing(2)
+        scroll.setWidget(container)
+        outer.addWidget(scroll, 1)
+
+        checkboxes = {}
+        for field_name in copyable_fields:
+            prev_val = previous_entry.get(field_name, '')
+            label = f"{field_name}" + (f"  [{prev_val}]" if prev_val else "  [blank]")
+            cb = QCheckBox(label)
+            # Restore last-used selection; default to unchecked for new fields
+            cb.setChecked(field_name in self._copy_custom_fields_selection)
+            vbox.addWidget(cb)
+            checkboxes[field_name] = cb
+
+        # Select-all / deselect-all helpers
+        btn_row = QHBoxLayout()
+        sel_all_btn = QPushButton("Select All")
+        sel_none_btn = QPushButton("Deselect All")
+        sel_save_btn = QPushButton("Save Selection")
+        sel_all_btn.clicked.connect(lambda: [cb.setChecked(True) for cb in checkboxes.values()])
+        sel_none_btn.clicked.connect(lambda: [cb.setChecked(False) for cb in checkboxes.values()])
+        def _save_selection():
+            self._copy_custom_fields_selection = {f for f, cb in checkboxes.items() if cb.isChecked()}
+            QMessageBox.information(dlg, "Selection Saved",
+                f"{len(self._copy_custom_fields_selection)} field(s) saved.\nThey will be pre-checked next time you open this dialog.")
+        sel_save_btn.clicked.connect(_save_selection)
+        btn_row.addWidget(sel_all_btn)
+        btn_row.addWidget(sel_none_btn)
+        btn_row.addWidget(sel_save_btn)
+        outer.addLayout(btn_row)
+
+        # OK / Cancel
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dlg.accept)
+        buttons.rejected.connect(dlg.reject)
+        outer.addWidget(buttons)
+
+        if dlg.exec_() != QDialog.Accepted:
+            return
+
+        selected = [f for f, cb in checkboxes.items() if cb.isChecked()]
+        if not selected:
+            return
+
+        # Persist the selection for next time
+        self._copy_custom_fields_selection = set(selected)
+
+        # ── Apply selected fields ─────────────────────────────────────────
         for widget in self.data_fields.values():
             widget.blockSignals(True)
 
         fields_copied = 0
-        for field_name in fields_to_copy:
+        for field_name in selected:
             widget = self.data_fields[field_name]
             value = previous_entry.get(field_name, '')
             if isinstance(widget, QTextEdit):
@@ -6145,10 +6559,13 @@ class VideoPlayer(QMainWindow):
             widget.blockSignals(False)
 
         self.mark_entry_changed()
+        for field_name in selected:
+            self.check_autofill_rules(field_name)
+            self.check_calculated_rules(field_name)
         self.update_extract_button_state()
 
-        QMessageBox.information(self, "Metadata Copied",
-            f"Copied {fields_copied} metadata field value(s) from entry #{source_index + 1}.\n\n"
+        QMessageBox.information(self, "Fields Copied",
+            f"Copied {fields_copied} field value(s) from entry #{source_index + 1}.\n\n"
             "Review and modify as needed.")
 
     def auto_save_data_entry(self, drop_id, still_filename):
@@ -6207,18 +6624,14 @@ class VideoPlayer(QMainWindow):
         fieldnames = self.template_fieldnames if self.template_fieldnames else list(data_row.keys())
         
         try:
-            with open(output_file, 'a', newline='', encoding='utf-8') as f:
-                writer = csv.DictWriter(f, fieldnames=fieldnames)
-                
-                # Write header if file is new
-                if not file_exists:
-                    writer.writeheader()
-                
-                # Write data row
-                writer.writerow(data_row)
-            
-            # Add to in-memory list
+            # Add to in-memory list, sort, then rewrite so CSV stays ordered
             self.all_data_entries.append(data_row)
+            self._sort_all_entries()
+            with open(output_file, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerows(self.all_data_entries)
+            
             self._new_entry_draft = None  # Committed — draft is now stale
             self._update_progress_label()
 
@@ -6275,6 +6688,7 @@ class VideoPlayer(QMainWindow):
         fieldnames = self.template_fieldnames if self.template_fieldnames else []
         
         try:
+            self._sort_all_entries()
             with open(output_file, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
                 writer.writeheader()
@@ -7284,14 +7698,15 @@ class VideoPlayer(QMainWindow):
                 elif rule_type == 'conditional':
                     if_field = rule.get('if_field')
                     if_value = str(rule.get('if_value', '')).strip()
+                    if_condition = rule.get('if_condition', 'equals')
                     then_field = rule.get('then_field')
                     then_condition = rule.get('then_condition', 'equals')
                     then_value = str(rule.get('then_value', '')).strip()
                     
                     current_if_value = data_row.get(if_field, '').strip()
                     
-                    # Check if condition applies
-                    if current_if_value == if_value:
+                    # Check if condition applies (supports if_condition for numeric/inequality comparisons)
+                    if self._compare_values_with_condition(current_if_value, if_value, if_condition):
                         current_then_value = data_row.get(then_field, '').strip()
                         
                         # Evaluate the condition
@@ -7531,14 +7946,21 @@ class VideoPlayer(QMainWindow):
                 if field_name == 'GRAB_ONLY':
                     grab_only_written = True
 
-        # Reset fields whose condition is no longer met
+        # Reset fields whose condition is no longer met — but only when the
+        # field still holds an auto-set value ("", "0" or "NA").  User-entered
+        # data must never be wiped by a non-matching clear (fixes the bug where
+        # changing a cover total from e.g. 50 → 60 erased sub-category values).
         for field_name in fields_to_clear:
             if field_name in self.data_fields:
                 target_widget = self.data_fields[field_name]
-                if isinstance(target_widget, QTextEdit):
-                    target_widget.setPlainText('')
-                else:
-                    target_widget.setText('')
+                current_val = (target_widget.toPlainText().strip()
+                               if isinstance(target_widget, QTextEdit)
+                               else target_widget.text().strip())
+                if current_val.upper() in ('', '0', 'NA'):
+                    if isinstance(target_widget, QTextEdit):
+                        target_widget.setPlainText('')
+                    else:
+                        target_widget.setText('')
 
         # Re-enforce all OTHER currently-active autofill rules so that a
         # higher-priority trigger (e.g. GRAB_ONLY=1) is never accidentally

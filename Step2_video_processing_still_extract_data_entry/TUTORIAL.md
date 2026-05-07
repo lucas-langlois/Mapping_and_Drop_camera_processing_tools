@@ -197,6 +197,7 @@ Validation rules automatically check your data for:
 - Missing required fields (e.g., POINT_ID cannot be empty)
 - Logical inconsistencies (e.g., if SG_PRESENT=0, then SG_COVER must be 0)
 - Incorrect totals (e.g., all cover percentages must sum to 100%)
+- Cross-field consistency (e.g., if SG_COVER > 0 then RANK and RANK_TYPE must also be filled)
 
 ### Step 1: Open the Rules Manager
 
@@ -357,6 +358,35 @@ Auto-fill works in both directions:
 This prevents stale "NA" values lingering in fields when you change your mind.
 
 **Power Combo:** Conditional Sum + Auto-Fill = Fast entry + Quality control!
+
+#### Dropdown Fields (Plain List)
+
+Use a `dropdown` rule when you want a pick-list of text values **without** the numeric-style labels that `allowed_values` adds:
+
+**Example: RANK_TYPE**
+
+```json
+{ "type": "dropdown", "field": "RANK_TYPE", "values": ["NA", "low", "high", "EA"] }
+```
+
+- The field renders as a combobox showing exactly `NA`, `low`, `high`, `EA`
+- The selected value is stored as-is in the CSV (no label suffix)
+- Combine with an `allowed_values` rule to also block invalid freeform entries if the user somehow bypasses the dropdown
+
+#### Cross-Field (Conditional) Validation
+
+Conditional rules can use comparison operators to validate consistency between related fields. This is useful for seagrass fields where `SG_COVER`, `RANK`, and `RANK_TYPE` must all agree:
+
+**Example rules already configured in the NESP Subtidal templates:**
+
+| Rule | Meaning |
+|------|---------|
+| `SG_COVER > 0` → `RANK > 0` | If cover is recorded, a rank must be assigned |
+| `SG_COVER > 0` → `RANK_TYPE ≠ NA` | If cover is recorded, rank type must be set |
+| `RANK_TYPE ≠ NA` → `SG_COVER > 0` | If rank type is set, cover must be > 0 |
+| `RANK > 0` → `SG_COVER > 0` | If a rank is given, cover must be > 0 |
+
+All six rules guard against any incomplete combination of the three fields, so if you fill in `SG_COVER = 30` but forget to set `RANK_TYPE`, the form highlights the inconsistency immediately.
 
 ### Tips for Validation Rules
 
@@ -864,6 +894,7 @@ Use the navigation buttons at the top of the data entry pane:
 - **◀ Previous Entry** — go back one entry (or, from the new entry form, step into the saved entries)
 - **Next Entry ▶** — go forward one entry; from the last saved entry, steps back to the new entry form
 - **Entry X of Y / New entry** — shows your current position
+- **🔍 Browse Entries** — (green button) open a searchable list of all saved entries; click any row to jump directly to it
 
 **The new entry form is always reachable:**  
 The Next ▶ button is enabled even when you are on the last saved entry. One more press returns to the new entry form.
@@ -876,6 +907,9 @@ When you are on the new entry form (fields partially filled) and click ◀ Previ
 - When you click Next ▶ back to the new entry form, **every field is restored exactly as you left it**
 - The draft is discarded only when you commit a new entry (extract or save)
 
+**Browse Entries also preserves your draft:**  
+If you click 🔍 Browse Entries while the new entry form has partially filled data, the draft is captured before the dialog opens. Returning via Next ▶ restores everything.
+
 ### Step 4: Edit Saved Data
 
 1. Navigate to the entry you want to fix
@@ -884,7 +918,35 @@ When you are on the new entry form (fields partially filled) and click ◀ Previ
 4. Navigate away — changes **auto-save** immediately
 5. Or click **"Save Entry"** to save manually
 
-### Step 5: Manual Save (Optional)
+> **Validation blocks saving:** If a field fails a validation rule, the save is blocked and the problem field is highlighted in red. Fix the value, then navigate or save again.
+
+### Step 5: Navigating Rows While Editing a Saved Entry
+
+If you clicked ◀ Previous Entry to review an older drop and made a correction, then want to move to the next video row:
+
+- Click **Next Row ▶** (or Prev Row, or Go To Row…)
+- The app **auto-saves your edits** to the current entry first
+- If the entry fails validation, the row navigation is **blocked** — you must fix the error before leaving
+- Once the edits are saved, the new row loads in clean new-entry mode
+
+This prevents blank or corrupt rows from being written to the CSV when switching rows after browsing old entries.
+
+### Step 6: Resuming the New Entry After Reviewing
+
+Full workflow for review-then-resume:
+
+```
+[Working on new entry for Row 8, filled in SUBSTRATE]
+↓ Click ◀ Previous Entry
+   Draft saved. Entry 7 loads.
+↓ Review / fix Entry 7
+   Entry 7 auto-saves when you navigate away.
+↓ Click Next Entry ▶ (as many times as needed to reach the new entry form)
+   New entry form restored: SUBSTRATE field still shows your value.
+↓ Continue filling in data and extract.
+```
+
+### Step 7: Manual Save (Optional)
 
 1. Click **"Save Entry"** button
 2. Confirmation: "Entry updated successfully."

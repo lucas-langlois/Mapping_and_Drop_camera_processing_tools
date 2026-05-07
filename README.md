@@ -336,6 +336,11 @@ For questions or issues:
 
 ## 🔄 Version History
 
+- **v1.2** - Grab-only mode fixes, CSV auto-sort, Data Table Viewer
+  - Metadata/survey fields excluded from NA-fill in grab-only entries
+  - CSV auto-sorts by SITE_ID → DROP_ID (natural numeric order) on every save
+  - New "📋 View Data Table" popup — browse all entries without opening Excel
+  - DATETIME column support; natural sort (5 < 10 < 111)
 - **v1.0.0** - Initial release with complete two-step workflow
   - Video renaming and GPS matching (R Shiny)
   - Video analysis and data entry tool (Python)

@@ -22,11 +22,14 @@ A comprehensive video player application with integrated data entry for marine/e
 ✅ **Decimal Precision** - Support for decimal values (e.g., 0.7%) in percentage fields  
 ✅ **Auto-Population** - Pre-fill location/metadata from base CSV  
 ✅ **Smart Drop Numbering** - Sequential drop IDs keyed on **POINT_ID** (not video name) — carries across multiple videos for the same point  
-✅ **Dropdown Fields** - `allowed_values` fields rendered as labelled dropdowns (e.g., "1 — Yes", "0 — No", "NA — Not applicable")  
+✅ **Dropdown Fields** - `allowed_values` fields rendered as labelled dropdowns (e.g., "1 — Yes", "0 — No", "NA — Not applicable"); a separate `dropdown` rule type renders a plain list without numeric-style labels (used for text-valued fields like RANK_TYPE)  
 ✅ **Entry Navigation** - Browse and edit previous entries with ◀ Previous / Next ▶ buttons  
 ✅ **Draft Buffer** - Navigating away from a new unsaved entry saves a temporary draft; returning restores every field exactly  
 ✅ **Return-to-New-Entry** - Next ▶ is always enabled from any saved entry, stepping back to the new entry form  
-✅ **Auto-Save on Navigation** - Changes to existing entries auto-saved when moving between them  
+✅ **Auto-Save on Navigation** - Edits to any saved entry are auto-saved before navigating to another entry or a different CSV row  
+✅ **Row-Nav Auto-Save** - Clicking Prev/Next Row while editing a saved entry auto-saves those edits first; navigation is blocked if validation fails  
+✅ **Browse Entries Draft Preservation** - Opening the Browse Entries dialog while on the new entry form snapshots the draft so it is restored when you return  
+✅ **Clean New-Entry Mode on Row Switch** - Navigating to a different CSV row always resets to a clean new-entry state, preventing accidental overwrites of saved entries  
 ✅ **Still Image Integration** - Auto-create data entry when extracting frames  
 ✅ **Validation Rules** - Built-in QAQC system with visual rule builder  
 ✅ **Auto-Fill Rules** - Automatically populate fields based on conditions  
@@ -309,6 +312,9 @@ Any field with an `allowed_values` rule is automatically rendered as a dropdown 
 - **Next Entry ▶** — always active from any saved entry; the last step returns to your new entry form exactly as you left it
 - If you navigate away without saving, every field in the form is restored when you come back
 - Draft is automatically discarded when you commit an entry (extract or save)
+- **Prev/Next Row with unsaved edits** — if you were editing a saved entry and click a row-navigation button, edits are auto-saved first; if validation fails the navigation is blocked so no data is lost
+- **Browse Entries draft** — opening the Browse Entries (🔍) dialog while the new entry form has typed data snapshots a draft; returning via Next ▶ restores the form
+- **Row switch resets state** — changing to a different CSV row always resets `current_entry_index` to new-entry mode, preventing the blank-row-overwrite bug that could occur after browsing saved entries
 
 ### Grab-Only Mode
 For sampling points where you have a grab photo but no drop video:

@@ -4,7 +4,7 @@
       "name": "Metadata",
       "colour": "#E3F2FD",
       "fields": [
-        "SITE",
+        "SITE_ID",
         "DROP_ID",
         "DATE_TIME",
         "TIME",
@@ -34,11 +34,11 @@
       "name": "Seagrass",
       "colour": "#E8F5E9",
       "fields": [
-        "SEAGRASS_P",
+        "SG_PRESENT",
         "RANK",
         "RANK_TYPE",
-        "EXCLUDE_B",
-        "SEAGRASS_C",
+        "EXCLU_BIO",
+        "SG_COVER",
         "EPI_COVER",
         "CR_COMP",
         "CS_COMP",
@@ -56,7 +56,7 @@
       "subgroups": [
         {
           "name": "Species Composition (% adding to 100)",
-          "parent_field": "SEAGRASS_C",
+          "parent_field": "SG_COVER",
           "fields": [
             "CR_COMP",
             "CS_COMP",
@@ -80,9 +80,9 @@
       "fields": [
         "AG_COVER",
         "AG_TURF_MA",
-        "AG_ERECT_M",
+        "AG_MACRO",
         "AG_ENCRUST",
-        "AG_ERECT_C",
+        "AG_CALC",
         "AG_FILAMEN"
       ],
       "subgroups": [
@@ -91,9 +91,9 @@
           "parent_field": "AG_COVER",
           "fields": [
             "AG_TURF_MA",
-            "AG_ERECT_M",
+            "AG_MACRO",
             "AG_ENCRUST",
-            "AG_ERECT_C",
+            "AG_CALC",
             "AG_FILAMEN"
           ]
         }
@@ -155,11 +155,12 @@
       "name": "Other Benthic Invertebrates",
       "colour": "#FBE9E7",
       "fields": [
-        "OTHER_BMI",
         "BMI_SPONGE",
         "BMI_ASCI",
         "BMI_BRYO",
-        "BMI_HYDR"
+        "BMI_HYDR",
+        "BMI_OTHER",
+        "PLOT_BMI"
       ],
       "subgroups": []
     },

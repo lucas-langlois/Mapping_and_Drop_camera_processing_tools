@@ -15,8 +15,8 @@
       "trigger_field": "OPEN_100",
       "trigger_value": "1",
       "actions": {
-        "SEAGRASS_P": "0",
-        "SEAGRASS_C": "0",
+        "SG_PRESENT": "0",
+        "SG_COVER": "0",
         "RANK": "NA",
         "RANK_TYPE": "NA",
         "CR_COMP": "NA",
@@ -34,9 +34,9 @@
         "EPI_COVER": "0",
         "AG_COVER": "0",
         "AG_TURF_MA": "NA",
-        "AG_ERECT_M": "NA",
+        "AG_MACRO": "NA",
         "AG_ENCRUST": "NA",
-        "AG_ERECT_C": "NA",
+        "AG_CALC": "NA",
         "AG_FILAMEN": "NA",
         "HC_COVER": "0",
         "HC_BRANC": "NA",
@@ -51,34 +51,34 @@
         "SC_GORG": "NA",
         "SC_WHIP": "NA",
         "SC_OTHER": "NA",
-        "OTHER_BMI": "0",
         "BMI_SPONGE": "0",
         "BMI_ASCI": "0",
         "BMI_BRYO": "0",
-        "BMI_HYDR": "0"
+        "BMI_HYDR": "0",
+        "BMI_OTHER": "0"
       }
     },
     {
       "type": "allowed_values",
-      "field": "SEAGRASS_P",
+      "field": "SG_PRESENT",
       "values": [
         "0",
         "1",
         "NA"
       ],
-      "error": "SEAGRASS_P must be 0, 1, or NA"
+      "error": "SG_PRESENT must be 0, 1, or NA"
     },
     {
       "type": "required",
-      "field": "SEAGRASS_P",
-      "error": "SEAGRASS_P is required (enter 0, 1, or NA)"
+      "field": "SG_PRESENT",
+      "error": "SG_PRESENT is required (enter 0, 1, or NA)"
     },
     {
       "type": "autofill",
-      "trigger_field": "SEAGRASS_P",
+      "trigger_field": "SG_PRESENT",
       "trigger_value": "0",
       "actions": {
-        "SEAGRASS_C": "0",
+        "SG_COVER": "0",
         "CR_COMP": "NA",
         "CS_COMP": "NA",
         "EA_COMP": "NA",
@@ -98,10 +98,10 @@
     },
     {
       "type": "autofill",
-      "trigger_field": "SEAGRASS_P",
+      "trigger_field": "SG_PRESENT",
       "trigger_value": "NA",
       "actions": {
-        "SEAGRASS_C": "NA",
+        "SG_COVER": "NA",
         "CR_COMP": "NA",
         "CS_COMP": "NA",
         "EA_COMP": "NA",
@@ -117,9 +117,9 @@
         "EPI_COVER": "NA",
         "AG_COVER": "NA",
         "AG_TURF_MA": "NA",
-        "AG_ERECT_M": "NA",
+        "AG_MACRO": "NA",
         "AG_ENCRUST": "NA",
-        "AG_ERECT_C": "NA",
+        "AG_CALC": "NA",
         "AG_FILAMEN": "NA",
         "HC_COVER": "NA",
         "HC_BRANC": "NA",
@@ -134,11 +134,11 @@
         "SC_GORG": "NA",
         "SC_WHIP": "NA",
         "SC_OTHER": "NA",
-        "OTHER_BMI": "NA",
         "BMI_SPONGE": "NA",
         "BMI_ASCI": "NA",
         "BMI_BRYO": "NA",
         "BMI_HYDR": "NA",
+        "BMI_OTHER": "NA",
         "OPEN_SUBST": "NA",
         "RANK": "NA",
         "RANK_TYPE": "NA"
@@ -146,7 +146,7 @@
     },
     {
       "type": "conditional_sum",
-      "if_field": "SEAGRASS_P",
+      "if_field": "SG_PRESENT",
       "if_value": "1",
       "fields": [
         "CR_COMP",
@@ -169,30 +169,30 @@
     },
     {
       "type": "conditional",
-      "if_field": "SEAGRASS_P",
+      "if_field": "SG_PRESENT",
       "if_value": "0",
-      "then_field": "SEAGRASS_C",
+      "then_field": "SG_COVER",
       "then_condition": "equals",
       "then_value": "0",
-      "error": "If no seagrass is present, SEAGRASS_C must be 0"
+      "error": "If no seagrass is present, SG_COVER must be 0"
     },
     {
       "type": "conditional",
-      "if_field": "SEAGRASS_P",
+      "if_field": "SG_PRESENT",
       "if_value": "1",
-      "then_field": "SEAGRASS_C",
+      "then_field": "SG_COVER",
       "then_condition": "greater_than",
       "then_value": "0",
-      "error": "If seagrass is present, SEAGRASS_C must be greater than 0"
+      "error": "If seagrass is present, SG_COVER must be greater than 0"
     },
     {
       "type": "conditional",
-      "if_field": "SEAGRASS_P",
+      "if_field": "SG_PRESENT",
       "if_value": "1",
-      "then_field": "SEAGRASS_C",
+      "then_field": "SG_COVER",
       "then_condition": "less_equal",
       "then_value": "100",
-      "error": "If seagrass is present, SEAGRASS_C must be 100 or less"
+      "error": "If seagrass is present, SG_COVER must be 100 or less"
     },
     {
       "type": "autofill",
@@ -200,9 +200,9 @@
       "trigger_value": "0",
       "actions": {
         "AG_TURF_MA": "NA",
-        "AG_ERECT_M": "NA",
+        "AG_MACRO": "NA",
         "AG_ENCRUST": "NA",
-        "AG_ERECT_C": "NA",
+        "AG_CALC": "NA",
         "AG_FILAMEN": "NA"
       }
     },
@@ -212,9 +212,9 @@
       "trigger_value": "NA",
       "actions": {
         "AG_TURF_MA": "NA",
-        "AG_ERECT_M": "NA",
+        "AG_MACRO": "NA",
         "AG_ENCRUST": "NA",
-        "AG_ERECT_C": "NA",
+        "AG_CALC": "NA",
         "AG_FILAMEN": "NA"
       }
     },
@@ -225,9 +225,9 @@
       "if_value": "0",
       "fields": [
         "AG_TURF_MA",
-        "AG_ERECT_M",
+        "AG_MACRO",
         "AG_ENCRUST",
-        "AG_ERECT_C",
+        "AG_CALC",
         "AG_FILAMEN"
       ],
       "comparison": "equal",
@@ -354,58 +354,141 @@
       "error": "DOLPHIN must be 0, 1, or NA"
     },
     {
-      "type": "allowed_values",
-      "field": "SEA_CUCUMB",
-      "values": [
-        "0",
-        "1",
-        "NA"
-      ],
-      "error": "SEA_CUCUMB must be 0, 1, or NA"
-    },
-    {
       "type": "required",
       "field": "SEA_CUCUMB",
-      "error": "SEA_CUCUMB is required (enter 0, 1, or NA)"
+      "error": "SEA_CUCUMB is required (enter NA or a count: 0, 1, 2, ...)"
     },
     {
       "type": "allowed_values",
       "field": "RANK_TYPE",
       "values": [
+        "NA",
         "low",
         "high",
-        "NA"
+        "EA"
       ],
-      "error": "RANK_TYPE must be low, high, or NA"
+      "error": "RANK_TYPE must be NA, low, high, or EA"
+    },
+    {
+      "type": "dropdown",
+      "field": "RANK_TYPE",
+      "values": [
+        "NA",
+        "low",
+        "high",
+        "EA"
+      ]
+    },
+    {
+      "type": "conditional",
+      "if_field": "SG_COVER",
+      "if_condition": "greater_than",
+      "if_value": "0",
+      "then_field": "RANK",
+      "then_condition": "greater_than",
+      "then_value": "0",
+      "error": "If SG_COVER > 0, RANK must be > 0"
+    },
+    {
+      "type": "conditional",
+      "if_field": "SG_COVER",
+      "if_condition": "greater_than",
+      "if_value": "0",
+      "then_field": "RANK_TYPE",
+      "then_condition": "not_equals",
+      "then_value": "NA",
+      "error": "If SG_COVER > 0, RANK_TYPE must be low or high (not NA)"
+    },
+    {
+      "type": "conditional",
+      "if_field": "RANK_TYPE",
+      "if_condition": "not_equals",
+      "if_value": "NA",
+      "then_field": "RANK",
+      "then_condition": "greater_than",
+      "then_value": "0",
+      "error": "If RANK_TYPE is low or high, RANK must be > 0"
+    },
+    {
+      "type": "conditional",
+      "if_field": "RANK_TYPE",
+      "if_condition": "not_equals",
+      "if_value": "NA",
+      "then_field": "SG_COVER",
+      "then_condition": "greater_than",
+      "then_value": "0",
+      "error": "If RANK_TYPE is low or high, SG_COVER must be > 0"
+    },
+    {
+      "type": "conditional",
+      "if_field": "RANK",
+      "if_condition": "greater_than",
+      "if_value": "0",
+      "then_field": "SG_COVER",
+      "then_condition": "greater_than",
+      "then_value": "0",
+      "error": "If RANK > 0, SG_COVER must be > 0"
+    },
+    {
+      "type": "conditional",
+      "if_field": "RANK",
+      "if_condition": "greater_than",
+      "if_value": "0",
+      "then_field": "RANK_TYPE",
+      "then_condition": "not_equals",
+      "then_value": "NA",
+      "error": "If RANK > 0, RANK_TYPE must be low or high (not NA)"
     },
     {
       "type": "conditional_sum",
-      "if_field": "SEAGRASS_P",
+      "if_field": "SG_PRESENT",
       "if_condition": "not_equals",
       "if_value": "NA",
       "fields": [
-        "SEAGRASS_C",
+        "SG_COVER",
         "AG_COVER",
         "HC_COVER",
         "SC_COVER",
-        "OTHER_BMI",
         "BMI_SPONGE",
         "BMI_ASCI",
         "BMI_BRYO",
         "BMI_HYDR",
+        "BMI_OTHER",
         "OPEN_SUBST"
       ],
       "comparison": "equal",
       "target": 100.0,
       "tolerance": 0.0,
       "blank_as_zero": false,
-      "error": "Sum of SEAGRASS_C, AG_COVER, HC_COVER, SC_COVER, OTHER_BMI, BMI_SPONGE, BMI_ASCI, BMI_BRYO, BMI_HYDR, OPEN_SUBST must equal 100"
+      "error": "Sum of SG_COVER, AG_COVER, HC_COVER, SC_COVER, BMI_SPONGE, BMI_ASCI, BMI_BRYO, BMI_HYDR, BMI_OTHER, OPEN_SUBST must equal 100"
     },
     {
       "type": "calculated",
       "target_field": "OPEN_SUBST",
-      "formula": "100 - SEAGRASS_C - AG_COVER - HC_COVER - SC_COVER - OTHER_BMI - BMI_SPONGE - BMI_ASCI - BMI_BRYO - BMI_HYDR",
+      "formula": "100 - SG_COVER - AG_COVER - HC_COVER - SC_COVER - BMI_SPONGE - BMI_ASCI - BMI_BRYO - BMI_HYDR - BMI_OTHER",
       "decimals": 1
+    },
+    {
+      "type": "calculated",
+      "target_field": "PLOT_BMI",
+      "formula": "BMI_ASCI + BMI_BRYO + BMI_HYDR + BMI_OTHER",
+      "decimals": 1
+    },
+    {
+      "type": "autofill",
+      "trigger_field": "SG_PRESENT",
+      "trigger_value": "0",
+      "actions": {
+        "METHOD": "drop-camera"
+      }
+    },
+    {
+      "type": "autofill",
+      "trigger_field": "SG_PRESENT",
+      "trigger_value": "1",
+      "actions": {
+        "METHOD": "drop-camera"
+      }
     }
   ]
 }
