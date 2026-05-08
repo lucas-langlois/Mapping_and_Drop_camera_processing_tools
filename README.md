@@ -148,13 +148,9 @@ The tool will:
 **Purpose**: Extract still frames from videos and perform structured habitat/benthic data entry.
 
 **Requirements**:
-- Python 3.8+
+- 📥 **[Download drop_cam_analysis_app.exe from the latest release](https://github.com/lucas-langlois/Mapping_and_Drop_camera_processing_tools/releases/latest)** 
 - Renamed video files from Step 1
 - Data entry template CSV
-
-**Option 1: Use the Pre-Built Executable (Recommended)**:
-
-📥 **[Download drop_cam_analysis_app.exe from the latest release](https://github.com/lucas-langlois/Mapping_and_Drop_camera_processing_tools/releases/latest)**
 
 > ⚠️ **Important — placement matters!**
 > The app locates `drop_videos/`, `drop_stills/`, `grab_photos/`, `projects/` and `data/` relative to wherever the `.exe` is placed.
@@ -169,27 +165,6 @@ The tool will:
 >   projects/
 >   data/
 > ```
-
-**Option 2: Run from Source**:
-```bash
-# Navigate to Step2 folder
-cd Step2_video_processing_still_extract_data_entry
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Launch the video player
-python video_player.py
-```
-
-**Option 3: Rebuild the Executable**:
-```bash
-# Navigate to Step2 folder
-cd Step2_video_processing_still_extract_data_entry
-
-# Build the .exe (output in dist/drop_cam_analysis_app.exe)
-python build_exe.py
-```
 
 The tool provides:
 - 🎬 Video playback with frame-by-frame control
