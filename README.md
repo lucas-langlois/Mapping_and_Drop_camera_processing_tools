@@ -1,4 +1,33 @@
+
 # Mapping and Drop Camera Processing Tools
+
+## 🟢 Quick Start for Beginners
+
+**If you just want to use the app and don't know how to code, follow these steps:**
+
+### 1. Download the Folder Structure & Code
+
+- Click the green **"Code"** button at the top of the [GitHub repository page](https://github.com/lucas-langlois/Mapping_and_Drop_camera_processing_tools)
+- Choose **"Download ZIP"**
+- Unzip the folder somewhere on your computer (e.g., Desktop or Documents)
+
+This gives you all the required folders and templates in the correct structure.
+
+### 2. Download the Latest App (.exe)
+
+- Go to the [Releases page](https://github.com/lucas-langlois/Mapping_and_Drop_camera_processing_tools/releases/latest)
+- Download the file named **`drop_cam_analysis_app.exe`**
+- Move the downloaded `.exe` file into the folder:
+  `Step2_video_processing_still_extract_data_entry/`
+- Double-click the `.exe` to open the app (no installation needed)
+
+**For Step 2 (the .exe), you do NOT need to install Python or any coding tools.**
+
+**However, you WILL need to install R and (optionally) RStudio if you want to use the Shiny apps for Step 0 and Step 1.**
+  - See the instructions further below for links and details.
+
+---
+
 
 A comprehensive toolkit for processing underwater drop camera videos, from initial file organization to data extraction and analysis. This repository contains two main processing steps designed to streamline marine/environmental video workflows.
 
@@ -254,20 +283,6 @@ Required R packages (auto-installed by START_HERE.R):
 - `shiny`, `shinythemes`, `shinyFiles`
 - `lubridate`, `dplyr`, `readr`
 
-### For Step 2 (Python Tools)
-- **Python** 3.8+: [Download Python](https://www.python.org/downloads/)
-
-Required Python packages:
-```bash
-pip install -r Step2_video_processing_still_extract_data_entry/Source_code/requirements.txt
-```
-
-Main dependencies: `opencv-python`, `pandas`, `pillow`, `PyQt5`, `numpy`
-
-**Optional** - To build standalone executable:
-```bash
-pip install pyinstaller
-```
 
 ---
 
@@ -290,38 +305,30 @@ Contributions are welcome! If you encounter issues or have suggestions:
 
 ---
 
-## � Publishing a New Release (Maintainers)
+## 🔔 App Updates
 
-When a new version of the app is ready:
-
-**1. Rebuild the exe**
-```powershell
-python Step2_video_processing_still_extract_data_entry\build_exe.py
-# Output: Step2_video_processing_still_extract_data_entry\dist\drop_cam_analysis_app.exe
-```
-
-**2. Create a GitHub Release and upload the exe**
-```powershell
-gh release create v1.x.x "Step2_video_processing_still_extract_data_entry/dist/drop_cam_analysis_app.exe" `
-  --repo lucas-langlois/Mapping_and_Drop_camera_processing_tools `
-  --title "v1.x.x - Drop Cam Analysis App" `
-  --notes "Brief description of changes"
-```
-
-**3. Push any code changes as usual**
-```powershell
-git add .
-git commit -m "..."
-git push origin main
-```
-
-> `dist/` and `build/` are gitignored — the exe is never committed to the repo, only uploaded to Releases. The README download link points to `/releases/latest` so it always picks up the newest release automatically.
+Keep an eye on the [Releases page](https://github.com/lucas-langlois/Mapping_and_Drop_camera_processing_tools/releases/latest) for new versions of the `.exe` app. When a new release is available, download it and replace your old version to get the latest features and fixes.
 
 ---
 
-## �📄 License
 
-This project is part of the NESP Marine Biodiversity Hub research program.
+## 📄 License
+
+This project is licensed under the [MIT License](LICENSE).
+
+---
+
+## 📢 Citation & Acknowledgment
+
+If you use or adapt this toolkit, please acknowledge the original authors. Citation is not legally required by the license, but is strongly requested to support continued development and recognition.
+
+**Preferred citation:**
+
+Langlois, L., & James Cook University (2026). Mapping and Drop Camera Processing Tools. https://github.com/lucas-langlois/Mapping_and_Drop_camera_processing_tools
+
+Or, simply cite this repository and the NESP Marine Biodiversity Hub research program in your work.
+
+Thank you for supporting open science!
 
 ---
 
