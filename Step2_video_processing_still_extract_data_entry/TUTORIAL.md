@@ -493,7 +493,7 @@ With the video folder set and a base CSV loaded, use the row navigation buttons 
 - **Next Row ▶**: Go to the next CSV row
 - **Go To Row…**: Jump directly to any row by number
 
-The app matches the `VIDEO_FILENAME` column from the current row against files in the video folder. If a matching video is found, it loads automatically. If no match is found, a no-video placeholder is shown instead.
+The app matches the `VIDEO_FILENAME` or `matched_video_filename` column from the current row against files in the video folder. Videos can be stored directly in the selected folder or in child folders such as `drop_videos/Boat1/20251211/XXX.MP4`; the CSV can still store only `XXX.MP4`. If a matching video is found, it loads automatically. If no match is found, a no-video placeholder is shown instead.
 
 The status label shows your current position (e.g., `"3/152: Point ID003 | 🎥 Video"`) and the folder label confirms which folder is active.
 
@@ -1329,7 +1329,7 @@ If you have multiple videos for the same sampling point:
 ### Troubleshooting Common Issues
 
 **Form fields not pre-populating:**
-- Check VIDEO_FILENAME in base CSV matches exactly (including extension)
+- Check VIDEO_FILENAME or matched_video_filename in base CSV matches the video basename exactly (including extension)
 - Verify VIDEO_TIMESTAMP format: `DD/MM/YYYY HH:MM`
 - Try clicking "Load Base CSV" button to reload
 

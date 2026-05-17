@@ -144,6 +144,8 @@ If you need a standalone `.exe` file (no Python required to run):
 1. **Set Video Folder**
    - Click **"📁 Use drop_videos/"** (or **"Choose Folder…"** for a custom path)
    - The folder is set as the video source; videos load automatically as you navigate rows
+   - Videos can be stored directly in this folder or in child folders such as `drop_videos/Boat1/20251211/XXX.MP4`
+   - The base CSV can still store only the filename in `VIDEO_FILENAME` or `matched_video_filename` (for example, `XXX.MP4`)
    - Use **◀ Prev Row / Next Row ▶** to step through base CSV rows and load the matching video
 
 2. **For Each Drop:**

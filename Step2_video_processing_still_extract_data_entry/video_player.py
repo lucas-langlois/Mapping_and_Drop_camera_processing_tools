@@ -3,7 +3,7 @@ MP4 Video Player with Frame Extraction
 Features: Play/Pause, Frame navigation, Timeline scrubbing, Speed control, Frame export
 """
 
-APP_VERSION = "1.2"
+APP_VERSION = "1.2.1"
 
 import sys
 import os
@@ -2375,6 +2375,8 @@ class VideoPlayer(QMainWindow):
         self.data_dir = os.path.join(application_path, 'data')
         self.projects_dir = os.path.join(application_path, 'projects')
         os.makedirs(self.projects_dir, exist_ok=True)
+        self._video_lookup_root = None
+        self._video_lookup = {}
         
         # Project state variables
         self.current_project_file = None
@@ -2663,6 +2665,73 @@ class VideoPlayer(QMainWindow):
     def _get_video_filename_from_row(self, row):
         """Get video filename value from a row using flexible field aliases."""
         return self._get_row_value(row, ['VIDEO_FILENAME', 'MATCHED_VIDEO_FILENAME', 'VIDEO_FILE', 'VIDEO_NAME'])
+
+    def _reset_video_lookup_cache(self):
+        """Clear cached recursive video filename lookup."""
+        self._video_lookup_root = None
+        self._video_lookup = {}
+
+    def _build_video_lookup(self):
+        """Index videos under the selected folder by basename for nested-folder projects."""
+        if not self.drop_videos_dir or not os.path.isdir(self.drop_videos_dir):
+            self._reset_video_lookup_cache()
+            return {}
+
+        root = os.path.normcase(os.path.abspath(self.drop_videos_dir))
+        if self._video_lookup_root == root:
+            return self._video_lookup
+
+        lookup = {}
+        video_exts = {'.mp4', '.mov', '.avi', '.mkv', '.m4v'}
+        for dirpath, dirnames, filenames in os.walk(self.drop_videos_dir):
+            dirnames.sort(key=str.lower)
+            for filename in sorted(filenames, key=str.lower):
+                if os.path.splitext(filename)[1].lower() not in video_exts:
+                    continue
+                lookup.setdefault(filename.lower(), []).append(os.path.join(dirpath, filename))
+
+        self._video_lookup_root = root
+        self._video_lookup = lookup
+        return lookup
+
+    def _resolve_video_path_from_filename(self, video_filename):
+        """Resolve a CSV video filename to a file in the selected videos folder.
+
+        Supports both legacy flat layouts:
+            drop_videos/XXX.MP4
+        and nested layouts where the CSV stores only the basename:
+            drop_videos/Boat1/20251211/XXX.MP4
+        """
+        if not self.drop_videos_dir:
+            return ''
+
+        filename_text = str(video_filename or '').strip()
+        if not filename_text:
+            return ''
+
+        filename_base = os.path.basename(filename_text)
+
+        # Legacy fast path: exact basename directly inside drop_videos/.
+        candidate = os.path.join(self.drop_videos_dir, filename_base)
+        if os.path.isfile(candidate):
+            return candidate
+
+        # If a future CSV includes a relative path, support that too.
+        relative_candidate = os.path.normpath(os.path.join(self.drop_videos_dir, filename_text))
+        try:
+            root_abs = os.path.abspath(self.drop_videos_dir)
+            rel_abs = os.path.abspath(relative_candidate)
+            if os.path.commonpath([root_abs, rel_abs]) == root_abs and os.path.isfile(rel_abs):
+                return rel_abs
+        except (OSError, ValueError):
+            pass
+
+        lookup = self._build_video_lookup()
+        matches = lookup.get(filename_base.lower(), [])
+        if matches:
+            return matches[0]
+
+        return ''
 
     def _get_point_identifier_from_row(self, row):
         """Get point/site identifier value from a row using flexible field aliases."""
@@ -4194,11 +4263,13 @@ class VideoPlayer(QMainWindow):
         )
         if folder_path:
             self.drop_videos_dir = folder_path
+            self._reset_video_lookup_cache()
             self._update_video_dir_label()
 
     def _use_default_video_folder(self):
         """Set drop_videos_dir to the default drop_videos/ folder."""
         os.makedirs(self.drop_videos_dir, exist_ok=True)
+        self._reset_video_lookup_cache()
         self._update_video_dir_label()
         QMessageBox.information(
             self, "Videos Folder Set",
@@ -4288,51 +4359,7 @@ class VideoPlayer(QMainWindow):
             else:
                 data_row[field_name] = widget.text().strip()
         
-        # Auto-fill FILENAME if empty/placeholder
-        filename_value = data_row.get('FILENAME', '').strip()
-        filename_is_placeholder = filename_value.lower() == '[will be set on next extraction]'
-
-        if self.grab_only_mode:
-            # In grab-only mode: use GRAB_FILENAME as the filename if FILENAME is blank/placeholder
-            if not filename_value or filename_is_placeholder:
-                grab_fn = self._get_row_value(self.base_data, ['GRAB_FILENAME'])
-                if grab_fn and str(grab_fn).strip() not in ('', 'NA', 'N/A', 'NONE'):
-                    data_row['FILENAME'] = str(grab_fn).strip()
-                else:
-                    data_row['FILENAME'] = 'NA'
-                if 'FILENAME' in self.data_fields:
-                    w = self.data_fields['FILENAME']
-                    w.blockSignals(True)
-                    if isinstance(w, QTextEdit):
-                        w.setPlainText(data_row['FILENAME'])
-                    else:
-                        w.setText(data_row['FILENAME'])
-                    w.blockSignals(False)
-        elif (not filename_value or filename_is_placeholder) and self.video_path:
-            if self.drop_videos_dir and self.video_path:
-                current_drop_id = data_row.get('DROP_ID', '').strip()
-                queue_filename, _ = self._generate_queue_still_filename(current_drop_id)
-                data_row['FILENAME'] = queue_filename
-            else:
-                data_row['FILENAME'] = os.path.basename(self.video_path)
-
-            if 'FILENAME' in self.data_fields:
-                filename_widget = self.data_fields['FILENAME']
-                filename_widget.blockSignals(True)
-                if isinstance(filename_widget, QTextEdit):
-                    filename_widget.setPlainText(data_row['FILENAME'])
-                else:
-                    filename_widget.setText(data_row['FILENAME'])
-                filename_widget.blockSignals(False)
-        
-        # Auto-fill DATE_TIME if DATE and TIME are provided
-        if data_row.get('DATE') and data_row.get('TIME'):
-            data_row['DATE_TIME'] = f"{data_row['DATE']} {data_row['TIME']}"
-        elif not data_row.get('DATE_TIME'):
-            data_row['DATE_TIME'] = ''
-
-        normalized = self._normalize_percentage_fields_in_row(data_row)
-        if normalized:
+        if self._prepare_data_row_for_save(data_row, repair_video_filename=True):
             self._update_widgets_from_data_row(data_row)
         
         # Validate data entry if rules exist
@@ -4751,6 +4778,70 @@ class VideoPlayer(QMainWindow):
 
         frame_number = int(self.current_frame) if hasattr(self, 'current_frame') else 0
         return f"{video_name}_drop{drop_number}_frame{frame_number:06d}.jpg", f"drop{drop_number}"
+
+    def _is_real_entry_value(self, value):
+        """Return True when a CSV/form value is meaningful rather than blank/NA."""
+        text = str(value or '').strip()
+        return bool(text) and text.upper() not in ('NA', 'N/A', 'NONE', 'NULL', 'NAN')
+
+    def _is_pending_filename_placeholder(self, value):
+        """Return True for the generated video-mode pending extraction placeholder."""
+        return str(value or '').strip().lower() == '[will be set on next extraction]'
+
+    def _prepare_data_row_for_save(self, data_row, drop_id=None, still_filename=None, repair_video_filename=False):
+        """Apply final save-time repairs shared by manual save, edit save, and extract save."""
+        changed = False
+
+        def set_value(field_name, value):
+            nonlocal changed
+            if field_name not in data_row:
+                return
+            old_value = str(data_row.get(field_name, '') or '').strip()
+            new_value = str(value).strip()
+            if old_value != new_value:
+                data_row[field_name] = new_value
+                changed = True
+
+        if drop_id is not None:
+            set_value('DROP_ID', drop_id)
+        if still_filename is not None:
+            set_value('FILENAME', still_filename)
+
+        base_grab_fn = self._get_row_value(self.base_data, ['GRAB_FILENAME']) if self.base_data else ''
+        if 'GRAB_FILENAME' in data_row:
+            grab_value = data_row.get('GRAB_FILENAME', '')
+            if (not self._is_real_entry_value(grab_value) or self._is_pending_filename_placeholder(grab_value)) and self._is_real_entry_value(base_grab_fn):
+                set_value('GRAB_FILENAME', base_grab_fn)
+
+        drop_id_value = str(data_row.get('DROP_ID', '') or '').strip()
+        is_grab_entry = (
+            self.grab_only_mode
+            or str(data_row.get('GRAB_ONLY', '') or '').strip() == '1'
+            or drop_id_value.lower().startswith('grab')
+        )
+
+        filename_value = data_row.get('FILENAME', '')
+        if is_grab_entry and ('FILENAME' in data_row):
+            if not self._is_real_entry_value(filename_value) or self._is_pending_filename_placeholder(filename_value):
+                resolved_grab_fn = data_row.get('GRAB_FILENAME', '') or base_grab_fn
+                set_value('FILENAME', resolved_grab_fn if self._is_real_entry_value(resolved_grab_fn) else 'NA')
+        elif repair_video_filename and ('FILENAME' in data_row) and (not self._is_real_entry_value(filename_value) or self._is_pending_filename_placeholder(filename_value)) and self.video_path:
+            if self.drop_videos_dir:
+                current_drop_id = str(data_row.get('DROP_ID', '') or '').strip()
+                queue_filename, _ = self._generate_queue_still_filename(current_drop_id)
+                set_value('FILENAME', queue_filename)
+            else:
+                set_value('FILENAME', os.path.basename(self.video_path))
+
+        if data_row.get('DATE') and data_row.get('TIME'):
+            set_value('DATE_TIME', f"{data_row['DATE']} {data_row['TIME']}")
+        elif 'DATE_TIME' in data_row and not data_row.get('DATE_TIME'):
+            set_value('DATE_TIME', '')
+
+        if self._normalize_percentage_fields_in_row(data_row):
+            changed = True
+
+        return changed
 
     def _count_current_video_entries_and_stills(self):
         """Return (entry_count, still_count) for current video based on drop filename pattern."""
@@ -5263,21 +5354,7 @@ class VideoPlayer(QMainWindow):
 
         if has_video:
             video_fn_base = os.path.basename(str(video_fn).strip())
-            # Build path directly from configured videos folder
-            video_path = ''
-            if self.drop_videos_dir:
-                candidate = os.path.join(self.drop_videos_dir, video_fn_base)
-                if os.path.isfile(candidate):
-                    video_path = candidate
-                else:
-                    # Case-insensitive fallback (Windows usually handles this but be safe)
-                    try:
-                        for f in os.listdir(self.drop_videos_dir):
-                            if f.lower() == video_fn_base.lower():
-                                video_path = os.path.join(self.drop_videos_dir, f)
-                                break
-                    except OSError:
-                        pass
+            video_path = self._resolve_video_path_from_filename(video_fn)
 
             if video_path:
                 # _load_video_file uses base_data (already set above) for drop counter
@@ -5304,7 +5381,8 @@ class VideoPlayer(QMainWindow):
                     QMessageBox.warning(
                         self, "Video Not Found",
                         f"Row {index + 1} references video file:\n  {video_fn_base}\n\n"
-                        f"File not found in:\n  {self.drop_videos_dir}\n\n"
+                        f"File not found in:\n  {self.drop_videos_dir}\n"
+                        "or any of its subfolders.\n\n"
                         "Make sure the correct videos folder is set.")
         else:
             # No video — enter grab_only_mode; always exactly 1 grab entry per point
@@ -6079,12 +6157,7 @@ class VideoPlayer(QMainWindow):
             else:
                 data_row[field_name] = widget.text().strip()
         
-        # Update DATE_TIME if needed
-        if data_row.get('DATE') and data_row.get('TIME'):
-            data_row['DATE_TIME'] = f"{data_row['DATE']} {data_row['TIME']}"
-
-        normalized = self._normalize_percentage_fields_in_row(data_row)
-        if normalized:
+        if self._prepare_data_row_for_save(data_row):
             self._update_widgets_from_data_row(data_row)
         
         # Validate if rules exist
@@ -6581,18 +6654,7 @@ class VideoPlayer(QMainWindow):
             else:
                 data_row[field_name] = widget.text().strip()
         
-        # Override with drop-specific information
-        data_row['DROP_ID'] = drop_id
-        data_row['FILENAME'] = still_filename
-        
-        # Auto-fill DATE_TIME if DATE and TIME are provided
-        if data_row.get('DATE') and data_row.get('TIME'):
-            data_row['DATE_TIME'] = f"{data_row['DATE']} {data_row['TIME']}"
-        elif not data_row.get('DATE_TIME'):
-            data_row['DATE_TIME'] = ''
-
-        normalized = self._normalize_percentage_fields_in_row(data_row)
-        if normalized:
+        if self._prepare_data_row_for_save(data_row, drop_id=drop_id, still_filename=still_filename):
             self._update_widgets_from_data_row(data_row)
         
         # Validate and BLOCK if validation fails
@@ -6861,6 +6923,13 @@ class VideoPlayer(QMainWindow):
 
     def _conditional_rule_applies(self, data_row, rule):
         """Return True when a conditional/conditional_sum rule applies to a data row."""
+        skip_if_field = rule.get('skip_if_field')
+        if skip_if_field:
+            skip_if_value = str(rule.get('skip_if_value', '') or '').strip()
+            current_skip_value = str(data_row.get(skip_if_field, '') or '').strip()
+            if current_skip_value == skip_if_value:
+                return False
+
         if_field = rule.get('if_field')
         if not if_field:
             return False
@@ -6906,6 +6975,13 @@ class VideoPlayer(QMainWindow):
             if not trigger_field or trigger_field not in data_row:
                 continue
 
+            skip_if_field = rule.get('skip_if_field')
+            if skip_if_field:
+                skip_if_value = str(rule.get('skip_if_value', '') or '').strip()
+                current_skip_value = str(data_row.get(skip_if_field, '') or '').strip()
+                if current_skip_value == skip_if_value:
+                    continue
+
             trigger_value = str(rule.get('trigger_value', '') or '').strip()
             current_value = str(data_row.get(trigger_field, '') or '').strip()
             if current_value != trigger_value:
@@ -6931,8 +7007,8 @@ class VideoPlayer(QMainWindow):
 
         Template-driven behavior:
         - Apply matching autofill rules first (e.g., parent cover 0/NA -> child fields NA).
-        - For conditional_sum groups with blank_as_zero=True, if condition applies and any value
-          exists in the subgroup, blanks/NA are converted to 0 so means aggregate correctly.
+        - For conditional_sum groups, if condition applies, blank fields are saved as 0.
+          If blank_as_zero=True, NA-like values in the active group are also converted to 0.
         - For conditional_sum groups gated by "> 0" or ">= 0" style checks, if the condition
           does not apply, subgroup fields are forced to NA.
         """
@@ -6963,12 +7039,11 @@ class VideoPlayer(QMainWindow):
 
             blank_as_zero = bool(rule.get('blank_as_zero', False))
 
-            if blank_as_zero and condition_applies:
-                has_any_value = any(not self._is_na_value(data_row.get(field, '')) for field in fields)
-                if has_any_value:
-                    for field in fields:
-                        if self._is_na_value(data_row.get(field, '')):
-                            set_value(field, '0')
+            if condition_applies:
+                for field in fields:
+                    current_value = str(data_row.get(field, '') or '').strip()
+                    if current_value == '' or (blank_as_zero and self._is_na_value(current_value)):
+                        set_value(field, '0')
 
             if_condition = str(rule.get('if_condition', 'equals') or '').strip()
             if_value_num = self._try_parse_float(rule.get('if_value', ''))

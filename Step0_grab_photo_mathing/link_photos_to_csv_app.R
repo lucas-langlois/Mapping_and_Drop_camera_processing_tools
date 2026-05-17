@@ -53,6 +53,117 @@ signed_coord <- function(val, ref) {
   ifelse(!is.na(ref) & toupper(trimws(ref)) %in% c("S", "W"), -abs(val), abs(val))
 }
 
+common_tz_choices <- unique(c(
+  "UTC",
+  "Australia/Brisbane",
+  "Australia/Sydney",
+  "Australia/Perth",
+  "Australia/Adelaide",
+  "Australia/Darwin",
+  "Australia/Hobart",
+  "Pacific/Auckland",
+  "Asia/Kolkata",
+  "US/Eastern",
+  "US/Central",
+  "US/Pacific",
+  "Europe/London",
+  "Europe/Paris",
+  OlsonNames()
+))
+
+guess_csv_datetime_preference <- function(values) {
+  vals <- as.character(values)
+  vals <- vals[!is.na(vals) & nchar(trimws(vals)) > 0]
+  if (length(vals) == 0) return("auto")
+
+  vals <- head(vals, 100)
+  ymd <- grepl("^\\s*\\d{4}[-/]\\d{1,2}[-/]\\d{1,2}", vals)
+  if (sum(ymd) > length(vals) / 2) return("ymd")
+
+  parts <- regmatches(vals, regexec("^\\s*(\\d{1,2})[-/](\\d{1,2})[-/](\\d{2,4})", vals))
+  parts <- parts[lengths(parts) == 4]
+  if (length(parts) == 0) return("auto")
+
+  first  <- suppressWarnings(as.integer(vapply(parts, `[`, character(1), 2)))
+  second <- suppressWarnings(as.integer(vapply(parts, `[`, character(1), 3)))
+
+  if (any(!is.na(second) & second > 12 & !is.na(first) & first <= 12)) return("mdy")
+  if (any(!is.na(first) & first > 12 & !is.na(second) & second <= 12)) return("dmy")
+  "auto"
+}
+
+csv_datetime_orders <- function(preference) {
+  switch(preference,
+    "mdy" = c("mdy HMS", "mdy HM", "ymd HMS", "ymd HM", "dmy HMS", "dmy HM"),
+    "dmy" = c("dmy HMS", "dmy HM", "ymd HMS", "ymd HM", "mdy HMS", "mdy HM"),
+    "ymd" = c("ymd HMS", "ymd HM", "mdy HMS", "mdy HM", "dmy HMS", "dmy HM"),
+    c("ymd HMS", "ymd HM", "mdy HMS", "mdy HM", "dmy HMS", "dmy HM")
+  )
+}
+
+unique_col_name <- function(existing, base_name) {
+  candidate <- base_name
+  n <- 2L
+  while (candidate %in% existing) {
+    candidate <- paste0(base_name, "_", n)
+    n <- n + 1L
+  }
+  candidate
+}
+
+convert_datetime_col_to_camera_tz <- function(df, datetime_col, csv_tz, photo_tz,
+                                              csv_datetime_format) {
+  if (is.null(datetime_col) || !nzchar(datetime_col) ||
+      !(datetime_col %in% names(df))) {
+    return(df)
+  }
+
+  original_values <- df[[datetime_col]]
+  parsed <- tryCatch(
+    lubridate::parse_date_time(original_values,
+                               orders = csv_datetime_orders(csv_datetime_format),
+                               tz = csv_tz),
+    error = function(e) NULL
+  )
+  if (is.null(parsed) || all(is.na(parsed))) {
+    return(df)
+  }
+
+  timezone_col <- if ("TIMEZONE" %in% names(df)) {
+    "TIMEZONE"
+  } else {
+    unique_col_name(names(df), "TIMEZONE")
+  }
+
+  camera_time <- lubridate::with_tz(parsed, tzone = photo_tz)
+  df[[datetime_col]] <- ifelse(
+    is.na(camera_time),
+    NA_character_,
+    format(camera_time, "%Y-%m-%d %H:%M:%S", tz = photo_tz)
+  )
+  df[[timezone_col]] <- ifelse(is.na(camera_time), NA_character_, photo_tz)
+  df
+}
+
+normalise_match_label <- function(x) {
+  x <- tolower(trimws(as.character(x)))
+  x <- gsub("[^a-z0-9]+", "", x)
+  ifelse(is.na(x), "", x)
+}
+
+guess_vessel_filter <- function(df, vessel_col, photos_dir) {
+  if (is.null(df) || is.null(vessel_col) || !nzchar(vessel_col) ||
+      !(vessel_col %in% names(df))) {
+    return("")
+  }
+  vessels <- sort(unique(trimws(as.character(df[[vessel_col]]))))
+  vessels <- vessels[!is.na(vessels) & nzchar(vessels)]
+  folder <- basename(normalizePath(photos_dir, winslash = "/", mustWork = FALSE))
+  folder_norm <- normalise_match_label(folder)
+  hit <- vessels[normalise_match_label(vessels) == folder_norm]
+  if (length(hit) > 0) hit[1] else ""
+}
+
 # Pure-R JPEG EXIF GPS patcher ─────────────────────────────────────────────
 # Overwrites GPS lat/lon directly in the JPEG binary (no ExifTool, no Python).
 # Works even when ExifTool fails due to corrupted IFD0 thumbnail data (common
@@ -322,7 +433,7 @@ ui <- dashboardPage(
                          your sampling points (it must have columns for coordinates or a
                          POINT_ID)."),
                 tags$li(tags$b("Select your photos folder"), " — the directory that contains
-                         the .jpg photos you want to link."),
+                         the .jpg or .jpeg photos you want to link."),
                 tags$li("Once both are loaded, move on to ", tags$b("Step 2: Check EXIF"), ".")
               )
             )
@@ -509,8 +620,8 @@ ui <- dashboardPage(
               tags$ul(
                 tags$li(tags$b("Location"), " — a name you choose (e.g. your study site)."),
                 tags$li(tags$b("PointID"), " — taken from the POINT_ID column in your CSV."),
-                tags$li(tags$b("YYYYMMDD"), " — the date extracted from the original filename
-                         or EXIF data."),
+                tags$li(tags$b("YYYYMMDD"), " — the date from the matched CSV row's
+                         datetime column, with EXIF/filename used only as fallback."),
                 tags$li(tags$b("#"), " — a sequence number when multiple photos match
                          the same point (1, 2, 3 ...).")
               ),
@@ -601,6 +712,10 @@ ui <- dashboardPage(
                       value = ";", width = "200px"),
             helpText("When multiple photos match one row, this character separates
                       the filenames in the GRAB_FILENAME column."),
+            checkboxInput("convert_output_datetime_to_camera_tz",
+                          "Save selected CSV datetime column in the photo/camera timezone",
+                          value = TRUE),
+            helpText("Default on. The saved CSV replaces the selected datetime column with camera-local time and adds a TIMEZONE column."),
             hr(),
             fluidRow(
               column(4,
@@ -722,10 +837,10 @@ server <- function(input, output, session) {
       showNotification("Photos directory not found! Check the path.", type = "error")
       return()
     }
-    files <- list.files(input$photos_dir, pattern = "\\.jpg$",
+    files <- list.files(input$photos_dir, pattern = "\\.jpe?g$",
                         ignore.case = TRUE, recursive = FALSE)
     if (length(files) == 0) {
-      showNotification("No .jpg files found in that folder!", type = "warning")
+      showNotification("No .jpg or .jpeg files found in that folder!", type = "warning")
       rv$photo_files <- NULL
       return()
     }
@@ -746,7 +861,7 @@ server <- function(input, output, session) {
     }
     div(class = "success-box",
       p(icon("check-circle"), tags$b(" Photos found!")),
-      p("Total .jpg files: ", tags$b(nrow(pf))),
+      p("Total JPEG files: ", tags$b(nrow(pf))),
       p("Total size: ", tags$b(round(sum(pf$size_KB, na.rm = TRUE) / 1024, 1), " MB"))
     )
   })
@@ -828,7 +943,8 @@ server <- function(input, output, session) {
     exif_df <- rv$exif_data
     if (isTRUE(rv$exif_has_gps)) {
       n_gps <- sum(!is.na(exif_df$lat_signed) & !is.na(exif_df$lon_signed))
-      n_ts  <- sum(!is.na(exif_df$timestamp))
+      n_ts  <- sum(!is.na(exif_df$DateTimeOriginal) &
+                   nchar(as.character(exif_df$DateTimeOriginal)) > 0)
       div(class = "success-box",
         h4(icon("check-circle"), " GPS Data Detected!"),
         p(tags$b(n_gps), " out of ", tags$b(nrow(exif_df)),
@@ -937,14 +1053,45 @@ server <- function(input, output, session) {
     }
 
     if (method == "exif") {
+      dt_col_default <- if (!is.null(cols)) {
+        pick_col(cols, c("^DATETIME$", "date.*time", "^time"))
+      } else {
+        ""
+      }
+      vessel_col_default <- if (!is.null(cols)) {
+        pick_col(cols, c("^VESSEL$", "vessel", "boat", "ship"), fallback = length(cols))
+      } else {
+        ""
+      }
+      if (is.null(cols) || !grepl("vessel|boat|ship", vessel_col_default, ignore.case = TRUE)) {
+        vessel_col_default <- ""
+      }
+      dt_col_for_guess <- if (!is.null(input$datetime_col) &&
+                              nchar(input$datetime_col) > 0) {
+        input$datetime_col
+      } else {
+        dt_col_default
+      }
+      vessel_col_for_choices <- if (!is.null(input$vessel_col) &&
+                                    nchar(input$vessel_col) > 0) {
+        input$vessel_col
+      } else {
+        vessel_col_default
+      }
+      vessel_values <- character(0)
+      if (!is.null(rv$csv_data) && vessel_col_for_choices %in% names(rv$csv_data)) {
+        vessel_values <- sort(unique(trimws(as.character(rv$csv_data[[vessel_col_for_choices]]))))
+        vessel_values <- vessel_values[!is.na(vessel_values) & nzchar(vessel_values)]
+      }
+      vessel_guess <- guess_vessel_filter(rv$csv_data, vessel_col_for_choices, input$photos_dir)
       tagList(
         h4("Distance + Time Thresholds"),
         numericInput("dist_threshold", "Distance threshold (metres):",
-                     value = 50, min = 1, max = 50000, step = 1),
+                     value = 350, min = 1, max = 50000, step = 1),
         helpText("Photos within this radius of a CSV point are eligible for matching."),
         hr(),
         numericInput("time_threshold", "Time threshold (seconds):",
-                     value = 180, min = 0, max = 86400, step = 10),
+                     value = 600, min = 0, max = 86400, step = 10),
         helpText("Photos within this many seconds of the CSV timestamp are eligible.
                   Set to 0 to match by distance only (ignore time)."),
         hr(),
@@ -953,21 +1100,25 @@ server <- function(input, output, session) {
           with no timezone info. You must set both timezones manually so the
           time difference is calculated correctly.")),
         selectInput("photo_tz", "Photo / camera timezone:",
-                    choices = c("UTC", "Asia/Kolkata", "US/Eastern", "US/Central",
-                                "US/Pacific", "Europe/London", "Europe/Paris",
-                                "Australia/Sydney", "Pacific/Auckland",
-                                OlsonNames()),
-                    selected = "UTC"),
+                    choices = common_tz_choices,
+                    selected = "Australia/Brisbane"),
         helpText("The timezone the camera clock was set to when the photos were taken."),
         uiOutput("photo_tz_sample_ui"),
         selectInput("csv_tz", "CSV datetime timezone:",
-                    choices = c("UTC", "Asia/Kolkata", "US/Eastern", "US/Central",
-                                "US/Pacific", "Europe/London", "Europe/Paris",
-                                "Australia/Sydney", "Pacific/Auckland",
-                                OlsonNames()),
+                    choices = common_tz_choices,
                     selected = "UTC"),
         helpText("The timezone used by the date/time column in your CSV file."),
         uiOutput("csv_tz_sample_ui"),
+        selectInput("csv_datetime_format", "CSV date format:",
+                    choices = c("Auto (try common formats)" = "auto",
+                                "Month/day/year, e.g. 12/17/2025" = "mdy",
+                                "Day/month/year, e.g. 17/12/2025" = "dmy",
+                                "Year-month-day, e.g. 2025-12-17" = "ymd"),
+                    selected = if (!is.null(cols) && !is.null(rv$csv_data) &&
+                                  dt_col_for_guess %in% names(rv$csv_data)) {
+                      guess_csv_datetime_preference(rv$csv_data[[dt_col_for_guess]])
+                    } else "auto"),
+        helpText("For values like 12/17/2025, choose month/day/year. For ambiguous values like 12/11/2025, this prevents Dec 11 being read as 12 Nov."),
         hr(),
         h4("CSV Column Mapping"),
         if (!is.null(cols)) {
@@ -978,7 +1129,14 @@ server <- function(input, output, session) {
                         selected = pick_col(cols, c("^lon(gitude)?$", "^lng$", "^x$"))),
             selectInput("datetime_col", "Date/time column (for time matching):",
                         choices = c("(none - ignore time)" = "", cols),
-                        selected = pick_col(cols, c("^DATETIME$", "date.*time", "^time")))
+                        selected = dt_col_default),
+            selectInput("vessel_col", "Vessel / boat column (optional):",
+                        choices = c("(none - use all CSV rows)" = "", cols),
+                        selected = vessel_col_default),
+            selectInput("vessel_filter", "Limit matching to vessel:",
+                        choices = c("(all vessels)" = "", vessel_values),
+                        selected = vessel_guess),
+            helpText("Use this when photos are stored in separate vessel folders. If the folder name matches a CSV vessel, it is selected automatically.")
           )
         } else {
           p(tags$em("Load CSV first to see column names."))
@@ -987,7 +1145,7 @@ server <- function(input, output, session) {
         h4("Fallback Matching"),
         checkboxInput("use_time_fallback_bad_gps",
                       "Time-only fallback for photos with bad/missing GPS",
-                      value = FALSE),
+                      value = TRUE),
         helpText("If a photo's GPS puts it more than the distance below from every CSV point,",
                  " its GPS is treated as unreliable and it is matched by timestamp alone.",
                  " Requires a datetime column and time threshold to be set above."),
@@ -1140,7 +1298,7 @@ server <- function(input, output, session) {
       return(NULL)
     }
 
-    photo_pattern <- "^(\\d+)_\\d{8}_\\d{6}_Photo \\d+\\.jpg$"
+    photo_pattern <- "^(\\d+)_\\d{8}_\\d{6}_Photo \\d+\\.jpe?g$"
     lookup  <- list()
     skipped <- character(0)
 
@@ -1204,14 +1362,26 @@ server <- function(input, output, session) {
     dist_threshold <- input$dist_threshold
     time_threshold <- input$time_threshold
 
-    has_gps      <- !is.na(exif_df$lat_signed) & !is.na(exif_df$lon_signed)
-    photos_gps   <- exif_df[has_gps, ]
-    photos_nogps <- exif_df[!has_gps, ]
-
     csv_lat <- suppressWarnings(as.numeric(df[[input$lat_col]]))
     csv_lon <- suppressWarnings(as.numeric(df[[input$lon_col]]))
 
-    # Parse CSV timestamps if time matching enabled
+    eligible_csv <- rep(TRUE, nrow(df))
+    vessel_filter_label <- NULL
+    if (!is.null(input$vessel_col) && nzchar(input$vessel_col) &&
+        input$vessel_col %in% names(df) &&
+        !is.null(input$vessel_filter) && nzchar(input$vessel_filter)) {
+      eligible_csv <- normalise_match_label(df[[input$vessel_col]]) ==
+                      normalise_match_label(input$vessel_filter)
+      vessel_filter_label <- input$vessel_filter
+      if (!any(eligible_csv, na.rm = TRUE)) {
+        showNotification(
+          paste("No CSV rows found for vessel:", input$vessel_filter),
+          type = "error", duration = 12)
+        return(NULL)
+      }
+    }
+
+    # Parse timestamps if time matching enabled.
     csv_time <- NULL
     use_time <- !is.null(input$datetime_col) && nchar(input$datetime_col) > 0 &&
                 time_threshold > 0
@@ -1219,22 +1389,37 @@ server <- function(input, output, session) {
       input$photo_tz else "UTC"
     csv_tz_val   <- if (!is.null(input$csv_tz)   && nchar(input$csv_tz)   > 0)
       input$csv_tz   else "UTC"
+    csv_format_val <- if (!is.null(input$csv_datetime_format) &&
+                          nchar(input$csv_datetime_format) > 0) {
+      input$csv_datetime_format
+    } else {
+      "auto"
+    }
 
     # Re-parse EXIF timestamps now that we know the correct camera timezone.
     # EXIF DateTimeOriginal has no timezone embedded, so this must be done here
     # rather than at EXIF-check time (when the user may not have set photo_tz yet).
-    photos_gps$timestamp <- as.POSIXct(photos_gps$DateTimeOriginal,
-                                        format = "%Y:%m:%d %H:%M:%S",
-                                        tz = photo_tz_val)
+    exif_df$timestamp <- as.POSIXct(exif_df$DateTimeOriginal,
+                                    format = "%Y:%m:%d %H:%M:%S",
+                                    tz = photo_tz_val)
+
+    has_gps      <- !is.na(exif_df$lat_signed) & !is.na(exif_df$lon_signed)
+    photos_gps   <- exif_df[has_gps, ]
+    photos_nogps <- exif_df[!has_gps, ]
 
     if (use_time && input$datetime_col %in% names(df)) {
       csv_time <- tryCatch(
         lubridate::parse_date_time(df[[input$datetime_col]],
-                                   orders = c("dmy HM", "dmy HMS", "ymd HMS",
-                                              "ymd HM", "dmY HM", "dmY HMS"),
+                                   orders = csv_datetime_orders(csv_format_val),
                                    tz = csv_tz_val),
         error = function(e) NULL
       )
+      if (is.null(csv_time) || all(is.na(csv_time))) {
+        showNotification(
+          "CSV timestamps could not be parsed. Check the CSV date format setting.",
+          type = "error", duration = 12)
+        return(NULL)
+      }
     }
 
     df$GRAB_FILENAME     <- ""
@@ -1246,6 +1431,7 @@ server <- function(input, output, session) {
 
     withProgress(message = "Matching by distance + time...", value = 0.3, {
       for (i in seq_len(nrow(df))) {
+        if (!isTRUE(eligible_csv[i])) next
         if (is.na(csv_lat[i]) || is.na(csv_lon[i])) next
         if (nrow(photos_gps) == 0) next
 
@@ -1287,10 +1473,11 @@ server <- function(input, output, session) {
     bad_gps_m      <- (if (!is.null(input$bad_gps_km)) input$bad_gps_km else 100) * 1000
     use_time_fallback <- isTRUE(input$use_time_fallback_bad_gps) &&
                          use_time && !is.null(csv_time)
-    valid_csv <- !is.na(csv_lat) & !is.na(csv_lon)
+    valid_csv <- eligible_csv & !is.na(csv_lat) & !is.na(csv_lon)
 
     time_fallback_count <- 0L
     after_time_unmatched_idx <- integer(0)
+    matched_nogps_idx <- integer(0)
 
     for (j in unmatched_idx) {
       # Check if this photo's GPS is suspect: min distance to any CSV row > bad_gps_m
@@ -1314,11 +1501,11 @@ server <- function(input, output, session) {
 
       td <- abs(as.numeric(difftime(photo_ts, csv_time, units = "secs")))
       td[is.na(td)] <- Inf
-      within_time_only <- which(td <= time_threshold)
+      within_time_only <- which(eligible_csv & td <= time_threshold)
 
       if (length(within_time_only) > 0) {
         ord <- within_time_only[order(td[within_time_only])]
-        for (row_i in ord) {
+        for (row_i in ord[1]) {
           existing <- df$GRAB_FILENAME[row_i]
           if (nchar(existing) == 0) {
             df$GRAB_FILENAME[row_i]     <- photos_gps$FileName[j]
@@ -1345,10 +1532,44 @@ server <- function(input, output, session) {
       }
     }
 
+    if (use_time_fallback && nrow(photos_nogps) > 0) {
+      for (j in seq_len(nrow(photos_nogps))) {
+        photo_ts <- photos_nogps$timestamp[j]
+        if (is.na(photo_ts)) next
+
+        td <- abs(as.numeric(difftime(photo_ts, csv_time, units = "secs")))
+        td[is.na(td)] <- Inf
+        within_time_only <- which(eligible_csv & td <= time_threshold)
+        if (length(within_time_only) == 0) next
+
+        ord <- within_time_only[order(td[within_time_only])]
+        for (row_i in ord[1]) {
+          existing <- df$GRAB_FILENAME[row_i]
+          if (nchar(existing) == 0) {
+            df$GRAB_FILENAME[row_i]     <- photos_nogps$FileName[j]
+            df$GRAB_DISTANCE_M[row_i]   <- NA_character_
+            df$GRAB_TIME_DIFF_S[row_i]  <- round(td[row_i], 0)
+            df$GRAB_MATCH_METHOD[row_i] <- "time_only (missing GPS)"
+          } else {
+            df$GRAB_FILENAME[row_i]     <- paste(existing, photos_nogps$FileName[j],
+                                                  sep = separator)
+            df$GRAB_DISTANCE_M[row_i]   <- paste(df$GRAB_DISTANCE_M[row_i],
+                                                  NA_character_, sep = separator)
+            df$GRAB_TIME_DIFF_S[row_i]  <- paste(df$GRAB_TIME_DIFF_S[row_i],
+                                                   round(td[row_i], 0), sep = separator)
+            df$GRAB_MATCH_METHOD[row_i] <- paste0(df$GRAB_MATCH_METHOD[row_i],
+                                                   "+time_only_missing_gps")
+          }
+        }
+        matched_nogps_idx   <- union(matched_nogps_idx, j)
+        time_fallback_count <- time_fallback_count + 1L
+      }
+    }
+
     if (time_fallback_count > 0) {
       showNotification(
         paste0(time_fallback_count, " photo(s) matched by time only ",
-               "(GPS was > ", input$bad_gps_km, " km from any CSV point)."),
+               "(GPS was missing or > ", input$bad_gps_km, " km from any CSV point)."),
         type = "warning", duration = 10)
     }
 
@@ -1359,7 +1580,7 @@ server <- function(input, output, session) {
       "POINT_ID"
     } else NULL
 
-    fn_pattern <- "^(\\d+)_\\d{8}_\\d{6}_Photo \\d+\\.jpg$"
+    fn_pattern <- "^(\\d+)_\\d{8}_\\d{6}_Photo \\d+\\.jpe?g$"
     still_unmatched_idx <- integer(0)
     fallback_count <- 0L
 
@@ -1367,9 +1588,10 @@ server <- function(input, output, session) {
 
     if (use_fallback && !is.null(pid_col)) {
       # Build POINT_ID → CSV row index lookup
+      eligible_rows <- which(eligible_csv)
       pid_to_row <- setNames(
-        seq_len(nrow(df)),
-        as.character(suppressWarnings(as.integer(as.character(df[[pid_col]]))))
+        eligible_rows,
+        as.character(suppressWarnings(as.integer(as.character(df[[pid_col]][eligible_rows]))))
       )
 
       for (j in after_time_unmatched_idx) {
@@ -1432,9 +1654,12 @@ server <- function(input, output, session) {
         return(data.frame(
           Photo = photos_gps$FileName[j],
           Photo_Time = as.character(photos_gps$DateTimeOriginal[j]),
-          Nearest_Point = NA_character_,
+          Nearest_Dist_Point = NA_character_,
           Nearest_Dist_m = NA_real_,
+          Time_at_Nearest_Dist_s = NA_real_,
+          Nearest_Time_Point = NA_character_,
           Nearest_TimeDiff_s = NA_real_,
+          Dist_at_Nearest_Time_m = NA_real_,
           Why_unmatched = "No valid CSV coordinates",
           stringsAsFactors = FALSE
         ))
@@ -1446,15 +1671,25 @@ server <- function(input, output, session) {
       nd      <- round(d[ni], 1)
       pt_lbl  <- if (!is.null(pid_col)) as.character(df[[pid_col]][ni]) else as.character(ni)
 
-      # Nearest time diff (independently of nearest distance)
+      # Nearest time diff is tracked separately from nearest distance. A photo
+      # only matches when the same CSV row satisfies both thresholds.
       nt   <- NA_real_
       nt_lbl <- NA_character_
+      time_at_nearest_dist <- NA_real_
+      dist_at_nearest_time <- NA_real_
+      combined_ok <- FALSE
       if (use_time && !is.null(csv_time) && !is.na(photos_gps$timestamp[j])) {
         td <- abs(as.numeric(difftime(photos_gps$timestamp[j], csv_time, units = "secs")))
         td[is.na(td)] <- Inf
+        td[!eligible_csv] <- Inf
         ti   <- which.min(td)
         nt   <- round(td[ti], 0)
         nt_lbl <- if (!is.null(pid_col)) as.character(df[[pid_col]][ti]) else as.character(ti)
+        time_at_nearest_dist <- round(td[ni], 0)
+        dist_at_nearest_time <- round(d[ti], 1)
+        combined_ok <- any(d <= dist_threshold & td <= time_threshold, na.rm = TRUE)
+      } else {
+        combined_ok <- any(d <= dist_threshold, na.rm = TRUE)
       }
 
       dist_ok <- nd <= dist_threshold
@@ -1466,6 +1701,10 @@ server <- function(input, output, session) {
       why <- dplyr::case_when(
         gps_suspect              ~ paste0("GPS likely wrong (", round(nd/1000, 0),
                                           " km from nearest point) — matched by filename instead"),
+        dist_ok & time_ok & !combined_ok ~ paste0(
+          "Nearest distance and nearest time are different CSV rows; ",
+          "at nearest distance time is ", time_at_nearest_dist,
+          "s, at nearest time distance is ", dist_at_nearest_time, "m"),
         !dist_ok & !time_ok      ~ paste0("Dist ", nd, "m > ", dist_threshold,
                                            "m  &  Time ", nt, "s > ", time_threshold, "s"),
         !dist_ok                 ~ paste0("Dist ", nd, "m > ", dist_threshold, "m threshold"),
@@ -1476,9 +1715,12 @@ server <- function(input, output, session) {
       data.frame(
         Photo              = photos_gps$FileName[j],
         Photo_Time         = as.character(photos_gps$DateTimeOriginal[j]),
-        Nearest_Point      = pt_lbl,
+        Nearest_Dist_Point = pt_lbl,
         Nearest_Dist_m     = nd,
+        Time_at_Nearest_Dist_s = time_at_nearest_dist,
+        Nearest_Time_Point = nt_lbl,
         Nearest_TimeDiff_s = nt,
+        Dist_at_Nearest_Time_m = dist_at_nearest_time,
         GPS_suspect        = nd > 100000,
         Why_unmatched      = why,
         stringsAsFactors   = FALSE
@@ -1486,9 +1728,15 @@ server <- function(input, output, session) {
     })
     diag_df <- if (length(diag_rows) > 0) do.call(rbind, diag_rows) else NULL
 
-    skipped <- if (nrow(photos_nogps) > 0) {
-      data.frame(filename = photos_nogps$FileName,
-                 reason = "No GPS in EXIF",
+    skipped_nogps_idx <- setdiff(seq_len(nrow(photos_nogps)), matched_nogps_idx)
+    skipped <- if (length(skipped_nogps_idx) > 0) {
+      reason <- if (use_time_fallback) {
+        "No GPS in EXIF and no timestamp match within threshold"
+      } else {
+        "No GPS in EXIF"
+      }
+      data.frame(filename = photos_nogps$FileName[skipped_nogps_idx],
+                 reason = reason,
                  stringsAsFactors = FALSE)
     } else NULL
 
@@ -1522,6 +1770,8 @@ server <- function(input, output, session) {
       tags$ul(
         tags$li("Method: ", tags$b(
           if (rv$last_method == "exif") "EXIF Distance + Time" else "Filename (POINT_ID)")),
+        if (!is.null(input$vessel_filter) && nzchar(input$vessel_filter))
+          tags$li("CSV vessel filter: ", tags$b(input$vessel_filter)),
         tags$li("CSV rows: ", tags$b(total)),
         tags$li("Rows matched: ", tags$b(matched)),
         tags$li("Rows without match: ", tags$b(total - matched)),
@@ -1615,18 +1865,30 @@ server <- function(input, output, session) {
     # Drop time column if not used
     if (all(is.na(diag$Nearest_TimeDiff_s))) {
       diag$Nearest_TimeDiff_s <- NULL
+      diag$Nearest_Time_Point <- NULL
+      diag$Time_at_Nearest_Dist_s <- NULL
+      diag$Dist_at_Nearest_Time_m <- NULL
     }
     # Drop internal GPS_suspect flag column from display
     gps_suspect_vec <- if ("GPS_suspect" %in% names(diag)) diag$GPS_suspect else rep(FALSE, nrow(diag))
     diag$GPS_suspect <- NULL
 
+    display_names <- c(
+      Photo = "Photo",
+      Photo_Time = "EXIF Time",
+      Nearest_Dist_Point = "Nearest Distance Row",
+      Nearest_Dist_m = "Nearest Dist (m)",
+      Time_at_Nearest_Dist_s = "Time at Nearest Dist (s)",
+      Nearest_Time_Point = "Nearest Time Row",
+      Nearest_TimeDiff_s = "Nearest Time Diff (s)",
+      Dist_at_Nearest_Time_m = "Dist at Nearest Time (m)",
+      Why_unmatched = "Why not matched"
+    )
+
     dt <- datatable(
       diag,
       rownames  = FALSE,
-      colnames  = c("Photo", "EXIF Time", "Nearest CSV Point",
-                    "Distance (m)",
-                    if ("Nearest_TimeDiff_s" %in% names(diag)) "Time Diff (s)" else NULL,
-                    "Why not matched"),
+      colnames  = unname(display_names[names(diag)]),
       options   = list(
         pageLength = 25, scrollX = TRUE, dom = "frtip",
         order = list(list(3, "asc"))   # sort by distance ascending
@@ -1641,10 +1903,14 @@ server <- function(input, output, session) {
       TRUE                                   ~ "white"
     )
 
-    dt <- dt %>%
-      formatRound("Nearest_Dist_m", digits = 1) %>%
-      formatStyle(0, target = "row",
-                  backgroundColor = styleEqual(seq_len(nrow(diag)), row_colours))
+    round_cols <- intersect(c("Nearest_Dist_m", "Time_at_Nearest_Dist_s",
+                              "Nearest_TimeDiff_s", "Dist_at_Nearest_Time_m"),
+                            names(diag))
+    if (length(round_cols) > 0) {
+      dt <- dt %>% formatRound(round_cols, digits = 1)
+    }
+    dt <- dt %>% formatStyle(0, target = "row",
+                             backgroundColor = styleEqual(seq_len(nrow(diag)), row_colours))
     dt
   })
 
@@ -1760,9 +2026,15 @@ server <- function(input, output, session) {
         if (has_csv_coords && rv$last_method == "exif") {
           separator <- if (is.null(input$separator) || nchar(trimws(input$separator)) == 0)
             ";" else input$separator
+          line_filename_col <- if ("GRAB_FILENAME_ORIGINAL" %in% names(df)) {
+            "GRAB_FILENAME_ORIGINAL"
+          } else {
+            "GRAB_FILENAME"
+          }
 
-          for (i in which(valid_csv & df$GRAB_FILENAME != "")) {
-            photo_names <- trimws(unlist(strsplit(df$GRAB_FILENAME[i], separator, fixed = TRUE)))
+          for (i in which(valid_csv & df[[line_filename_col]] != "")) {
+            photo_names <- trimws(unlist(strsplit(df[[line_filename_col]][i],
+                                                 separator, fixed = TRUE)))
             for (pname in photo_names) {
               pidx <- which(exif_df$FileName == pname)
               if (length(pidx) == 1 && valid_exif[pidx]) {
@@ -1863,6 +2135,31 @@ server <- function(input, output, session) {
       return()
     }
     tryCatch({
+      if (isTRUE(input$convert_output_datetime_to_camera_tz)) {
+        csv_tz_val <- if (!is.null(input$csv_tz) && nchar(input$csv_tz) > 0) {
+          input$csv_tz
+        } else {
+          "UTC"
+        }
+        photo_tz_val <- if (!is.null(input$photo_tz) && nchar(input$photo_tz) > 0) {
+          input$photo_tz
+        } else {
+          "Australia/Brisbane"
+        }
+        csv_format_val <- if (!is.null(input$csv_datetime_format) &&
+                              nchar(input$csv_datetime_format) > 0) {
+          input$csv_datetime_format
+        } else {
+          "auto"
+        }
+        df <- convert_datetime_col_to_camera_tz(
+          df = df,
+          datetime_col = input$datetime_col,
+          csv_tz = csv_tz_val,
+          photo_tz = photo_tz_val,
+          csv_datetime_format = csv_format_val
+        )
+      }
       base <- tools::file_path_sans_ext(basename(input$csv_path))
       out  <- file.path(dirname(input$csv_path), paste0(base, "_photos.csv"))
       write.csv(df, out, row.names = FALSE)
@@ -1975,15 +2272,59 @@ server <- function(input, output, session) {
             next
           }
 
-          # Extract date: try EXIF timestamp first, then filename pattern
+          # Extract date: prefer the matched CSV row datetime. This names photos
+          # by the survey event they were matched to, not by the camera clock.
           date_str <- NA_character_
-          if (!is.null(rv$exif_data)) {
+          if (!is.null(input$datetime_col) &&
+              nchar(input$datetime_col) > 0 &&
+              input$datetime_col %in% names(df)) {
+            csv_format_val <- if (!is.null(input$csv_datetime_format) &&
+                                  nchar(input$csv_datetime_format) > 0) {
+              input$csv_datetime_format
+            } else {
+              "auto"
+            }
+            csv_tz_val <- if (!is.null(input$csv_tz) &&
+                              nchar(input$csv_tz) > 0) {
+              input$csv_tz
+            } else {
+              "UTC"
+            }
+            csv_ts <- tryCatch(
+              lubridate::parse_date_time(df[[input$datetime_col]][i],
+                                         orders = csv_datetime_orders(csv_format_val),
+                                         tz = csv_tz_val),
+              error = function(e) NA
+            )
+            if (length(csv_ts) == 1 && !is.na(csv_ts)) {
+              date_str <- format(csv_ts, "%Y%m%d", tz = csv_tz_val)
+            }
+          }
+          if (is.na(date_str) && !is.null(rv$exif_data)) {
             exif_row <- rv$exif_data[rv$exif_data$FileName == old_name, , drop = FALSE]
-            if (nrow(exif_row) == 1 &&
-                "timestamp" %in% names(exif_row) &&
-                length(exif_row$timestamp) == 1 &&
-                !is.na(exif_row$timestamp[1])) {
-              date_str <- format(exif_row$timestamp[1], "%Y%m%d")
+            if (nrow(exif_row) == 1) {
+              exif_ts <- NA
+              if ("timestamp" %in% names(exif_row) &&
+                  length(exif_row$timestamp) == 1 &&
+                  !is.na(exif_row$timestamp[1])) {
+                exif_ts <- exif_row$timestamp[1]
+              } else if ("DateTimeOriginal" %in% names(exif_row) &&
+                         length(exif_row$DateTimeOriginal) == 1 &&
+                         !is.na(exif_row$DateTimeOriginal[1]) &&
+                         nchar(as.character(exif_row$DateTimeOriginal[1])) > 0) {
+                photo_tz_val <- if (!is.null(input$photo_tz) &&
+                                    nchar(input$photo_tz) > 0) {
+                  input$photo_tz
+                } else {
+                  "Australia/Brisbane"
+                }
+                exif_ts <- as.POSIXct(exif_row$DateTimeOriginal[1],
+                                      format = "%Y:%m:%d %H:%M:%S",
+                                      tz = photo_tz_val)
+              }
+              if (!is.na(exif_ts)) {
+                date_str <- format(exif_ts, "%Y%m%d")
+              }
             }
           }
           if (is.na(date_str)) {

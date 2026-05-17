@@ -85,11 +85,13 @@ The script will install any missing packages and launch the app.
 | Setting | Description |
 |---------|-------------|
 | CSV columns | Select your latitude, longitude, datetime, and POINT_ID columns |
+| Vessel / boat filter | Optional. Limit matching to one CSV vessel when photos are stored in vessel folders |
 | Photo timezone | Timezone the camera clock was set to (EXIF has no timezone) |
 | CSV timezone | Timezone of the datetime column in your CSV |
-| Distance threshold | Max metres between photo GPS and CSV point (default 50 m) |
-| Time threshold | Max seconds between photo and CSV time (0 = ignore, default 300 s) |
-| Time-only fallback | Tick to match by time alone when GPS is > N km off (for bad-GPS cameras) |
+| CSV date format | Date order used in the CSV, e.g. month/day/year for `12/17/2025` |
+| Distance threshold | Max metres between photo GPS and CSV point (default 350 m) |
+| Time threshold | Max seconds between photo and CSV time (0 = ignore, default 600 s) |
+| Time-only fallback | Tick to match by time alone when GPS is missing or > N km off |
 | Filename fallback | Tick to use POINT_ID from filename as last resort |
 
 Click **Run Matching**. After matching you will see:
@@ -104,6 +106,7 @@ Click **Run Matching**. After matching you will see:
 ### Tab 5 — Rename Photos
 - Enter a **Location / Site Name** (e.g. `Chilika`)
 - Select the **POINT_ID column**
+- The `YYYYMMDD` part of the new filename comes from the matched CSV row's datetime column
 - Optionally tick **"Overwrite GPS in renamed photos that were matched by time only"** — this patches the correct lat/lon directly into the EXIF of the copied file (pure R, works even on DJI files with corrupted EXIF thumbnails)
 - Click **Rename Photos**
 
@@ -112,6 +115,7 @@ Output filename format: `Chilika_86_20251120_GRAB_1.jpg`
 
 ### Tab 6 — Results & Export
 - Review the full matched table
+- By default, the selected CSV datetime column is converted to the photo/camera timezone in the saved CSV and a `TIMEZONE` column is added
 - Click **Download CSV** to save results
 
 ---
@@ -123,8 +127,10 @@ DJI grab cameras often embed `0° N, 0° E` in EXIF. Enable **"Time-only fallbac
 
 ### Photos not matching at all
 1. Check your **photo timezone** and **CSV timezone** settings — a wrong timezone will shift all timestamps by hours
-2. Use the **diagnostic table** on Tab 3 to see exactly how far off each photo is in distance and time
-3. Try relaxing the distance or time threshold
+2. If several boats sampled at the same time, select the vessel photo folder and set **Limit matching to vessel** so photos are only compared with that boat's CSV rows
+3. Check your **CSV date format**. Values like `12/17/2025` are month/day/year; otherwise ambiguous values like `12/11/2025` may be read as the wrong month
+4. Use the **diagnostic table** on Tab 3 to see exactly how far off each photo is in distance and time
+5. Try relaxing the distance or time threshold
 
 ### GPS still 0,0 after rename
 Make sure the **"Overwrite GPS"** checkbox is ticked before clicking Rename. The log table will show `OK | GPS overwritten` for each fixed file.
