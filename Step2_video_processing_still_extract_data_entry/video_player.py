@@ -3,7 +3,7 @@ MP4 Video Player with Frame Extraction
 Features: Play/Pause, Frame navigation, Timeline scrubbing, Speed control, Frame export
 """
 
-APP_VERSION = "1.2.1"
+APP_VERSION = "1.2.2"
 
 import sys
 import os

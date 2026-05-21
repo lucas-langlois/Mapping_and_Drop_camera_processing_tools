@@ -318,6 +318,7 @@ For questions or issues:
 
 ## 🔄 Version History
 
+- **v1.2.2** - Numeric site/drop sorting (1 before 1001), video/row mismatch guards, nested video lookup, improved project restore
 - **v1.2.1** - Nested video folders, Step0 grab photo matching updates, grab-only filename fixes, observer templates
 - **v1.2** - Grab-only mode fixes, CSV auto-sort, Data Table Viewer
   - Metadata/survey fields excluded from NA-fill in grab-only entries
