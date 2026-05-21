@@ -1,6 +1,10 @@
 """
 Build script to create standalone .exe for Video Player
 Run this script to create a distributable executable
+
+Release build reminder:
+    conda activate video_player
+    python build_exe.py
 """
 
 import PyInstaller.__main__

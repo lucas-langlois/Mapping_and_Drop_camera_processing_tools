@@ -38,6 +38,53 @@ from PyQt5.QtGui import QImage, QPixmap, QKeySequence, QColor, QPainter, QFont
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 
 
+POINT_ID_FIELD_NAMES = {'POINT_ID', 'SITE', 'SITE_ID', 'POINT', 'STATION', 'STATION_ID'}
+
+
+def _natural_sort_key(value):
+    """Split text into text/number chunks so IDs like 2 sort before 1001."""
+    parts = []
+    for chunk in re.split(r'(\d+)', str(value or '').strip().lower()):
+        parts.append(int(chunk) if chunk.isdigit() else chunk)
+    return tuple(parts)
+
+
+def _numeric_identifier_sort_key(value):
+    """Sort whole-number site/point identifiers numerically, blanks last."""
+    text = str(value or '').strip()
+    if not text:
+        return (2, '')
+    if re.fullmatch(r'[+-]?\d+', text):
+        return (0, int(text), text.lower())
+    return (1, _natural_sort_key(text))
+
+
+def _table_cell_sort_key(value, column_name):
+    """Return a stable sort key for QTableWidget cells."""
+    if str(column_name or '').strip().upper() in POINT_ID_FIELD_NAMES:
+        return _numeric_identifier_sort_key(value)
+
+    text = str(value or '').strip()
+    if not text:
+        return (2, '')
+    if re.fullmatch(r'[+-]?\d+(?:\.\d+)?', text):
+        return (0, float(text), text.lower())
+    return (1, _natural_sort_key(text))
+
+
+class _SortAwareTableWidgetItem(QTableWidgetItem):
+    """QTableWidgetItem with numeric-aware sorting for ID-like columns."""
+
+    def __init__(self, text, sort_key):
+        super().__init__(text)
+        self._sort_key = sort_key
+
+    def __lt__(self, other):
+        if isinstance(other, _SortAwareTableWidgetItem):
+            return self._sort_key < other._sort_key
+        return super().__lt__(other)
+
+
 class _ComboFieldWidget(QComboBox):
     """QComboBox drop-in for data entry fields.
 
@@ -160,7 +207,7 @@ class EntryLookupDialog(QDialog):
 
         filter_text = self._search_box.text().strip().lower() if hasattr(self, '_search_box') else ''
 
-        for pid, items in groups.items():
+        for pid, items in sorted(groups.items(), key=lambda kv: _numeric_identifier_sort_key(kv[0])):
             # Apply filter at site level
             if filter_text and filter_text not in pid.lower():
                 # Check if any child matches
@@ -180,7 +227,10 @@ class EntryLookupDialog(QDialog):
             site_item.setFont(0, font)
             site_item.setForeground(0, QColor('#1565C0'))
 
-            for flat_idx, entry in items:
+            for flat_idx, entry in sorted(
+                items,
+                key=lambda item: _natural_sort_key(item[1].get('DROP_ID', '') or str(item[0] + 1))
+            ):
                 drop_id = entry.get('DROP_ID', '').strip() or f"Entry {flat_idx + 1}"
                 date_val = entry.get('DATE', entry.get('DATE_TIME', '')).strip()
                 filename = entry.get('FILENAME', '').strip()
@@ -2631,17 +2681,15 @@ class VideoPlayer(QMainWindow):
         return True
 
     def _load_base_csv_rows_uppercase_headers(self, csv_path):
-        """Load base CSV rows, normalize column names to uppercase, and sort by DATE_TIME."""
+        """Load base CSV rows, normalize column names to uppercase, and sort by numeric site/point ID."""
         with open(csv_path, 'r', encoding='utf-8') as csv_file:
             reader = csv.DictReader(csv_file)
             normalized_rows = []
             for row in reader:
                 normalized_rows.append(self._normalize_row_keys_uppercase(row))
-        # Sort rows by DATE_TIME so both queues share the same order
-        normalized_rows.sort(
-            key=lambda r: self._parse_datetime_for_sort(self._get_datetime_source_from_row(r))
-        )
-        return normalized_rows
+        indexed_rows = list(enumerate(normalized_rows))
+        indexed_rows.sort(key=lambda item: self._base_csv_row_sort_key(item[1], item[0]))
+        return [row for _, row in indexed_rows]
 
     def _normalize_row_keys_uppercase(self, row):
         """Return a copy of a dictionary with keys normalized to uppercase."""
@@ -2661,6 +2709,25 @@ class VideoPlayer(QMainWindow):
             if value not in (None, ''):
                 return str(value)
         return ''
+
+    def _base_csv_row_sort_key(self, row, original_index=0):
+        """Sort navigation rows by numeric site/point ID, then date/video as tie-breakers."""
+        point_id = self._get_point_identifier_from_row(row)
+        return (
+            _numeric_identifier_sort_key(point_id),
+            self._parse_datetime_for_sort(self._get_datetime_source_from_row(row)),
+            _natural_sort_key(self._get_video_filename_from_row(row)),
+            original_index
+        )
+
+    def _entry_sort_key(self, row, original_index=0):
+        """Sort saved entries by numeric site/point ID, then natural DROP_ID."""
+        return (
+            _numeric_identifier_sort_key(self._get_point_identifier_from_row(row)),
+            _natural_sort_key(row.get('DROP_ID', '')),
+            self._parse_datetime_for_sort(self._get_datetime_source_from_row(row)),
+            original_index
+        )
 
     def _get_video_filename_from_row(self, row):
         """Get video filename value from a row using flexible field aliases."""
@@ -4095,6 +4162,9 @@ class VideoPlayer(QMainWindow):
                 # Auto-load base data from CSV on first extraction if not already loaded
                 if not self.base_data:
                     self.auto_load_base_data_from_csv()
+
+                if not self._ensure_current_video_matches_base_row("extract a still"):
+                    return
                 
                 # ALWAYS calculate the next drop number using simple logic
                 # (Compare current POINT_ID with last entry's POINT_ID)
@@ -4177,6 +4247,10 @@ class VideoPlayer(QMainWindow):
         """Extract and save current frame image only (without saving another data row)."""
         if not self.cap:
             return
+
+        if self.drop_videos_dir and self.video_path:
+            if not self._ensure_current_video_matches_base_row("extract a still"):
+                return
 
         self.cap.set(cv2.CAP_PROP_POS_FRAMES, self.current_frame)
         ret, frame = self.cap.read()
@@ -4359,7 +4433,10 @@ class VideoPlayer(QMainWindow):
             else:
                 data_row[field_name] = widget.text().strip()
         
-        if self._prepare_data_row_for_save(data_row, repair_video_filename=True):
+        prepared = self._prepare_data_row_for_save(data_row, repair_video_filename=True)
+        if prepared is None:
+            return
+        if prepared:
             self._update_widgets_from_data_row(data_row)
         
         # Validate data entry if rules exist
@@ -4779,8 +4856,47 @@ class VideoPlayer(QMainWindow):
         frame_number = int(self.current_frame) if hasattr(self, 'current_frame') else 0
         return f"{video_name}_drop{drop_number}_frame{frame_number:06d}.jpg", f"drop{drop_number}"
 
+    def _expected_video_basename_for_base_row(self):
+        """Return the expected video basename for the current base CSV row, or ''. """
+        if not self.base_data:
+            return ''
+        expected = self._get_video_filename_from_row(self.base_data)
+        expected = str(expected or '').strip()
+        if not expected or expected.upper() in ('NA', 'N/A', 'NONE'):
+            return ''
+        return os.path.basename(expected)
+
+    def _current_video_matches_base_row(self):
+        """Return True when loaded video and current base row point at the same video."""
+        expected = self._expected_video_basename_for_base_row()
+        if not expected or not self.video_path:
+            return True
+
+        expected_stem = os.path.splitext(expected)[0].lower()
+        actual_stem = os.path.splitext(os.path.basename(self.video_path))[0].lower()
+        return expected_stem == actual_stem
+
+    def _ensure_current_video_matches_base_row(self, action_text):
+        """Block save/extract operations if row metadata and loaded video diverge."""
+        if self._current_video_matches_base_row():
+            return True
+
+        expected = self._expected_video_basename_for_base_row()
+        actual = os.path.basename(self.video_path) if self.video_path else '(no video loaded)'
+        point_id = self._get_point_identifier_from_row(self.base_data) or '(unknown)'
+        QMessageBox.critical(
+            self,
+            "Loaded Video Does Not Match Row",
+            f"Cannot {action_text} because the loaded video does not match the current row.\n\n"
+            f"Current row site/point: {point_id}\n"
+            f"Expected video: {expected or '(none)'}\n"
+            f"Loaded video: {actual}\n\n"
+            "Use Next/Previous Row or Go To Point to reload the correct video before saving."
+        )
+        return False
+
     def _is_real_entry_value(self, value):
-        """Return True when a CSV/form value is meaningful rather than blank/NA."""
+        """Return True when a field value is a real saved value rather than blank/NA."""
         text = str(value or '').strip()
         return bool(text) and text.upper() not in ('NA', 'N/A', 'NONE', 'NULL', 'NAN')
 
@@ -4789,7 +4905,10 @@ class VideoPlayer(QMainWindow):
         return str(value or '').strip().lower() == '[will be set on next extraction]'
 
     def _prepare_data_row_for_save(self, data_row, drop_id=None, still_filename=None, repair_video_filename=False):
-        """Apply final save-time repairs shared by manual save, edit save, and extract save."""
+        """Apply final save-time repairs shared by manual save, edit save, and extract save.
+
+        Returns None when save should be blocked (e.g. loaded video does not match row).
+        """
         changed = False
 
         def set_value(field_name, value):
@@ -4827,6 +4946,8 @@ class VideoPlayer(QMainWindow):
                 set_value('FILENAME', resolved_grab_fn if self._is_real_entry_value(resolved_grab_fn) else 'NA')
         elif repair_video_filename and ('FILENAME' in data_row) and (not self._is_real_entry_value(filename_value) or self._is_pending_filename_placeholder(filename_value)) and self.video_path:
             if self.drop_videos_dir:
+                if not self._ensure_current_video_matches_base_row("save this entry"):
+                    return None
                 current_drop_id = str(data_row.get('DROP_ID', '') or '').strip()
                 queue_filename, _ = self._generate_queue_still_filename(current_drop_id)
                 set_value('FILENAME', queue_filename)
@@ -5507,11 +5628,8 @@ class VideoPlayer(QMainWindow):
         self.navigate_to_base_csv_row(new_index)
 
     def _sort_all_entries(self):
-        """Sort all_data_entries in-place by SITE_ID then DROP_ID (natural numeric sort).
+        """Sort all_data_entries in-place by numeric site/point ID then DROP_ID."""
 
-        Both fields are split into alternating (text, number) token pairs so that
-        purely-numeric IDs sort numerically: 5 < 10 < 111 rather than 10 < 111 < 5.
-        """
         def _natural_key(s):
             """Split 'ABC_10_grab2' → ('abc_', 10, '_grab', 2) for natural ordering."""
             parts = []
@@ -5520,9 +5638,9 @@ class VideoPlayer(QMainWindow):
             return parts
 
         def _key(row):
-            site = str(row.get('SITE_ID', '') or '').strip()
+            site = str(self._get_point_identifier_from_row(row) or '').strip()
             drop = str(row.get('DROP_ID', '') or '').strip()
-            return (_natural_key(site), _natural_key(drop))
+            return (_numeric_identifier_sort_key(site), _natural_key(drop))
 
         self.all_data_entries.sort(key=_key)
 
@@ -5830,6 +5948,7 @@ class VideoPlayer(QMainWindow):
             try:
                 with open(output_file, 'r', encoding='utf-8') as f:
                     self.all_data_entries = list(csv.DictReader(f))
+                self._sort_all_entries()
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Could not read entries:\n{e}")
                 return
@@ -5883,6 +6002,13 @@ class VideoPlayer(QMainWindow):
                 QMessageBox.information(self, "No Data", "The data entries file is empty.")
                 return
 
+        entries = [
+            row for _, row in sorted(
+                enumerate(entries),
+                key=lambda item: self._entry_sort_key(item[1], item[0])
+            )
+        ]
+
         # Determine column order: template order when available, else dict key order
         if self.template_fieldnames:
             columns = [c for c in self.template_fieldnames if c in entries[0]]
@@ -5930,7 +6056,8 @@ class VideoPlayer(QMainWindow):
             for r, row in enumerate(rows):
                 for c, col in enumerate(columns):
                     val = row.get(col, '')
-                    item = QTableWidgetItem(str(val) if val is not None else '')
+                    text_val = str(val) if val is not None else ''
+                    item = _SortAwareTableWidgetItem(text_val, _table_cell_sort_key(text_val, col))
                     table.setItem(r, c, item)
             table.setSortingEnabled(True)
 
@@ -5983,6 +6110,7 @@ class VideoPlayer(QMainWindow):
             with open(output_file, 'r', encoding='utf-8') as f:
                 reader = csv.DictReader(f)
                 self.all_data_entries = list(reader)
+            self._sort_all_entries()
             
             if not self.all_data_entries:
                 QMessageBox.information(
@@ -6157,7 +6285,10 @@ class VideoPlayer(QMainWindow):
             else:
                 data_row[field_name] = widget.text().strip()
         
-        if self._prepare_data_row_for_save(data_row):
+        prepared = self._prepare_data_row_for_save(data_row)
+        if prepared is None:
+            return False
+        if prepared:
             self._update_widgets_from_data_row(data_row)
         
         # Validate if rules exist
@@ -6656,7 +6787,7 @@ class VideoPlayer(QMainWindow):
         
         if self._prepare_data_row_for_save(data_row, drop_id=drop_id, still_filename=still_filename):
             self._update_widgets_from_data_row(data_row)
-        
+
         # Validate and BLOCK if validation fails
         is_valid, errors = self.validate_data_entry(data_row)
 
@@ -8446,6 +8577,7 @@ class VideoPlayer(QMainWindow):
             self.drop_counter = 1
             self.current_entry_index = project_data.get('current_entry_index', -1)
             self.base_data = project_data.get('base_data', {})
+            project_base_data = self.base_data
             self.base_data_csv_path = abs_p(project_data.get('base_data_csv_path', ''))
             self.current_base_csv_row_index = project_data.get('current_base_csv_row_index', -1)
 
@@ -8466,10 +8598,7 @@ class VideoPlayer(QMainWindow):
             self.base_data_csv = []
             if self.base_data_csv_path and os.path.exists(self.base_data_csv_path):
                 try:
-                    with open(self.base_data_csv_path, 'r', encoding='utf-8') as f:
-                        reader = csv.DictReader(f)
-                        for row in reader:
-                            self.base_data_csv.append(self._normalize_row_keys_uppercase(row))
+                    self.base_data_csv = self._load_base_csv_rows_uppercase_headers(self.base_data_csv_path)
                     print(f"  Re-read base CSV from disk: {len(self.base_data_csv)} rows")
                     # Refresh base_data from the reloaded CSV using the saved row index
                     if 0 <= self.current_base_csv_row_index < len(self.base_data_csv):
@@ -8491,20 +8620,34 @@ class VideoPlayer(QMainWindow):
             # Re-enable point navigation if base CSV is loaded, restoring saved position
             if self.base_data_csv:
                 saved_row_index = self.current_base_csv_row_index
+                saved_point_id = str(self._get_point_identifier_from_row(project_base_data) or '').strip()
+                saved_video = os.path.basename(str(self._get_video_filename_from_row(project_base_data) or '').strip()).lower()
 
                 # Fallback for older projects that didn't store current_base_csv_row_index:
-                # try to locate base_data's point ID inside base_data_csv
-                if saved_row_index < 0 and self.base_data:
-                    current_pid = str(self._get_point_identifier_from_row(self.base_data) or '').strip()
-                    if current_pid:
-                        for i, row in enumerate(self.base_data_csv):
-                            if str(self._get_point_identifier_from_row(row) or '').strip() == current_pid:
-                                saved_row_index = i
-                                break
+                # try to locate base_data's point ID inside base_data_csv. Also do this
+                # when the saved index now points at a different row after numeric sorting.
+                index_matches_saved_row = False
+                if 0 <= saved_row_index < len(self.base_data_csv) and saved_point_id:
+                    row_at_saved_index = self.base_data_csv[saved_row_index]
+                    row_point_id = str(self._get_point_identifier_from_row(row_at_saved_index) or '').strip()
+                    row_video = os.path.basename(str(self._get_video_filename_from_row(row_at_saved_index) or '').strip()).lower()
+                    index_matches_saved_row = (
+                        row_point_id == saved_point_id and
+                        (not saved_video or not row_video or row_video == saved_video)
+                    )
+
+                if saved_point_id and (saved_row_index < 0 or not index_matches_saved_row):
+                    for i, row in enumerate(self.base_data_csv):
+                        row_point_id = str(self._get_point_identifier_from_row(row) or '').strip()
+                        row_video = os.path.basename(str(self._get_video_filename_from_row(row) or '').strip()).lower()
+                        if row_point_id == saved_point_id and (not saved_video or not row_video or row_video == saved_video):
+                            saved_row_index = i
+                            break
 
                 self._enable_point_navigation()   # enables buttons, resets index to -1
                 if 0 <= saved_row_index < len(self.base_data_csv):
                     self.current_base_csv_row_index = saved_row_index  # put back the real position
+                    self.base_data = self.base_data_csv[saved_row_index]
                     n = len(self.base_data_csv)
                     point_id = self._get_point_identifier_from_row(self.base_data_csv[saved_row_index]) or str(saved_row_index + 1)
                     self.point_nav_label.setText(f"Row {saved_row_index + 1}/{n}: Point {point_id} — resumed")
@@ -8516,9 +8659,24 @@ class VideoPlayer(QMainWindow):
                 with open(output_file, 'r', encoding='utf-8') as f:
                     reader = csv.DictReader(f)
                     self.all_data_entries = list(reader)
+                self._sort_all_entries()
             
             # Restore video if it exists
             current_video_path = abs_p(project_data.get('current_video_path', ''))
+            restore_frame = project_data.get('current_frame', 0)
+            if current_video_path and self.base_data:
+                expected_video = self._expected_video_basename_for_base_row()
+                expected_stem = os.path.splitext(expected_video)[0].lower() if expected_video else ''
+                actual_stem = os.path.splitext(os.path.basename(current_video_path))[0].lower()
+                if expected_stem and actual_stem and expected_stem != actual_stem:
+                    expected_path = self._resolve_video_path_from_filename(expected_video)
+                    print(
+                        "  Saved project video did not match base row; "
+                        f"using expected row video instead: {expected_video}"
+                    )
+                    current_video_path = expected_path
+                    restore_frame = 0
+
             if current_video_path and os.path.exists(current_video_path):
                 # Load the video
                 if self.cap:
@@ -8531,7 +8689,7 @@ class VideoPlayer(QMainWindow):
                 if self.cap.isOpened():
                     self.total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
                     self.fps = self.cap.get(cv2.CAP_PROP_FPS)
-                    self.current_frame = project_data.get('current_frame', 0)
+                    self.current_frame = restore_frame
 
                     # Always recompute next drop from existing entries for current video
                     self.drop_counter = self.get_next_drop_number_for_point()

@@ -87,6 +87,12 @@ A comprehensive video player application with integrated data entry for marine/e
 
 If you need a standalone `.exe` file (no Python required to run):
 
+> **Release build reminder:** always build the Windows `.exe` from the `video_player` conda environment:
+> ```powershell
+> conda activate video_player
+> python build_exe.py
+> ```
+
 1. **Install PyInstaller**
    ```powershell
    pip install pyinstaller
